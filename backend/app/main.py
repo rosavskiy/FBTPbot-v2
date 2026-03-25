@@ -110,7 +110,7 @@ async def health_check():
     """Проверка состояния системы."""
     from app.database.reason_store import get_cached_or_load
 
-    reasons_data = await get_cached_or_load()
+    reasons_data = get_cached_or_load()
     reasons_count = len(reasons_data.reasons) if reasons_data else 0
 
     return HealthResponse(
