@@ -22,6 +22,7 @@ backend/data/images/
 backend/data/support_kb.json
 backend/data/contact_reasons.json
 backend/data/backups/
+backend/data/google_credentials*.json*
 
 # Node
 node_modules/

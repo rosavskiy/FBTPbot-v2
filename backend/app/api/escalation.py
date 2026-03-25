@@ -18,8 +18,8 @@ from app.models.schemas import (
     FeedbackRequest,
     FeedbackResponse,
 )
-from app.tg.notifier import get_telegram_notifier
 from app.sheets.gsheet_logger import get_gsheet_logger
+from app.tg.notifier import get_telegram_notifier
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/escalation", tags=["escalation"])
