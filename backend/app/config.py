@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     # Google Sheets
     google_sheets_credentials_file: str = ""
     google_sheets_spreadsheet_id: str = ""
+    google_sheets_worksheet: str = "QnA"
 
     # CORS
     cors_origins: str = '["http://localhost:3000","http://localhost:5173"]'

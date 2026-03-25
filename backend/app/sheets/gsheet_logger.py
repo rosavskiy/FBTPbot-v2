@@ -76,7 +76,12 @@ class GoogleSheetLogger:
             creds = Credentials.from_service_account_file(str(path), scopes=SCOPES)
             gc = gspread.authorize(creds)
             spreadsheet = gc.open_by_key(spreadsheet_id)
-            self._sheet = spreadsheet.sheet1
+            sheet_name = settings.google_sheets_worksheet
+            try:
+                self._sheet = spreadsheet.worksheet(sheet_name)
+            except gspread.exceptions.WorksheetNotFound:
+                logger.warning(f"Лист '{sheet_name}' не найден, используем первый лист")
+                self._sheet = spreadsheet.sheet1
             self._ensure_header()
             self._enabled = True
             logger.info(f"✅ Google Sheets логгер подключён: {spreadsheet.title}")
