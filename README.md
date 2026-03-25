@@ -82,14 +82,7 @@ frontend/
     chat/         — Страница чата
     operator/     — Панель оператора
     widget/       — Встраиваемый виджет
+  scripts/        — Скрипт импорта причин обращения из .docx
 brains/           — Исходные документы для базы знаний
-templates/        — Шаблоны импорта
-```
-
-## Деплой на сервер
-
-```bash
-chmod +x deploy.sh server-setup.sh
-./server-setup.sh   # Установка Docker, настройка сервера
-./deploy.sh         # Сборка и запуск контейнеров
+templates/        — Шаблоны .docx для импорта причин обращения
 ```

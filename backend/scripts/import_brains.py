@@ -28,7 +28,7 @@ def slugify(text: str) -> str:
     """Превращает название причины в id (латиница + _)."""
     table = str.maketrans(
         "абвгдежзийклмнопрстуфхцчшщъыьэюя ",
-        "abvgdezhziiklmnoprstufhccsssuiueua_",
+        "abvgdezziiklmnoprstufhccss_y_eua_",
     )
     slug = text.lower().strip().translate(table)
     slug = re.sub(r"[^a-z0-9_]", "", slug)
