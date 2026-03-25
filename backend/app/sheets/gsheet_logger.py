@@ -86,7 +86,7 @@ class GoogleSheetLogger:
             self._enabled = True
             logger.info(f"✅ Google Sheets логгер подключён: {spreadsheet.title}")
         except Exception as e:
-            logger.error(f"Ошибка подключения к Google Sheets: {e}")
+            logger.error(f"Ошибка подключения к Google Sheets: {e}", exc_info=True)
 
     def _ensure_header(self) -> None:
         """Записывает заголовки, если первая строка пуста."""
