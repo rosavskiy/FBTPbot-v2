@@ -169,7 +169,7 @@ class FeedbackResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-    version: str = "1.0.0"
+    version: str = "2.0.0"
     knowledge_base_ready: bool = False
     total_articles: int = 0
     total_chunks: int = 0

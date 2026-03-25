@@ -36,6 +36,19 @@ class DatabaseService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def _commit_with_retry(self) -> None:
+        """Commit с retry при \"database is locked\" (SQLite concurrent access)."""
+        for attempt in range(MAX_RETRIES):
+            try:
+                await self.session.commit()
+                return
+            except OperationalError as e:
+                if "database is locked" in str(e) and attempt < MAX_RETRIES - 1:
+                    logger.warning("[DB] database is locked, retry %d", attempt + 1)
+                    await asyncio.sleep(RETRY_DELAY * (attempt + 1))
+                    continue
+                raise
+
     # === Сессии ===
 
     async def create_session(self, user_ip: str | None = None, user_agent: str | None = None) -> ChatSession:
@@ -45,16 +58,7 @@ class DatabaseService:
             user_agent=user_agent,
         )
         self.session.add(chat_session)
-        for attempt in range(MAX_RETRIES):
-            try:
-                await self.session.commit()
-                return chat_session
-            except OperationalError as e:
-                if "database is locked" in str(e) and attempt < MAX_RETRIES - 1:
-                    logger.warning("[DB] database is locked on create_session, retry %d", attempt + 1)
-                    await asyncio.sleep(RETRY_DELAY * (attempt + 1))
-                    continue
-                raise
+        await self._commit_with_retry()
         return chat_session
 
     async def get_session(self, session_id: str) -> ChatSession | None:
@@ -81,16 +85,7 @@ class DatabaseService:
             source_articles=json.dumps(source_articles) if source_articles else None,
         )
         self.session.add(message)
-        for attempt in range(MAX_RETRIES):
-            try:
-                await self.session.commit()
-                return message
-            except OperationalError as e:
-                if "database is locked" in str(e) and attempt < MAX_RETRIES - 1:
-                    logger.warning("[DB] database is locked on add_message, retry %d", attempt + 1)
-                    await asyncio.sleep(RETRY_DELAY * (attempt + 1))
-                    continue
-                raise
+        await self._commit_with_retry()
         return message
 
     async def get_chat_history(self, session_id: str, limit: int = 20) -> list[ChatMessageDB]:
@@ -119,7 +114,7 @@ class DatabaseService:
             contact_info=contact_info,
         )
         self.session.add(escalation)
-        await self.session.commit()
+        await self._commit_with_retry()
         return escalation
 
     async def get_escalation(self, escalation_id: str) -> Escalation | None:
@@ -176,14 +171,14 @@ class DatabaseService:
             values["operator_id"] = operator_id
 
         await self.session.execute(update(Escalation).where(Escalation.id == escalation_id).values(**values))
-        await self.session.commit()
+        await self._commit_with_retry()
         return await self.get_escalation(escalation_id)
 
     async def set_telegram_message_id(self, escalation_id: str, message_id: str):
         await self.session.execute(
             update(Escalation).where(Escalation.id == escalation_id).values(telegram_message_id=message_id)
         )
-        await self.session.commit()
+        await self._commit_with_retry()
 
     # === Обратная связь ===
 
@@ -201,5 +196,5 @@ class DatabaseService:
             comment=comment,
         )
         self.session.add(feedback)
-        await self.session.commit()
+        await self._commit_with_retry()
         return feedback

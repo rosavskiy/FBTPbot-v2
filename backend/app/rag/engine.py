@@ -256,7 +256,7 @@ class RAGEngine:
             # Принудительная причина — пропускаем L1
             from app.database.reason_store import get_reason as _get_reason
 
-            reason = await _get_reason(reason_id)
+            reason = _get_reason(reason_id)
             if reason is None:
                 return RAGResponse(
                     answer="Причина обращения не найдена.",

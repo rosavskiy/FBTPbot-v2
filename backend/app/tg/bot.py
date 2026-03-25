@@ -93,7 +93,7 @@ def _format_answer(
     detected_reason_name: str = "",
 ) -> str:
     """Форматирование ответа для Telegram."""
-    parts = [answer]
+    parts = [_escape(answer)]
 
     if needs_escalation:
         parts.append("")
