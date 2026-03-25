@@ -22,6 +22,7 @@ from app.config import settings
 from app.database.models import init_db
 from app.database.reason_store import load_reasons
 from app.models.schemas import HealthResponse
+from app.rag.engine import close_rag_engine
 from app.rag.session_store import cleanup_expired_sessions
 
 logging.basicConfig(
@@ -62,6 +63,7 @@ async def lifespan(app: FastAPI):
     yield
 
     cleanup_task.cancel()
+    await close_rag_engine()
     logger.info("Завершение работы...")
 
 

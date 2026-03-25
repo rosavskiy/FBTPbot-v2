@@ -24,6 +24,7 @@ class TelegramNotifier:
         self.token = settings.telegram_bot_token
         self.chat_id = settings.telegram_support_chat_id
         self.enabled = bool(self.token and self.chat_id)
+        self._client = httpx.AsyncClient(timeout=10.0)
 
         if not self.enabled:
             logger.warning(
@@ -74,25 +75,23 @@ class TelegramNotifier:
         text += f"\n🔗 <b>Панель оператора:</b>\n" f"/escalation_{escalation_id[:8]}"
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.api_url}/sendMessage",
-                    json={
-                        "chat_id": self.chat_id,
-                        "text": text,
-                        "parse_mode": "HTML",
-                    },
-                    timeout=10.0,
-                )
-                data = response.json()
+            response = await self._client.post(
+                f"{self.api_url}/sendMessage",
+                json={
+                    "chat_id": self.chat_id,
+                    "text": text,
+                    "parse_mode": "HTML",
+                },
+            )
+            data = response.json()
 
-                if data.get("ok"):
-                    message_id = str(data["result"]["message_id"])
-                    logger.info(f"Telegram-уведомление отправлено: escalation={escalation_id}")
-                    return message_id
-                else:
-                    logger.error(f"Telegram API error: {data}")
-                    return None
+            if data.get("ok"):
+                message_id = str(data["result"]["message_id"])
+                logger.info(f"Telegram-уведомление отправлено: escalation={escalation_id}")
+                return message_id
+            else:
+                logger.error(f"Telegram API error: {data}")
+                return None
 
         except Exception as e:
             logger.error(f"Ошибка отправки в Telegram: {e}")
@@ -126,15 +125,13 @@ class TelegramNotifier:
             payload["reply_to_message_id"] = int(reply_to_message_id)
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.api_url}/sendMessage",
-                    json=payload,
-                    timeout=10.0,
-                )
-                data = response.json()
-                if data.get("ok"):
-                    return str(data["result"]["message_id"])
+            response = await self._client.post(
+                f"{self.api_url}/sendMessage",
+                json=payload,
+            )
+            data = response.json()
+            if data.get("ok"):
+                return str(data["result"]["message_id"])
         except Exception as e:
             logger.error(f"Ошибка отправки в Telegram: {e}")
 

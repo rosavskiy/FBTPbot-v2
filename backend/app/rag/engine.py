@@ -99,6 +99,10 @@ class YandexGPTClient:
     def __init__(self):
         self._client = httpx.AsyncClient(timeout=60.0)
 
+    async def close(self) -> None:
+        """Закрыть HTTP-клиент."""
+        await self._client.aclose()
+
     async def complete(
         self,
         messages: list[dict],
@@ -108,7 +112,7 @@ class YandexGPTClient:
         """Запрос к YandexGPT completion API.
 
         Args:
-            messages: Список сообщений [{"role": "system"/"user"/"assistant", "content": "..."}]
+            messages: Список сообщений [{"role": "system"/"user"/"assistant", "text": "..."}]
             temperature: Температура генерации
             max_tokens: Максимальное количество токенов
 
@@ -308,7 +312,7 @@ class RAGEngine:
         section_title = l2.section.title if l2.section else "Общий"
 
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "text": SYSTEM_PROMPT},
         ]
 
         if chat_history:
@@ -498,3 +502,11 @@ def get_rag_engine() -> RAGEngine:
     if _engine is None:
         _engine = RAGEngine()
     return _engine
+
+
+async def close_rag_engine() -> None:
+    """Закрыть HTTP-клиент RAG-движка при завершении."""
+    global _engine
+    if _engine is not None:
+        await _engine.llm.close()
+        _engine = None
