@@ -10,7 +10,7 @@ services:
       - ./backend/.env
     volumes:
       - ./backend/data:/app/data
-      - ./instructions:/app/instructions:ro
+      - ./brains:/app/brains:ro
     restart: unless-stopped
 
   tg-bot:
@@ -19,7 +19,6 @@ services:
       - ./backend/.env
     volumes:
       - ./backend/data:/app/data
-      - ./instructions:/app/instructions:ro
     depends_on:
       - backend
     restart: unless-stopped
