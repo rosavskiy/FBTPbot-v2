@@ -14,8 +14,8 @@ from typing import Callable, Dict, List, Optional
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 
 from app.config import settings
 from app.parser.html_parser import InstructionParser, ParsedInstruction
@@ -27,13 +27,26 @@ COLLECTION_NAME = "farmbazis_instructions"
 SUPPORT_COLLECTION_NAME = "support_tickets"
 
 
+class ChromaDefaultEmbeddings(Embeddings):
+    """Обёртка ChromaDB default embeddings для LangChain.
+    Использует onnxruntime + all-MiniLM-L6-v2 (компактная модель ~80MB)."""
+
+    def __init__(self):
+        from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+        self._ef = DefaultEmbeddingFunction()
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self._ef(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._ef([text])[0]
+
+
 class KnowledgeBaseIndexer:
     """Индексатор базы знаний на основе ChromaDB."""
 
     def __init__(self):
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        )
+        self.embeddings = ChromaDefaultEmbeddings()
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=settings.rag_chunk_size,
             chunk_overlap=settings.rag_chunk_overlap,

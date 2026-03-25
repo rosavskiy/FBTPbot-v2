@@ -12,7 +12,6 @@ langchain-community==0.3.14
 langchain-chroma==0.2.2
 chromadb==0.6.3
 pymorphy3==2.0.2
-sentence-transformers>=2.2.0
 
 # HTML Parsing
 beautifulsoup4==4.12.3
