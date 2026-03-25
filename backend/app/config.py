@@ -31,7 +31,12 @@ class Settings(BaseSettings):
     # Application
     app_host: str = "0.0.0.0"
     app_port: int = 8000
-    app_debug: bool = True
+    app_debug: bool = False
+
+    # Operator auth
+    operator_username: str = "admin"
+    operator_password: str = ""  # MUST be set via env OPERATOR_PASSWORD
+    operator_display_name: str = "Администратор ТП"
 
     # RAG
     rag_chunk_size: int = 800

@@ -6,14 +6,15 @@ API панели оператора техподдержки.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
+import bcrypt
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database.models import get_db
 from app.database.service import DatabaseService
 from app.models.schemas import (
@@ -30,15 +31,31 @@ from app.tg.notifier import get_telegram_notifier
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/operator", tags=["operator"])
 
-# Простой in-memory токен-стор (в продакшене — JWT или Redis)
+# In-memory токен-стор (в продакшене — JWT или Redis)
 _active_tokens: dict[str, dict] = {}
 
-# Дефолтный оператор для демо (в продакшене — из БД)
-DEMO_OPERATOR = {
-    "username": "admin",
-    "password_hash": hashlib.sha256(b"farmbazis2024").hexdigest(),
-    "display_name": "Администратор ТП",
-}
+# Хеш пароля оператора (создаётся при первом запуске из env)
+_operator_password_hash: bytes | None = None
+
+
+def _get_operator_password_hash() -> bytes:
+    """Получить bcrypt-хеш пароля оператора (lazy init из env)."""
+    global _operator_password_hash
+    if _operator_password_hash is None:
+        password = settings.operator_password
+        if not password:
+            logger.warning("OPERATOR_PASSWORD не задан! Авторизация оператора невозможна.")
+            return b""
+        _operator_password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+    return _operator_password_hash
+
+
+def _cleanup_expired_tokens() -> None:
+    """Удалить просроченные токены из хранилища."""
+    now = datetime.now(UTC)
+    expired = [t for t, data in _active_tokens.items() if now > data["expires_at"]]
+    for t in expired:
+        del _active_tokens[t]
 
 
 def _verify_token(authorization: str | None = Header(None)) -> dict:
@@ -61,15 +78,21 @@ def _verify_token(authorization: str | None = Header(None)) -> dict:
 @router.post("/login", response_model=OperatorLoginResponse)
 async def operator_login(request: OperatorLoginRequest):
     """Авторизация оператора."""
-    password_hash = hashlib.sha256(request.password.encode()).hexdigest()
+    _cleanup_expired_tokens()
 
-    if request.username != DEMO_OPERATOR["username"] or password_hash != DEMO_OPERATOR["password_hash"]:
+    if not settings.operator_password:
+        raise HTTPException(status_code=503, detail="Авторизация не настроена (OPERATOR_PASSWORD не задан)")
+
+    if request.username != settings.operator_username:
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+
+    if not bcrypt.checkpw(request.password.encode("utf-8"), _get_operator_password_hash()):
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
     token = secrets.token_urlsafe(32)
     _active_tokens[token] = {
         "username": request.username,
-        "display_name": DEMO_OPERATOR["display_name"],
+        "display_name": settings.operator_display_name,
         "expires_at": datetime.now(UTC) + timedelta(hours=12),
     }
 
