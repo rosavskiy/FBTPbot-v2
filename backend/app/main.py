@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
     logger.info("✅ База данных инициализирована")
 
     # Загружаем причины обращения
-    reasons = await load_reasons()
+    reasons = load_reasons()
     count = len(reasons.reasons) if reasons else 0
     logger.info(f"✅ Загружено причин обращения: {count}")
 
