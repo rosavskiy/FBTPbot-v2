@@ -58,10 +58,7 @@ async def create_escalation(
     )
 
     # Формируем краткое содержание диалога
-    chat_summary = "\n".join(
-        f"{'👤' if m.role == 'user' else '🤖'} {m.content[:100]}"
-        for m in history[-6:]
-    )
+    chat_summary = "\n".join(f"{'👤' if m.role == 'user' else '🤖'} {m.content[:100]}" for m in history[-6:])
 
     # Отправляем уведомление в Telegram
     tg_message_id = await notifier.send_escalation_notification(

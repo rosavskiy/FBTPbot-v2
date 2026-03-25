@@ -5,7 +5,6 @@ API эндпоинты чата v2 — L1→L2→L3 pipeline.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,10 +62,7 @@ async def send_message(
 
     # Получаем историю чата для контекста
     history_messages = await db_service.get_chat_history(session.id, limit=10)
-    chat_history = [
-        {"role": msg.role, "content": msg.content}
-        for msg in history_messages[:-1]
-    ]
+    chat_history = [{"role": msg.role, "content": msg.content} for msg in history_messages[:-1]]
 
     # ── Основной pipeline: L1→L2→L3 ──
     rag_response = await rag_engine.ask(

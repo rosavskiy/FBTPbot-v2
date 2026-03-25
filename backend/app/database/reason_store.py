@@ -12,7 +12,6 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
-from typing import Optional
 
 from app.config import settings
 from app.models.reason_schemas import ContactReason, ContactReasonsData
@@ -23,7 +22,7 @@ _STORE_LOCK = Lock()
 _MAX_BACKUPS = 20
 
 # Кэш в памяти
-_cached_data: Optional[ContactReasonsData] = None
+_cached_data: ContactReasonsData | None = None
 
 
 def _get_path() -> Path:
@@ -80,7 +79,7 @@ def _make_backup(path: Path) -> None:
         backups.pop(0).unlink()
 
 
-def get_reason(reason_id: str) -> Optional[ContactReason]:
+def get_reason(reason_id: str) -> ContactReason | None:
     """Получить причину по ID."""
     data = get_cached_or_load()
     for r in data.reasons:

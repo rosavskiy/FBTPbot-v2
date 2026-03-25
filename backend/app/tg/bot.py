@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Telegram-бот техподдержки Фармбазис v2.
 
@@ -15,12 +14,10 @@ Telegram-бот техподдержки Фармбазис v2.
 
 from __future__ import annotations
 
-import asyncio
 import html
 import logging
 import os
 import sys
-from typing import Dict, Optional
 
 from telegram import (
     InlineKeyboardButton,
@@ -63,8 +60,8 @@ HELP_TEXT = (
 )
 
 # Хранилище chat_history и clarification context для Telegram (по user_id)
-_chat_histories: Dict[int, list] = {}
-_clarification_ctx: Dict[int, dict] = {}
+_chat_histories: dict[int, list] = {}
+_clarification_ctx: dict[int, dict] = {}
 MAX_HISTORY = 10
 
 
@@ -77,7 +74,7 @@ def _add_to_history(user_id: int, role: str, content: str):
         _chat_histories[user_id] = []
     _chat_histories[user_id].append({"role": role, "content": content})
     if len(_chat_histories[user_id]) > MAX_HISTORY * 2:
-        _chat_histories[user_id] = _chat_histories[user_id][-MAX_HISTORY * 2:]
+        _chat_histories[user_id] = _chat_histories[user_id][-MAX_HISTORY * 2 :]
 
 
 def _clear_history(user_id: int):

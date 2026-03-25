@@ -50,17 +50,15 @@ async def lifespan(app: FastAPI):
     logger.info(f"✅ Загружено причин обращения: {count}")
 
     if count == 0:
-        logger.warning(
-            "⚠️ Причины обращения не загружены! "
-            "Добавьте их через /bot-config или импортируйте."
-        )
+        logger.warning("⚠️ Причины обращения не загружены! " "Добавьте их через /bot-config или импортируйте.")
 
     logger.info(f"✅ Сервер готов к работе на {settings.app_host}:{settings.app_port}")
-    
+
     # Запускаем фоновую очистку истёкших контекстов уточнения
     import asyncio
+
     cleanup_task = asyncio.create_task(cleanup_expired_sessions())
-    
+
     yield
 
     cleanup_task.cancel()
@@ -71,8 +69,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Фармбазис ИИ-Техподдержка",
     description=(
-        "Модуль интеллектуальной техподдержки для ООО «Фармбазис». "
-        "RAG-система на основе руководства пользователя."
+        "Модуль интеллектуальной техподдержки для ООО «Фармбазис». " "RAG-система на основе руководства пользователя."
     ),
     version="1.0.0",
     lifespan=lifespan,

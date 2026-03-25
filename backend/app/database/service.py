@@ -10,18 +10,12 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
-logger = logging.getLogger(__name__)
-
-MAX_RETRIES = 3
-RETRY_DELAY = 0.5  # секунд
 
 from app.database.models import (
     ChatMessageDB,
@@ -29,6 +23,11 @@ from app.database.models import (
     Escalation,
     Feedback,
 )
+
+logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 3
+RETRY_DELAY = 0.5  # секунд
 
 
 class DatabaseService:
@@ -39,9 +38,7 @@ class DatabaseService:
 
     # === Сессии ===
 
-    async def create_session(
-        self, user_ip: Optional[str] = None, user_agent: Optional[str] = None
-    ) -> ChatSession:
+    async def create_session(self, user_ip: str | None = None, user_agent: str | None = None) -> ChatSession:
         chat_session = ChatSession(
             id=str(uuid.uuid4()),
             user_ip=user_ip,
@@ -60,11 +57,9 @@ class DatabaseService:
                 raise
         return chat_session
 
-    async def get_session(self, session_id: str) -> Optional[ChatSession]:
+    async def get_session(self, session_id: str) -> ChatSession | None:
         result = await self.session.execute(
-            select(ChatSession)
-            .options(selectinload(ChatSession.messages))
-            .where(ChatSession.id == session_id)
+            select(ChatSession).options(selectinload(ChatSession.messages)).where(ChatSession.id == session_id)
         )
         return result.scalar_one_or_none()
 
@@ -75,8 +70,8 @@ class DatabaseService:
         session_id: str,
         role: str,
         content: str,
-        confidence: Optional[float] = None,
-        source_articles: Optional[List[str]] = None,
+        confidence: float | None = None,
+        source_articles: list[str] | None = None,
     ) -> ChatMessageDB:
         message = ChatMessageDB(
             session_id=session_id,
@@ -98,9 +93,7 @@ class DatabaseService:
                 raise
         return message
 
-    async def get_chat_history(
-        self, session_id: str, limit: int = 20
-    ) -> List[ChatMessageDB]:
+    async def get_chat_history(self, session_id: str, limit: int = 20) -> list[ChatMessageDB]:
         result = await self.session.execute(
             select(ChatMessageDB)
             .where(ChatMessageDB.session_id == session_id)
@@ -116,8 +109,8 @@ class DatabaseService:
     async def create_escalation(
         self,
         session_id: str,
-        reason: Optional[str] = None,
-        contact_info: Optional[str] = None,
+        reason: str | None = None,
+        contact_info: str | None = None,
     ) -> Escalation:
         escalation = Escalation(
             id=str(uuid.uuid4()),
@@ -129,13 +122,11 @@ class DatabaseService:
         await self.session.commit()
         return escalation
 
-    async def get_escalation(self, escalation_id: str) -> Optional[Escalation]:
-        result = await self.session.execute(
-            select(Escalation).where(Escalation.id == escalation_id)
-        )
+    async def get_escalation(self, escalation_id: str) -> Escalation | None:
+        result = await self.session.execute(select(Escalation).where(Escalation.id == escalation_id))
         return result.scalar_one_or_none()
 
-    async def get_pending_escalations(self) -> List[Escalation]:
+    async def get_pending_escalations(self) -> list[Escalation]:
         result = await self.session.execute(
             select(Escalation)
             .where(Escalation.status.in_(["pending", "in_progress"]))
@@ -144,14 +135,12 @@ class DatabaseService:
         return list(result.scalars().all())
 
     async def get_all_escalations(
-        self, status: Optional[str] = None, limit: int = 50, offset: int = 0
-    ) -> Tuple[List[Escalation], int, int]:
+        self, status: str | None = None, limit: int = 50, offset: int = 0
+    ) -> tuple[list[Escalation], int, int]:
         """Получение эскалаций с пагинацией."""
         query = select(Escalation).order_by(Escalation.created_at.desc())
         count_query = select(func.count(Escalation.id))
-        pending_query = select(func.count(Escalation.id)).where(
-            Escalation.status == "pending"
-        )
+        pending_query = select(func.count(Escalation.id)).where(Escalation.status == "pending")
 
         if status:
             query = query.where(Escalation.status == status)
@@ -174,33 +163,25 @@ class DatabaseService:
         self,
         escalation_id: str,
         status: str,
-        operator_notes: Optional[str] = None,
-        operator_id: Optional[str] = None,
-    ) -> Optional[Escalation]:
+        operator_notes: str | None = None,
+        operator_id: str | None = None,
+    ) -> Escalation | None:
         values = {
             "status": status,
-            "updated_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(UTC),
         }
         if operator_notes is not None:
             values["operator_notes"] = operator_notes
         if operator_id is not None:
             values["operator_id"] = operator_id
 
-        await self.session.execute(
-            update(Escalation)
-            .where(Escalation.id == escalation_id)
-            .values(**values)
-        )
+        await self.session.execute(update(Escalation).where(Escalation.id == escalation_id).values(**values))
         await self.session.commit()
         return await self.get_escalation(escalation_id)
 
-    async def set_telegram_message_id(
-        self, escalation_id: str, message_id: str
-    ):
+    async def set_telegram_message_id(self, escalation_id: str, message_id: str):
         await self.session.execute(
-            update(Escalation)
-            .where(Escalation.id == escalation_id)
-            .values(telegram_message_id=message_id)
+            update(Escalation).where(Escalation.id == escalation_id).values(telegram_message_id=message_id)
         )
         await self.session.commit()
 
@@ -211,7 +192,7 @@ class DatabaseService:
         session_id: str,
         rating: int,
         message_index: int = 0,
-        comment: Optional[str] = None,
+        comment: str | None = None,
     ) -> Feedback:
         feedback = Feedback(
             session_id=session_id,

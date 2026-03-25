@@ -16,7 +16,6 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 
@@ -26,38 +25,36 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ParsedImage:
     """Изображение, извлечённое из инструкции."""
-    filename: str          # имя файла после сохранения
-    original_index: int    # порядковый номер в статье
+
+    filename: str  # имя файла после сохранения
+    original_index: int  # порядковый номер в статье
     alt_text: str = ""
-    file_path: str = ""    # путь к сохранённому файлу
+    file_path: str = ""  # путь к сохранённому файлу
 
 
 @dataclass
 class ParsedInstruction:
     """Распарсенная инструкция."""
-    article_id: str                       # ID статьи (имя файла без расширения)
-    title: str                            # Заголовок
-    text_content: str                     # Полный текст без HTML
-    sections: List[str] = field(default_factory=list)       # Разделы/этапы
-    images: List[ParsedImage] = field(default_factory=list) # Изображения
-    youtube_links: List[str] = field(default_factory=list)  # YouTube ссылки
-    source_file: str = ""                 # Путь к исходному HTML
+
+    article_id: str  # ID статьи (имя файла без расширения)
+    title: str  # Заголовок
+    text_content: str  # Полный текст без HTML
+    sections: list[str] = field(default_factory=list)  # Разделы/этапы
+    images: list[ParsedImage] = field(default_factory=list)  # Изображения
+    youtube_links: list[str] = field(default_factory=list)  # YouTube ссылки
+    source_file: str = ""  # Путь к исходному HTML
 
 
 class InstructionParser:
     """Парсер HTML-инструкций Фармбазис."""
 
     # Паттерн для поиска YouTube ссылок
-    YT_PATTERN = re.compile(
-        r'https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w\-]+'
-    )
+    YT_PATTERN = re.compile(r"https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w\-]+")
 
     # Паттерн для base64 изображений
-    BASE64_IMG_PATTERN = re.compile(
-        r'data:image/(\w+);base64,([A-Za-z0-9+/=\s]+)'
-    )
+    BASE64_IMG_PATTERN = re.compile(r"data:image/(\w+);base64,([A-Za-z0-9+/=\s]+)")
 
-    def __init__(self, images_dir: Optional[Path] = None):
+    def __init__(self, images_dir: Path | None = None):
         self.images_dir = images_dir or Path("./data/images")
         self.images_dir.mkdir(parents=True, exist_ok=True)
 
@@ -94,7 +91,7 @@ class InstructionParser:
             source_file=str(file_path),
         )
 
-    def parse_directory(self, directory: Path) -> List[ParsedInstruction]:
+    def parse_directory(self, directory: Path) -> list[ParsedInstruction]:
         """Парсинг всех HTML-файлов в директории."""
         instructions = []
         html_files = sorted(directory.glob("*.html"))
@@ -144,7 +141,7 @@ class InstructionParser:
 
         return f"Инструкция #{article_id}"
 
-    def _extract_images(self, soup: BeautifulSoup, article_id: str) -> List[ParsedImage]:
+    def _extract_images(self, soup: BeautifulSoup, article_id: str) -> list[ParsedImage]:
         """Извлечение и сохранение base64-изображений."""
         images = []
         img_tags = soup.find_all("img")
@@ -172,12 +169,14 @@ class InstructionParser:
                     if not file_path.exists():
                         file_path.write_bytes(raw_data)
 
-                    images.append(ParsedImage(
-                        filename=filename,
-                        original_index=idx,
-                        alt_text=alt,
-                        file_path=str(file_path),
-                    ))
+                    images.append(
+                        ParsedImage(
+                            filename=filename,
+                            original_index=idx,
+                            alt_text=alt,
+                            file_path=str(file_path),
+                        )
+                    )
                 except Exception as e:
                     logger.warning(f"Ошибка сохранения изображения {article_id}/img{idx}: {e}")
 
@@ -186,7 +185,7 @@ class InstructionParser:
 
         return images
 
-    def _extract_youtube_links(self, html_content: str) -> List[str]:
+    def _extract_youtube_links(self, html_content: str) -> list[str]:
         """Извлечение уникальных YouTube-ссылок."""
         links = self.YT_PATTERN.findall(html_content)
         # Убираем дубликаты, сохраняя порядок
@@ -219,25 +218,25 @@ class InstructionParser:
         # Объединяем и чистим
         raw_text = " ".join(lines)
         # Убираем множественные пробелы и переносы
-        text = re.sub(r'\s+', ' ', raw_text)
-        text = re.sub(r'\n\s*\n+', '\n\n', text)
+        text = re.sub(r"\s+", " ", raw_text)
+        text = re.sub(r"\n\s*\n+", "\n\n", text)
         text = text.strip()
 
         return text
 
-    def _extract_sections(self, text: str) -> List[str]:
+    def _extract_sections(self, text: str) -> list[str]:
         """Разбиение текста на секции по этапам/пунктам."""
         sections = []
 
         # Ищем паттерны типа "ЭТАП 1.", "1.", "Шаг 1" и т.д.
         patterns = [
-            r'(?:ЭТАП\s+\d+[\.\:])',
-            r'(?:^|\n)\s*\d+[\.\)]\s+',
-            r'(?:Шаг\s+\d+)',
+            r"(?:ЭТАП\s+\d+[\.\:])",
+            r"(?:^|\n)\s*\d+[\.\)]\s+",
+            r"(?:Шаг\s+\d+)",
         ]
 
-        combined_pattern = '|'.join(patterns)
-        parts = re.split(f'({combined_pattern})', text)
+        combined_pattern = "|".join(patterns)
+        parts = re.split(f"({combined_pattern})", text)
 
         current_section = ""
         for part in parts:

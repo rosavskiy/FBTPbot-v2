@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
 from langchain_core.documents import Document
 
@@ -18,32 +17,66 @@ logger = logging.getLogger(__name__)
 
 
 # ── Пороги ────────────────────────────────────────────────
-AMBIGUITY_SCORE_GAP = 0.08      # Макс. разница score между топ-результатами для "неоднозначности"
-MIN_QUERY_WORDS = 4             # Минимум слов для "конкретного" запроса
-MAX_TOPICS_TO_SUGGEST = 5       # Максимум тем для предложения пользователю
-TOP_RESULTS_WINDOW = 8          # Сколько топ-результатов анализировать
+AMBIGUITY_SCORE_GAP = 0.08  # Макс. разница score между топ-результатами для "неоднозначности"
+MIN_QUERY_WORDS = 4  # Минимум слов для "конкретного" запроса
+MAX_TOPICS_TO_SUGGEST = 5  # Максимум тем для предложения пользователю
+TOP_RESULTS_WINDOW = 8  # Сколько топ-результатов анализировать
 
 # Размытые паттерны — слова, которые сами по себе не несут конкретики
 VAGUE_PATTERNS = [
-    "проблема", "не работает", "ошибка", "помогите", "помощь",
-    "не могу", "сломалось", "баг", "вопрос по", "вопрос",
-    "как быть", "что делать", "не получается", "не открывается",
-    "не сохраняется", "не отображается", "не печатается",
-    "не загружается", "зависает", "глючит", "беда",
+    "проблема",
+    "не работает",
+    "ошибка",
+    "помогите",
+    "помощь",
+    "не могу",
+    "сломалось",
+    "баг",
+    "вопрос по",
+    "вопрос",
+    "как быть",
+    "что делать",
+    "не получается",
+    "не открывается",
+    "не сохраняется",
+    "не отображается",
+    "не печатается",
+    "не загружается",
+    "зависает",
+    "глючит",
+    "беда",
 ]
 
 # Общие объекты — слова, описывающие типовые сущности без детализации
 BROAD_OBJECTS = [
-    "накладная", "отчёт", "отчет", "документ", "справочник",
-    "печать", "товар", "цена", "остаток", "приход", "расход",
-    "рецепт", "лицензия", "обновление", "база", "касса",
-    "чек", "скидка", "карта", "поставщик", "контрагент",
+    "накладная",
+    "отчёт",
+    "отчет",
+    "документ",
+    "справочник",
+    "печать",
+    "товар",
+    "цена",
+    "остаток",
+    "приход",
+    "расход",
+    "рецепт",
+    "лицензия",
+    "обновление",
+    "база",
+    "касса",
+    "чек",
+    "скидка",
+    "карта",
+    "поставщик",
+    "контрагент",
 ]
 
 
 @dataclass
 class SuggestedTopic:
     """Тема, предлагаемая пользователю для уточнения."""
+
     title: str
     article_id: str
     score: float
@@ -53,14 +86,15 @@ class SuggestedTopic:
 @dataclass
 class ClassificationResult:
     """Результат классификации запроса."""
-    is_complete: bool                              # Достаточно ли информации для ответа
-    suggested_topics: List[SuggestedTopic] = field(default_factory=list)
-    clarification_message: Optional[str] = None    # Сообщение для уточнения
+
+    is_complete: bool  # Достаточно ли информации для ответа
+    suggested_topics: list[SuggestedTopic] = field(default_factory=list)
+    clarification_message: str | None = None  # Сообщение для уточнения
 
 
 def classify_query(
     query: str,
-    scored_results: List[Tuple[Document, float]],
+    scored_results: list[tuple[Document, float]],
 ) -> ClassificationResult:
     """
     Классифицирует запрос пользователя по полноте.
@@ -129,11 +163,11 @@ def classify_query(
 
 
 def _extract_unique_topics(
-    scored_results: List[Tuple[Document, float]],
-) -> List[SuggestedTopic]:
+    scored_results: list[tuple[Document, float]],
+) -> list[SuggestedTopic]:
     """Извлекает уникальные темы из результатов поиска."""
     seen_article_ids = set()
-    topics: List[SuggestedTopic] = []
+    topics: list[SuggestedTopic] = []
 
     for doc, score in scored_results[:TOP_RESULTS_WINDOW]:
         meta = doc.metadata
@@ -151,12 +185,14 @@ def _extract_unique_topics(
         # Берём начало текста как snippet
         snippet = doc.page_content[:120].replace("\n", " ").strip()
 
-        topics.append(SuggestedTopic(
-            title=title,
-            article_id=article_id,
-            score=score,
-            snippet=snippet,
-        ))
+        topics.append(
+            SuggestedTopic(
+                title=title,
+                article_id=article_id,
+                score=score,
+                snippet=snippet,
+            )
+        )
 
         if len(topics) >= MAX_TOPICS_TO_SUGGEST:
             break
@@ -164,7 +200,7 @@ def _extract_unique_topics(
     return topics
 
 
-def _build_clarification_message(topics: List[SuggestedTopic]) -> str:
+def _build_clarification_message(topics: list[SuggestedTopic]) -> str:
     """Формирует текстовое сообщение с вариантами тем."""
     lines = ["Уточните, какая тема вас интересует:"]
 

@@ -11,21 +11,18 @@ SQLite для хранения:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Column,
     DateTime,
-    Enum,
     Float,
     ForeignKey,
     Integer,
     String,
     Text,
-    create_engine,
+    event,
 )
-from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -40,8 +37,8 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
     user_ip = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
 
@@ -58,7 +55,7 @@ class ChatMessageDB(Base):
     content = Column(Text, nullable=False)
     confidence = Column(Float, nullable=True)
     source_articles = Column(Text, nullable=True)  # JSON
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
     session = relationship("ChatSession", back_populates="messages")
 
@@ -74,8 +71,8 @@ class Escalation(Base):
     operator_notes = Column(Text, nullable=True)
     operator_id = Column(String(100), nullable=True)
     telegram_message_id = Column(String(50), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     session = relationship("ChatSession", back_populates="escalations")
 
@@ -88,7 +85,7 @@ class Feedback(Base):
     message_index = Column(Integer, default=0)
     rating = Column(Integer, nullable=False)
     comment = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class Operator(Base):
@@ -100,7 +97,7 @@ class Operator(Base):
     display_name = Column(String(100), nullable=True)
     telegram_user_id = Column(String(50), nullable=True)
     is_active = Column(Integer, default=1)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 # Async engine и session

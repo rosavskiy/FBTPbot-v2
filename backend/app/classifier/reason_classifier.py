@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
 import pymorphy3
 
@@ -25,7 +24,7 @@ from app.models.reason_schemas import ContactReason
 logger = logging.getLogger(__name__)
 
 # Singleton морфоанализатора
-_morph: Optional[pymorphy3.MorphAnalyzer] = None
+_morph: pymorphy3.MorphAnalyzer | None = None
 
 
 def _get_morph() -> pymorphy3.MorphAnalyzer:
@@ -51,19 +50,21 @@ MIN_SCORE_THRESHOLD = 1.0
 @dataclass
 class ClassificationCandidate:
     """Кандидат на причину обращения с деталями скоринга."""
+
     reason: ContactReason
     score: float = 0.0
-    phrase_matches: List[str] = field(default_factory=list)
-    numeric_matches: List[str] = field(default_factory=list)
-    noun_matches: List[str] = field(default_factory=list)
-    verb_matches: List[str] = field(default_factory=list)
+    phrase_matches: list[str] = field(default_factory=list)
+    numeric_matches: list[str] = field(default_factory=list)
+    noun_matches: list[str] = field(default_factory=list)
+    verb_matches: list[str] = field(default_factory=list)
 
 
 @dataclass
 class L1Result:
     """Результат L1-классификации."""
-    reason: Optional[ContactReason] = None
-    candidates: List[ClassificationCandidate] = field(default_factory=list)
+
+    reason: ContactReason | None = None
+    candidates: list[ClassificationCandidate] = field(default_factory=list)
     is_confident: bool = False
     needs_clarification: bool = False
     method: str = ""  # phrase_mask, numeric_tag, marker_score, llm, none
@@ -71,17 +72,17 @@ class L1Result:
 
 def _normalize_text(text: str) -> str:
     """Приведение текста к нижнему регистру, удаление лишних пробелов."""
-    return re.sub(r'\s+', ' ', text.lower().strip())
+    return re.sub(r"\s+", " ", text.lower().strip())
 
 
-def _extract_lemmas(text: str) -> Tuple[set[str], set[str]]:
+def _extract_lemmas(text: str) -> tuple[set[str], set[str]]:
     """Извлечь леммы существительных и глаголов из текста.
 
     Returns:
         (noun_lemmas, verb_lemmas)
     """
     morph = _get_morph()
-    words = re.findall(r'[а-яёА-ЯЁa-zA-Z]+', text)
+    words = re.findall(r"[а-яёА-ЯЁa-zA-Z]+", text)
 
     nouns = set()
     verbs = set()
@@ -93,15 +94,15 @@ def _extract_lemmas(text: str) -> Tuple[set[str], set[str]]:
         best = parsed[0]
         pos = best.tag.POS
 
-        if pos in ('NOUN', 'ADJF', 'ADJS'):
+        if pos in ("NOUN", "ADJF", "ADJS"):
             nouns.add(best.normal_form)
-        elif pos in ('VERB', 'INFN', 'PRTF', 'PRTS', 'GRND'):
+        elif pos in ("VERB", "INFN", "PRTF", "PRTS", "GRND"):
             verbs.add(best.normal_form)
 
     return nouns, verbs
 
 
-def _check_phrase_masks(text_normalized: str, reason: ContactReason) -> List[str]:
+def _check_phrase_masks(text_normalized: str, reason: ContactReason) -> list[str]:
     """Проверить совпадение фразовых масок (100%-маркеры)."""
     matches = []
     for mask in reason.markers.phrase_masks:
@@ -111,25 +112,25 @@ def _check_phrase_masks(text_normalized: str, reason: ContactReason) -> List[str
     return matches
 
 
-def _check_numeric_tags(text: str, reason: ContactReason) -> List[str]:
+def _check_numeric_tags(text: str, reason: ContactReason) -> list[str]:
     """Проверить числовые теги с учётом границ слов."""
     matches = []
     for tag in reason.markers.numeric_tags:
         # Ищем число как отдельное слово (не часть другого числа)
-        pattern = r'(?<!\d)' + re.escape(tag) + r'(?!\d)'
+        pattern = r"(?<!\d)" + re.escape(tag) + r"(?!\d)"
         if re.search(pattern, text):
             matches.append(tag)
     return matches
 
 
-def _check_nouns(user_nouns: set[str], reason: ContactReason) -> List[str]:
+def _check_nouns(user_nouns: set[str], reason: ContactReason) -> list[str]:
     """Сопоставить леммы существительных пользователя с маркерами."""
     morph = _get_morph()
     matches = []
 
     for marker_noun in reason.markers.nouns:
         # Лемматизируем каждое слово маркера (маркер может быть фразой)
-        marker_words = re.findall(r'[а-яёА-ЯЁa-zA-Z]+', marker_noun.lower())
+        marker_words = re.findall(r"[а-яёА-ЯЁa-zA-Z]+", marker_noun.lower())
         marker_lemmas = set()
         for w in marker_words:
             parsed = morph.parse(w)
@@ -143,13 +144,13 @@ def _check_nouns(user_nouns: set[str], reason: ContactReason) -> List[str]:
     return matches
 
 
-def _check_verbs(user_verbs: set[str], reason: ContactReason) -> List[str]:
+def _check_verbs(user_verbs: set[str], reason: ContactReason) -> list[str]:
     """Сопоставить леммы глаголов пользователя с маркерами."""
     morph = _get_morph()
     matches = []
 
     for marker_verb in reason.markers.verbs:
-        marker_words = re.findall(r'[а-яёА-ЯЁa-zA-Z]+', marker_verb.lower())
+        marker_words = re.findall(r"[а-яёА-ЯЁa-zA-Z]+", marker_verb.lower())
         marker_lemmas = set()
         for w in marker_words:
             parsed = morph.parse(w)
@@ -178,11 +179,9 @@ def classify_reason(query: str) -> L1Result:
     text_normalized = _normalize_text(query)
     user_nouns, user_verbs = _extract_lemmas(query)
 
-    logger.info(
-        f"[L1] query='{query}' | nouns={user_nouns} | verbs={user_verbs}"
-    )
+    logger.info(f"[L1] query='{query}' | nouns={user_nouns} | verbs={user_verbs}")
 
-    candidates: List[ClassificationCandidate] = []
+    candidates: list[ClassificationCandidate] = []
 
     for reason in reasons:
         candidate = ClassificationCandidate(reason=reason)

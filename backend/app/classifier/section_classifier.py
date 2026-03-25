@@ -11,8 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
 
 import pymorphy3
 
@@ -26,7 +25,7 @@ from app.models.reason_schemas import (
 
 logger = logging.getLogger(__name__)
 
-_morph: Optional[pymorphy3.MorphAnalyzer] = None
+_morph: pymorphy3.MorphAnalyzer | None = None
 
 
 def _get_morph() -> pymorphy3.MorphAnalyzer:
@@ -39,12 +38,13 @@ def _get_morph() -> pymorphy3.MorphAnalyzer:
 @dataclass
 class L2Result:
     """Результат L2-классификации."""
-    section: Optional[ThematicSection] = None
-    best_qa: Optional[QAPair] = None
+
+    section: ThematicSection | None = None
+    best_qa: QAPair | None = None
     best_qa_score: float = 0.0
-    best_complaint: Optional[Complaint] = None
+    best_complaint: Complaint | None = None
     best_complaint_score: float = 0.0
-    best_example: Optional[ExampleQA] = None
+    best_example: ExampleQA | None = None
     best_example_score: float = 0.0
     method: str = ""  # qa_match, complaint_match, section_match, none
 
@@ -52,7 +52,7 @@ class L2Result:
 def _text_to_lemma_set(text: str) -> set[str]:
     """Лемматизировать текст → множество лемм."""
     morph = _get_morph()
-    words = re.findall(r'[а-яёА-ЯЁa-zA-Z0-9]+', text.lower())
+    words = re.findall(r"[а-яёА-ЯЁa-zA-Z0-9]+", text.lower())
     lemmas = set()
     for w in words:
         parsed = morph.parse(w)
@@ -94,7 +94,7 @@ def classify_section(query: str, reason: ContactReason) -> L2Result:
     logger.info(f"[L2] reason={reason.name} | query_lemmas={query_lemmas}")
 
     # ── 1. Поиск среди примеров ответов (ExampleQA) — самый высокий приоритет ──
-    best_example: Optional[ExampleQA] = None
+    best_example: ExampleQA | None = None
     best_example_score = 0.0
 
     for ex in reason.example_answers:
@@ -114,7 +114,7 @@ def classify_section(query: str, reason: ContactReason) -> L2Result:
         )
 
     # ── 2. Поиск среди типовых жалоб ──
-    best_complaint: Optional[Complaint] = None
+    best_complaint: Complaint | None = None
     best_complaint_score = 0.0
 
     for complaint in reason.typical_complaints:
@@ -133,14 +133,14 @@ def classify_section(query: str, reason: ContactReason) -> L2Result:
         )
 
     # ── 3. Поиск по Q&A парам внутри тематических разделов ──
-    best_section: Optional[ThematicSection] = None
-    best_qa: Optional[QAPair] = None
+    best_section: ThematicSection | None = None
+    best_qa: QAPair | None = None
     best_qa_score = 0.0
     best_section_score = 0.0
 
     for section in reason.thematic_sections:
         section_total_score = 0.0
-        section_best_qa: Optional[QAPair] = None
+        section_best_qa: QAPair | None = None
         section_best_qa_score = 0.0
 
         for qa in section.qa_pairs:

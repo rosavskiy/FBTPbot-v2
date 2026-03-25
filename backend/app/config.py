@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from typing import List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -48,7 +46,7 @@ class Settings(BaseSettings):
     cors_origins: str = '["http://localhost:3000","http://localhost:5173"]'
 
     @property
-    def cors_origins_list(self) -> List[str]:
+    def cors_origins_list(self) -> list[str]:
         return json.loads(self.cors_origins)
 
     @property

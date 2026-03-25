@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
@@ -33,6 +33,7 @@ class ChromaDefaultEmbeddings(Embeddings):
 
     def __init__(self):
         from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+
         self._ef = DefaultEmbeddingFunction()
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
@@ -53,20 +54,16 @@ class KnowledgeBaseIndexer:
             length_function=len,
             separators=["\n\n", "\n", ". ", ", ", " ", ""],
         )
-        self.parser = InstructionParser(
-            images_dir=Path(settings.chroma_persist_dir).parent / "images"
-        )
-        self.vector_store: Optional[Chroma] = None
-        self.support_vector_store: Optional[Chroma] = None
+        self.parser = InstructionParser(images_dir=Path(settings.chroma_persist_dir).parent / "images")
+        self.vector_store: Chroma | None = None
+        self.support_vector_store: Chroma | None = None
 
-    def _instruction_to_documents(
-        self, instruction: ParsedInstruction
-    ) -> List[Document]:
+    def _instruction_to_documents(self, instruction: ParsedInstruction) -> list[Document]:
         """Конвертация ParsedInstruction в список LangChain Document."""
         documents = []
 
         # Формируем метаданные
-        metadata_base: Dict = {
+        metadata_base: dict = {
             "article_id": instruction.article_id,
             "title": instruction.title,
             "source_file": instruction.source_file,
@@ -80,10 +77,7 @@ class KnowledgeBaseIndexer:
 
         # Добавляем информацию об изображениях
         if instruction.images:
-            image_info = [
-                {"filename": img.filename, "alt": img.alt_text}
-                for img in instruction.images
-            ]
+            image_info = [{"filename": img.filename, "alt": img.alt_text} for img in instruction.images]
             metadata_base["images_info"] = json.dumps(image_info, ensure_ascii=False)
 
         # Формируем обогащённый текст для индексации
@@ -104,13 +98,11 @@ class KnowledgeBaseIndexer:
                 "chunk_index": chunk_idx,
                 "total_chunks": len(chunks),
             }
-            documents.append(
-                Document(page_content=chunk, metadata=metadata)
-            )
+            documents.append(Document(page_content=chunk, metadata=metadata))
 
         return documents
 
-    def index_instructions(self, instructions_dir: Optional[Path] = None) -> int:
+    def index_instructions(self, instructions_dir: Path | None = None) -> int:
         """
         Полная индексация всех инструкций.
 
@@ -125,7 +117,7 @@ class KnowledgeBaseIndexer:
         logger.info(f"Распарсено {len(instructions)} инструкций")
 
         # Конвертируем в документы
-        all_documents: List[Document] = []
+        all_documents: list[Document] = []
         for instruction in instructions:
             docs = self._instruction_to_documents(instruction)
             all_documents.extend(docs)
@@ -143,21 +135,14 @@ class KnowledgeBaseIndexer:
             persist_directory=persist_dir,
         )
 
-        logger.info(
-            f"Индексация завершена. "
-            f"Записано {len(all_documents)} чанков в ChromaDB ({persist_dir})"
-        )
+        logger.info(f"Индексация завершена. " f"Записано {len(all_documents)} чанков в ChromaDB ({persist_dir})")
 
         # Сохраняем статистику
         stats = {
             "total_instructions": len(instructions),
             "total_chunks": len(all_documents),
-            "instructions_with_images": sum(
-                1 for i in instructions if i.images
-            ),
-            "instructions_with_youtube": sum(
-                1 for i in instructions if i.youtube_links
-            ),
+            "instructions_with_images": sum(1 for i in instructions if i.images),
+            "instructions_with_youtube": sum(1 for i in instructions if i.youtube_links),
         }
         stats_path = Path(persist_dir).parent / "indexing_stats.json"
         stats_path.write_text(json.dumps(stats, indent=2, ensure_ascii=False))
@@ -168,7 +153,7 @@ class KnowledgeBaseIndexer:
     def index_support_tickets(
         self,
         json_path: Path,
-        progress_callback: Optional[Callable[[int, int, str], None]] = None,
+        progress_callback: Callable[[int, int, str], None] | None = None,
         batch_size: int = 200,
     ) -> int:
         """
@@ -189,35 +174,33 @@ class KnowledgeBaseIndexer:
 
         logger.info(f"Начало индексации заявок ТП из {json_path}")
 
-        with open(json_path, 'r', encoding='utf-8') as f:
+        with open(json_path, encoding="utf-8") as f:
             qa_docs = _json.load(f)
 
         logger.info(f"Загружено {len(qa_docs)} Q&A документов")
         report_progress(0, len(qa_docs), "JSON загружен, подготовка документов")
 
         # Конвертируем в LangChain Document
-        documents: List[Document] = []
-        document_ids: List[str] = []
+        documents: list[Document] = []
+        document_ids: list[str] = []
         for item in qa_docs:
-            metadata = item.get('metadata', {})
+            metadata = item.get("metadata", {})
             # ChromaDB не поддерживает списки в metadata — сериализуем
             clean_meta = {
-                'source': metadata.get('source', 'real_support_tickets'),
-                'category': metadata.get('category', 'Прочее'),
-                'category_en': metadata.get('category_en', 'general'),
-                'quality_score': metadata.get('quality_score', 0),
-                'question': metadata.get('question', '')[:500],
-                'doc_type': metadata.get('type', 'qa_pair'),
-                'article_id': f"tp_{item.get('id', 'unknown')}",
-                'title': metadata.get('question', 'Заявка ТП')[:200],
+                "source": metadata.get("source", "real_support_tickets"),
+                "category": metadata.get("category", "Прочее"),
+                "category_en": metadata.get("category_en", "general"),
+                "quality_score": metadata.get("quality_score", 0),
+                "question": metadata.get("question", "")[:500],
+                "doc_type": metadata.get("type", "qa_pair"),
+                "article_id": f"tp_{item.get('id', 'unknown')}",
+                "title": metadata.get("question", "Заявка ТП")[:200],
             }
-            if metadata.get('tags'):
-                clean_meta['tags'] = ', '.join(metadata['tags'])
+            if metadata.get("tags"):
+                clean_meta["tags"] = ", ".join(metadata["tags"])
 
-            documents.append(
-                Document(page_content=item['text'], metadata=clean_meta)
-            )
-            document_ids.append(item['id'])
+            documents.append(Document(page_content=item["text"], metadata=clean_meta))
+            document_ids.append(item["id"])
 
         report_progress(0, len(documents), "Документы подготовлены, очистка коллекции")
 
@@ -232,13 +215,9 @@ class KnowledgeBaseIndexer:
                 persist_directory=persist_dir,
             )
             existing_store.delete_collection()
-            logger.info(
-                f"Существующая коллекция '{SUPPORT_COLLECTION_NAME}' удалена перед полной переиндексацией"
-            )
+            logger.info(f"Существующая коллекция '{SUPPORT_COLLECTION_NAME}' удалена перед полной переиндексацией")
         except Exception as e:
-            logger.info(
-                f"Коллекция '{SUPPORT_COLLECTION_NAME}' ещё не существовала или уже очищена: {e}"
-            )
+            logger.info(f"Коллекция '{SUPPORT_COLLECTION_NAME}' ещё не существовала или уже очищена: {e}")
 
         self.support_vector_store = Chroma(
             collection_name=SUPPORT_COLLECTION_NAME,
@@ -250,8 +229,8 @@ class KnowledgeBaseIndexer:
         report_progress(0, total_documents, "Индексация в ChromaDB запущена")
 
         for start_idx in range(0, total_documents, batch_size):
-            batch_docs = documents[start_idx:start_idx + batch_size]
-            batch_ids = document_ids[start_idx:start_idx + batch_size]
+            batch_docs = documents[start_idx : start_idx + batch_size]
+            batch_ids = document_ids[start_idx : start_idx + batch_size]
             self.support_vector_store.add_documents(batch_docs, ids=batch_ids)
             processed = min(start_idx + len(batch_docs), total_documents)
             report_progress(
@@ -268,13 +247,13 @@ class KnowledgeBaseIndexer:
         # Сохраняем статистику
         cats = {}
         for item in qa_docs:
-            cat = item.get('metadata', {}).get('category', 'Прочее')
+            cat = item.get("metadata", {}).get("category", "Прочее")
             cats[cat] = cats.get(cat, 0) + 1
 
         stats = {
-            'total_documents': len(documents),
-            'categories': cats,
-            'collection_name': SUPPORT_COLLECTION_NAME,
+            "total_documents": len(documents),
+            "categories": cats,
+            "collection_name": SUPPORT_COLLECTION_NAME,
         }
         stats_path = Path(persist_dir).parent / "support_indexing_stats.json"
         stats_path.write_text(_json.dumps(stats, indent=2, ensure_ascii=False))
@@ -293,10 +272,9 @@ class KnowledgeBaseIndexer:
             )
         return self.vector_store
 
-
-    def get_support_vector_store(self) -> Optional[Chroma]:
+    def get_support_vector_store(self) -> Chroma | None:
         """Получение векторного хранилища коллекции заявок ТП."""
-        if not hasattr(self, 'support_vector_store') or self.support_vector_store is None:
+        if not hasattr(self, "support_vector_store") or self.support_vector_store is None:
             try:
                 store = Chroma(
                     collection_name=SUPPORT_COLLECTION_NAME,
@@ -318,7 +296,7 @@ class KnowledgeBaseIndexer:
 
 
 # Singleton-экземпляр индексатора
-_indexer: Optional[KnowledgeBaseIndexer] = None
+_indexer: KnowledgeBaseIndexer | None = None
 
 
 def get_indexer() -> KnowledgeBaseIndexer:

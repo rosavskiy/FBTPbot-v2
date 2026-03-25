@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 _SESSION_TTL = timedelta(minutes=15)
 
 # Внутреннее хранилище: session_id → context dict
-_store: Dict[str, Dict[str, Any]] = {}
+_store: dict[str, dict[str, Any]] = {}
 
 
 async def save_clarification_context(
@@ -40,12 +40,12 @@ async def save_clarification_context(
         "state": "awaiting_clarification",
         "original_query": original_query,
         "topics": topics,
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
     }
     logger.debug(f"[SESSION] Saved clarification context for {session_id}: {len(topics)} topics")
 
 
-def get_clarification_context(session_id: str) -> Optional[Dict[str, Any]]:
+def get_clarification_context(session_id: str) -> dict[str, Any] | None:
     """
     Получает контекст уточнения, если он активен и не истёк.
 
@@ -56,9 +56,9 @@ def get_clarification_context(session_id: str) -> Optional[Dict[str, Any]]:
         return None
 
     ctx = _store[session_id]
-    created = ctx.get("created_at", datetime.now(timezone.utc))
+    created = ctx.get("created_at", datetime.now(UTC))
 
-    if datetime.now(timezone.utc) - created > _SESSION_TTL:
+    if datetime.now(UTC) - created > _SESSION_TTL:
         del _store[session_id]
         return None
 
@@ -74,7 +74,7 @@ def clear_clarification_context(session_id: str) -> None:
     logger.debug(f"[SESSION] Cleared clarification context for {session_id}")
 
 
-def resolve_topic_choice(session_id: str, user_input: str) -> Optional[dict]:
+def resolve_topic_choice(session_id: str, user_input: str) -> dict | None:
     """
     Проверяет, является ли сообщение пользователя выбором темы.
 
@@ -112,11 +112,8 @@ def resolve_topic_choice(session_id: str, user_input: str) -> Optional[dict]:
 async def cleanup_expired_sessions() -> None:
     """Фоновая задача: периодическая очистка просроченных записей."""
     while True:
-        now = datetime.now(timezone.utc)
-        expired = [
-            sid for sid, ctx in _store.items()
-            if now - ctx.get("created_at", now) > _SESSION_TTL
-        ]
+        now = datetime.now(UTC)
+        expired = [sid for sid, ctx in _store.items() if now - ctx.get("created_at", now) > _SESSION_TTL]
         for sid in expired:
             del _store[sid]
         if expired:

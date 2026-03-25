@@ -7,7 +7,6 @@ Telegram-бот для уведомления операторов техпод�
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import httpx
 
@@ -28,8 +27,7 @@ class TelegramNotifier:
 
         if not self.enabled:
             logger.warning(
-                "Telegram-уведомления отключены: "
-                "не заданы TELEGRAM_BOT_TOKEN и/или TELEGRAM_SUPPORT_CHAT_ID"
+                "Telegram-уведомления отключены: " "не заданы TELEGRAM_BOT_TOKEN и/или TELEGRAM_SUPPORT_CHAT_ID"
             )
 
     @property
@@ -42,10 +40,10 @@ class TelegramNotifier:
         session_id: str,
         user_question: str,
         bot_answer: str,
-        reason: Optional[str] = None,
-        contact_info: Optional[str] = None,
-        chat_summary: Optional[str] = None,
-    ) -> Optional[str]:
+        reason: str | None = None,
+        contact_info: str | None = None,
+        chat_summary: str | None = None,
+    ) -> str | None:
         """
         Отправка уведомления об эскалации в Telegram.
 
@@ -57,10 +55,7 @@ class TelegramNotifier:
             return None
 
         # Формируем красивое сообщение
-        text = (
-            f"🆘 <b>Новая заявка в техподдержку</b>\n\n"
-            f"📋 <b>ID:</b> <code>{escalation_id[:8]}...</code>\n"
-        )
+        text = f"🆘 <b>Новая заявка в техподдержку</b>\n\n" f"📋 <b>ID:</b> <code>{escalation_id[:8]}...</code>\n"
 
         if contact_info:
             text += f"📞 <b>Контакт:</b> {self._escape_html(contact_info)}\n"
@@ -68,24 +63,15 @@ class TelegramNotifier:
         if reason:
             text += f"❓ <b>Причина:</b> {self._escape_html(reason[:200])}\n"
 
-        text += (
-            f"\n💬 <b>Последний вопрос:</b>\n"
-            f"{self._escape_html(user_question[:300])}\n"
-        )
+        text += f"\n💬 <b>Последний вопрос:</b>\n" f"{self._escape_html(user_question[:300])}\n"
 
         if bot_answer:
-            text += (
-                f"\n🤖 <b>Ответ бота:</b>\n"
-                f"{self._escape_html(bot_answer[:300])}\n"
-            )
+            text += f"\n🤖 <b>Ответ бота:</b>\n" f"{self._escape_html(bot_answer[:300])}\n"
 
         if chat_summary:
             text += f"\n📝 <b>Краткое содержание диалога:</b>\n{self._escape_html(chat_summary[:500])}\n"
 
-        text += (
-            f"\n🔗 <b>Панель оператора:</b>\n"
-            f"/escalation_{escalation_id[:8]}"
-        )
+        text += f"\n🔗 <b>Панель оператора:</b>\n" f"/escalation_{escalation_id[:8]}"
 
         try:
             async with httpx.AsyncClient() as client:
@@ -102,9 +88,7 @@ class TelegramNotifier:
 
                 if data.get("ok"):
                     message_id = str(data["result"]["message_id"])
-                    logger.info(
-                        f"Telegram-уведомление отправлено: escalation={escalation_id}"
-                    )
+                    logger.info(f"Telegram-уведомление отправлено: escalation={escalation_id}")
                     return message_id
                 else:
                     logger.error(f"Telegram API error: {data}")
@@ -119,8 +103,8 @@ class TelegramNotifier:
         escalation_id: str,
         operator_name: str,
         reply_text: str,
-        reply_to_message_id: Optional[str] = None,
-    ) -> Optional[str]:
+        reply_to_message_id: str | None = None,
+    ) -> str | None:
         """Отправка уведомления об ответе оператора."""
         if not self.enabled:
             return None
@@ -159,15 +143,11 @@ class TelegramNotifier:
     @staticmethod
     def _escape_html(text: str) -> str:
         """Экранирование HTML для Telegram."""
-        return (
-            text.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-        )
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 # Singleton
-_notifier: Optional[TelegramNotifier] = None
+_notifier: TelegramNotifier | None = None
 
 
 def get_telegram_notifier() -> TelegramNotifier:

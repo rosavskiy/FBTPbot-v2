@@ -1,0 +1,212 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+jobs:
+  # ─── Stage 1: Backend checks ───────────────────────────────
+  backend-lint:
+    name: "Backend: Lint (Ruff)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Ruff
+        run: pip install ruff==0.8.6
+
+      - name: Ruff check
+        working-directory: backend
+        run: ruff check app/ tests/
+
+      - name: Ruff format check
+        working-directory: backend
+        run: ruff format --check app/ tests/
+
+  backend-test:
+    name: "Backend: Tests (pytest)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run tests
+        working-directory: backend
+        run: pytest -v --tb=short
+
+  # ─── Stage 2: Frontend checks ──────────────────────────────
+  frontend-build:
+    name: "Frontend: TypeScript & Build"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript type check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Build production
+        working-directory: frontend
+        run: npm run build
+
+      - name: Check build output
+        working-directory: frontend
+        run: |
+          if [ ! -d "dist" ] || [ -z "$(ls -A dist)" ]; then
+            echo "❌ Build output is empty"
+            exit 1
+          fi
+          echo "✅ Build output:"
+          ls -lh dist/
+          du -sh dist/
+
+  # ─── Stage 3: Docker build verification ─────────────────────
+  docker-build:
+    name: "Docker: Build images"
+    runs-on: ubuntu-latest
+    needs: [backend-lint, backend-test, frontend-build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t fbtpbot-backend:test ./backend
+
+      - name: Build frontend image
+        run: docker build -t fbtpbot-frontend:test ./frontend
+
+      - name: Verify backend starts
+        run: |
+          docker run -d --name backend-test \
+            -e DATABASE_URL=sqlite+aiosqlite:///./data/support.db \
+            -e CHROMA_PERSIST_DIR=./data/chroma_db \
+            -p 8000:8000 \
+            fbtpbot-backend:test
+
+          # Wait for startup
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/api/health > /dev/null 2>&1; then
+              echo "✅ Backend health check passed"
+              docker logs backend-test 2>&1 | tail -5
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "❌ Backend failed to start"
+          docker logs backend-test 2>&1
+          exit 1
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f backend-test 2>/dev/null || true
+
+  # ─── Stage 4: Deploy (only on push to main) ────────────────
+  deploy:
+    name: "Deploy to production"
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        env:
+          SERVER: ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}
+          DEPLOY_DIR: /opt/FBTPbot-v2
+        run: |
+          # Sync source code (preserve runtime data and .env)
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='backend/data' \
+            --exclude='backend/.env' \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            ./ $SERVER:$DEPLOY_DIR/
+
+          # Rebuild and restart containers
+          ssh -o StrictHostKeyChecking=no $SERVER "
+            cd $DEPLOY_DIR &&
+            docker compose build --parallel &&
+            docker compose up -d &&
+            docker image prune -f
+          "
+
+      - name: Health check
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          echo "⏳ Waiting for services to start..."
+          sleep 15
+
+          # Backend check
+          for i in $(seq 1 6); do
+            STATUS=$(curl -sf http://$SERVER_HOST:8000/api/health | jq -r '.status' 2>/dev/null || echo "fail")
+            if [ "$STATUS" = "ok" ]; then
+              echo "✅ Backend is healthy"
+              break
+            fi
+            echo "  Attempt $i/6 - retrying in 5s..."
+            sleep 5
+          done
+          if [ "$STATUS" != "ok" ]; then
+            echo "❌ Backend health check failed"
+            exit 1
+          fi
+
+          # Frontend check
+          HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' http://$SERVER_HOST)
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Frontend is serving (HTTP $HTTP_CODE)"
+          else
+            echo "❌ Frontend returned HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Notify success
+        if: success()
+        run: echo "🚀 Deployed commit ${{ github.sha }} to production"
+
+      - name: Notify failure
+        if: failure()
+        run: echo "❌ Deploy of ${{ github.sha }} failed — check logs above"

@@ -20,12 +20,12 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from langchain_chroma import Chroma
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.config import settings
 from app.indexer.knowledge_base import (
@@ -40,9 +40,12 @@ router = APIRouter(prefix="/api/kb", tags=["kb-admin"])
 # На сервере: /app/data/support_kb.json (persistent volume)
 # Локально: real_support/processed/support_qa_documents_merged_final.json
 _KB_PATHS = [
-    Path("/app/data/support_kb.json"),                    # Docker production
+    Path("/app/data/support_kb.json"),  # Docker production
     Path("/app/real_support/processed/support_qa_documents_merged_final.json"),  # Docker alt
-    Path(__file__).resolve().parents[3] / "real_support" / "processed" / "support_qa_documents_merged_final.json",  # Local dev
+    Path(__file__).resolve().parents[3]
+    / "real_support"
+    / "processed"
+    / "support_qa_documents_merged_final.json",  # Local dev
 ]
 KB_JSON_PATH = next((p for p in _KB_PATHS if p.exists()), _KB_PATHS[0])
 
@@ -51,11 +54,12 @@ KB_BACKUP_DIR = KB_JSON_PATH.parent / "backups"
 
 # ─── Pydantic-модели ─────────────────────────────────────────────────
 
+
 class KBItemMetadata(BaseModel):
     source: str = "real_support_tickets"
     category: str = "Прочее"
     category_en: str = "general"
-    tags: List[str] = []
+    tags: list[str] = []
     quality_score: int = 3
     question: str = ""
     answer: str = ""
@@ -67,24 +71,24 @@ class KBItem(BaseModel):
     text: str
     metadata: KBItemMetadata
     reviewed: bool = False
-    review_date: Optional[str] = None
+    review_date: str | None = None
 
 
 class KBItemUpdate(BaseModel):
-    question: Optional[str] = None
-    answer: Optional[str] = None
-    category: Optional[str] = None
-    category_en: Optional[str] = None
-    tags: Optional[List[str]] = None
-    quality_score: Optional[int] = None
+    question: str | None = None
+    answer: str | None = None
+    category: str | None = None
+    category_en: str | None = None
+    tags: list[str] | None = None
+    quality_score: int | None = None
 
 
 class KBStats(BaseModel):
     total: int = 0
     reviewed: int = 0
     unreviewed: int = 0
-    by_category: Dict[str, int] = {}
-    by_quality: Dict[str, int] = {}
+    by_category: dict[str, int] = {}
+    by_quality: dict[str, int] = {}
     avg_quality: float = 0.0
 
 
@@ -102,29 +106,29 @@ class KBReindexResult(BaseModel):
 
 
 class KBReindexStatus(BaseModel):
-    job_id: Optional[str] = None
+    job_id: str | None = None
     status: str = "idle"
     total_documents: int = 0
     processed_documents: int = 0
     progress_percent: float = 0.0
     duration_seconds: float = 0.0
-    started_at: Optional[str] = None
-    finished_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    updated_at: str | None = None
     message: str = "Ожидание запуска"
-    error: Optional[str] = None
+    error: str | None = None
 
 
-def _make_reindex_status() -> Dict[str, Any]:
+def _make_reindex_status() -> dict[str, Any]:
     return KBReindexStatus().model_dump()
 
 
 _REINDEX_STATUS_LOCK = threading.Lock()
-_REINDEX_STATUS: Dict[str, Any] = _make_reindex_status()
-_REINDEX_TASK: Optional[asyncio.Task] = None
+_REINDEX_STATUS: dict[str, Any] = _make_reindex_status()
+_REINDEX_TASK: asyncio.Task | None = None
 
 
-def _get_reindex_status() -> Dict[str, Any]:
+def _get_reindex_status() -> dict[str, Any]:
     with _REINDEX_STATUS_LOCK:
         return dict(_REINDEX_STATUS)
 
@@ -138,14 +142,14 @@ def _set_reindex_phase(
     *,
     status: str,
     message: str,
-    processed_documents: Optional[int] = None,
-    total_documents: Optional[int] = None,
-    progress_percent: Optional[float] = None,
-    error: Optional[str] = None,
-    finished_at: Optional[str] = None,
-    duration_seconds: Optional[float] = None,
+    processed_documents: int | None = None,
+    total_documents: int | None = None,
+    progress_percent: float | None = None,
+    error: str | None = None,
+    finished_at: str | None = None,
+    duration_seconds: float | None = None,
 ):
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "status": status,
         "message": message,
         "updated_at": datetime.now().isoformat(),
@@ -207,8 +211,8 @@ async def _run_reindex_job(job_id: str):
 
         from app.rag.engine import _engine as _rag_engine
 
-        if _rag_engine is not None and hasattr(_rag_engine, '_support_vector_store'):
-            delattr(_rag_engine, '_support_vector_store')
+        if _rag_engine is not None and hasattr(_rag_engine, "_support_vector_store"):
+            delattr(_rag_engine, "_support_vector_store")
             logger.info("Кеш support_vector_store в RAG-движке сброшен")
 
         indexer.support_vector_store = None
@@ -242,18 +246,19 @@ async def _run_reindex_job(job_id: str):
 
 # ─── Утилиты для работы с JSON-файлом ────────────────────────────────
 
-def _load_kb() -> List[Dict[str, Any]]:
+
+def _load_kb() -> list[dict[str, Any]]:
     """Загрузить базу знаний из JSON."""
     if not KB_JSON_PATH.exists():
         raise HTTPException(status_code=404, detail=f"Файл БЗ не найден: {KB_JSON_PATH}")
     try:
-        with open(KB_JSON_PATH, "r", encoding="utf-8") as f:
+        with open(KB_JSON_PATH, encoding="utf-8") as f:
             return json.load(f)
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=500, detail=f"Ошибка парсинга JSON: {e}")
 
 
-def _save_kb(data: List[Dict[str, Any]], backup: bool = True):
+def _save_kb(data: list[dict[str, Any]], backup: bool = True):
     """Сохранить базу знаний в JSON с опциональным бэкапом."""
     if backup:
         KB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
@@ -272,7 +277,7 @@ def _save_kb(data: List[Dict[str, Any]], backup: bool = True):
     logger.info(f"БЗ сохранена: {len(data)} записей -> {KB_JSON_PATH}")
 
 
-def _update_chromadb_document(item: Dict[str, Any]):
+def _update_chromadb_document(item: dict[str, Any]):
     """Инкрементально обновить один документ в ChromaDB."""
     try:
         indexer = get_indexer()
@@ -350,12 +355,13 @@ def _delete_chromadb_document(doc_id: str):
 
 # ─── Эндпоинты ───────────────────────────────────────────────────────
 
+
 @router.get("/stats", response_model=KBStats)
 async def get_kb_stats():
     """Статистика базы знаний."""
     data = _load_kb()
-    by_category: Dict[str, int] = {}
-    by_quality: Dict[str, int] = {}
+    by_category: dict[str, int] = {}
+    by_quality: dict[str, int] = {}
     reviewed = 0
     total_quality = 0.0
 
@@ -385,11 +391,11 @@ async def get_kb_stats():
 async def list_kb_items(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    category: Optional[str] = None,
-    reviewed: Optional[bool] = None,
-    quality_min: Optional[int] = None,
-    quality_max: Optional[int] = None,
-    search: Optional[str] = None,
+    category: str | None = None,
+    reviewed: bool | None = None,
+    quality_min: int | None = None,
+    quality_max: int | None = None,
+    search: str | None = None,
 ):
     """Список Q&A пар с пагинацией и фильтрацией."""
     data = _load_kb()
@@ -406,7 +412,8 @@ async def list_kb_items(
     if search:
         search_lower = search.lower()
         data = [
-            d for d in data
+            d
+            for d in data
             if search_lower in d.get("id", "").lower()
             or search_lower in d.get("metadata", {}).get("question", "").lower()
             or search_lower in d.get("metadata", {}).get("answer", "").lower()
@@ -438,7 +445,7 @@ async def get_kb_item(item_id: str):
 
 @router.get("/quiz/next")
 async def get_next_quiz_item(
-    category: Optional[str] = None,
+    category: str | None = None,
     skip_reviewed: bool = True,
 ):
     """
@@ -622,7 +629,7 @@ async def delete_kb_item(item_id: str):
     if found_idx is None:
         raise HTTPException(status_code=404, detail=f"Элемент {item_id} не найден")
 
-    removed = data.pop(found_idx)
+    data.pop(found_idx)
     _save_kb(data)
 
     _delete_chromadb_document(item_id)

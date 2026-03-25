@@ -119,6 +119,8 @@
 <div class="header">
     <h1>⚙️ Настройка бота — Фармбазис v2</h1>
     <div class="actions">
+        <input type="file" id="importFileInput" accept=".docx" style="display:none" onchange="importDocx(this)">
+        <button class="btn btn-success" onclick="document.getElementById('importFileInput').click()">📥 Импорт .docx</button>
         <button class="btn btn-secondary" onclick="reloadReasons()">🔄 Перезагрузить</button>
     </div>
 </div>
@@ -557,6 +559,31 @@ async function reloadReasons() {
     await fetch(`${API}/reload`, { method: 'POST' });
     await loadReasons();
     notify('Перезагружено', 'success');
+}
+
+async function importDocx(input) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = '';
+
+    if (!file.name.endsWith('.docx')) {
+        notify('Допустимы только .docx файлы', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    notify('Импорт...', 'success');
+    try {
+        const r = await fetch(`${API}/import-docx`, { method: 'POST', body: formData });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Ошибка импорта');
+        await loadReasons();
+        notify(data.message || `Импортировано: ${data.imported}`, 'success');
+    } catch(e) {
+        notify(e.message, 'error');
+    }
 }
 
 // ── Test ──

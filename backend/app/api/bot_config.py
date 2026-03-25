@@ -7,9 +7,10 @@ CRUD-операции + тестирование классификации.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+import tempfile
+from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from app.database.reason_store import (
@@ -19,13 +20,14 @@ from app.database.reason_store import (
     invalidate_cache,
     upsert_reason,
 )
-from app.models.reason_schemas import ContactReason, ContactReasonsData, Markers
+from app.models.reason_schemas import ContactReason
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/bot-config", tags=["bot-config"])
 
 
 # ── Request/Response models ──
+
 
 class ReasonSummary(BaseModel):
     id: str
@@ -51,18 +53,19 @@ class TestClassifyResponse(BaseModel):
     query: str
     l1_method: str
     l1_confident: bool
-    l1_reason: Optional[str] = None
-    l1_reason_id: Optional[str] = None
+    l1_reason: str | None = None
+    l1_reason_id: str | None = None
     candidates: list[dict] = []
-    l2_method: Optional[str] = None
-    l2_section: Optional[str] = None
-    l2_best_qa_score: Optional[float] = None
-    l2_best_qa: Optional[str] = None
-    l2_best_example_score: Optional[float] = None
-    l2_best_example: Optional[str] = None
+    l2_method: str | None = None
+    l2_section: str | None = None
+    l2_best_qa_score: float | None = None
+    l2_best_qa: str | None = None
+    l2_best_example_score: float | None = None
+    l2_best_example: str | None = None
 
 
 # ── Endpoints ──
+
 
 @router.get("/reasons", response_model=ReasonsListResponse)
 async def list_reasons(active_only: bool = False):
@@ -73,16 +76,18 @@ async def list_reasons(active_only: bool = False):
         m = r.markers
         markers_count = len(m.verbs) + len(m.nouns) + len(m.numeric_tags) + len(m.phrase_masks)
         qa_count = sum(len(s.qa_pairs) for s in r.thematic_sections)
-        summaries.append(ReasonSummary(
-            id=r.id,
-            name=r.name,
-            is_active=r.is_active,
-            markers_count=markers_count,
-            sections_count=len(r.thematic_sections),
-            qa_count=qa_count,
-            complaints_count=len(r.typical_complaints),
-            examples_count=len(r.example_answers),
-        ))
+        summaries.append(
+            ReasonSummary(
+                id=r.id,
+                name=r.name,
+                is_active=r.is_active,
+                markers_count=markers_count,
+                sections_count=len(r.thematic_sections),
+                qa_count=qa_count,
+                complaints_count=len(r.typical_complaints),
+                examples_count=len(r.example_answers),
+            )
+        )
     return ReasonsListResponse(total=len(summaries), reasons=summaries)
 
 
@@ -148,6 +153,7 @@ async def duplicate_reason(reason_id: str, new_id: str, new_name: str):
 async def test_classify(req: TestClassifyRequest):
     """Тестирование классификации вопроса (без генерации ответа)."""
     from app.rag.engine import get_rag_engine
+
     engine = get_rag_engine()
     result = await engine.test_classify(req.question)
     return TestClassifyResponse(**result)
@@ -159,3 +165,84 @@ async def reload_reasons():
     invalidate_cache()
     reasons = get_all_reasons(active_only=False)
     return {"status": "reloaded", "total": len(reasons)}
+
+
+class ImportResult(BaseModel):
+    imported: int = 0
+    skipped: int = 0
+    errors: list[str] = []
+    message: str = ""
+
+
+@router.post("/import-docx", response_model=ImportResult)
+async def import_docx(file: UploadFile = File(...)):
+    """Импорт причин обращения из .docx файла."""
+    if not file.filename or not file.filename.endswith(".docx"):
+        raise HTTPException(status_code=400, detail="Допустимы только .docx файлы")
+
+    # Сохраняем во временный файл
+    try:
+        contents = await file.read()
+        if len(contents) > 10 * 1024 * 1024:  # 10 MB limit
+            raise HTTPException(status_code=400, detail="Файл слишком большой (макс. 10 МБ)")
+
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
+            tmp.write(contents)
+            tmp_path = Path(tmp.name)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Ошибка чтения файла: {e}")
+
+    # Парсим docx
+    try:
+        from scripts.import_brains import parse_docx
+
+        reason_dict = parse_docx(tmp_path)
+    except Exception as e:
+        tmp_path.unlink(missing_ok=True)
+        logger.error(f"Ошибка парсинга docx: {e}")
+        raise HTTPException(status_code=422, detail=f"Ошибка парсинга файла: {e}")
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    # Валидируем и сохраняем
+    errors = []
+    imported = 0
+    skipped = 0
+
+    try:
+        reason = ContactReason.model_validate(reason_dict)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Невалидные данные: {e}")
+
+    if not reason.id or not reason.name:
+        raise HTTPException(status_code=422, detail="Не удалось извлечь название причины из файла")
+
+    existing = get_reason(reason.id)
+    if existing:
+        # Обновляем существующую
+        upsert_reason(reason)
+        logger.info(f"Updated reason from docx: {reason.id} ({reason.name})")
+    else:
+        upsert_reason(reason)
+        logger.info(f"Imported reason from docx: {reason.id} ({reason.name})")
+
+    imported = 1
+    invalidate_cache()
+
+    m = reason.markers
+    markers_count = len(m.verbs) + len(m.nouns) + len(m.numeric_tags) + len(m.phrase_masks)
+    qa_count = sum(len(s.qa_pairs) for s in reason.thematic_sections)
+
+    return ImportResult(
+        imported=imported,
+        skipped=skipped,
+        errors=errors,
+        message=(
+            f"{'Обновлена' if existing else 'Импортирована'} причина «{reason.name}»: "
+            f"{markers_count} маркеров, {len(reason.thematic_sections)} разделов, "
+            f"{qa_count} Q&A, {len(reason.typical_complaints)} жалоб, "
+            f"{len(reason.example_answers)} примеров"
+        ),
+    )

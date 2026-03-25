@@ -7,14 +7,11 @@ API панели оператора техподдержки.
 from __future__ import annotations
 
 import hashlib
-import hmac
-import json
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import get_db
@@ -44,7 +41,7 @@ DEMO_OPERATOR = {
 }
 
 
-def _verify_token(authorization: Optional[str] = Header(None)) -> dict:
+def _verify_token(authorization: str | None = Header(None)) -> dict:
     """Проверка токена авторизации оператора."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Требуется авторизация")
@@ -54,7 +51,7 @@ def _verify_token(authorization: Optional[str] = Header(None)) -> dict:
         raise HTTPException(status_code=401, detail="Недействительный токен")
 
     token_data = _active_tokens[token]
-    if datetime.now(timezone.utc) > token_data["expires_at"]:
+    if datetime.now(UTC) > token_data["expires_at"]:
         del _active_tokens[token]
         raise HTTPException(status_code=401, detail="Токен истёк")
 
@@ -66,17 +63,14 @@ async def operator_login(request: OperatorLoginRequest):
     """Авторизация оператора."""
     password_hash = hashlib.sha256(request.password.encode()).hexdigest()
 
-    if (
-        request.username != DEMO_OPERATOR["username"]
-        or password_hash != DEMO_OPERATOR["password_hash"]
-    ):
+    if request.username != DEMO_OPERATOR["username"] or password_hash != DEMO_OPERATOR["password_hash"]:
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
     token = secrets.token_urlsafe(32)
     _active_tokens[token] = {
         "username": request.username,
         "display_name": DEMO_OPERATOR["display_name"],
-        "expires_at": datetime.now(timezone.utc) + timedelta(hours=12),
+        "expires_at": datetime.now(UTC) + timedelta(hours=12),
     }
 
     return OperatorLoginResponse(
@@ -87,7 +81,7 @@ async def operator_login(request: OperatorLoginRequest):
 
 @router.get("/escalations", response_model=EscalationListResponse)
 async def list_escalations(
-    status: Optional[str] = None,
+    status: str | None = None,
     limit: int = 50,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
@@ -96,9 +90,7 @@ async def list_escalations(
     """Список эскалаций для оператора."""
     db_service = DatabaseService(db)
 
-    escalations, total, pending_count = await db_service.get_all_escalations(
-        status=status, limit=limit, offset=offset
-    )
+    escalations, total, pending_count = await db_service.get_all_escalations(status=status, limit=limit, offset=offset)
 
     details = []
     for esc in escalations:
