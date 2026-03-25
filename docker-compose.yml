@@ -1,0 +1,36 @@
+services:
+  backend:
+    image: fbtpbot-backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/data:/app/data
+      - ./instructions:/app/instructions:ro
+    restart: unless-stopped
+
+  tg-bot:
+    image: fbtpbot-backend:latest
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/data:/app/data
+      - ./instructions:/app/instructions:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+    command: ["python", "-m", "app.tg.bot"]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

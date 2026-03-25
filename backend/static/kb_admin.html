@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Фармбазис — Квиз базы знаний</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        /* Fallback for hidden class in case Tailwind CDN fails */
+        .hidden { display: none !important; }
+        
+        :root {
+            --primary: #2563eb;
+            --success: #16a34a;
+            --danger: #dc2626;
+            --warning: #d97706;
+        }
+        body { background: #f1f5f9; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        .card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+        .btn { border-radius: 8px; padding: 10px 20px; font-weight: 600; cursor: pointer; transition: all .15s; border: none; }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.15); }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-warning { background: var(--warning); color: white; }
+        .btn-outline { background: white; color: #374151; border: 2px solid #d1d5db; }
+        .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+        .tag { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 2px 10px; border-radius: 9999px; font-size: 0.8rem; margin: 2px; }
+        .tag-remove { cursor: pointer; margin-left: 4px; color: #6366f1; }
+        .tag-remove:hover { color: var(--danger); }
+        textarea, input[type="text"], select {
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px 14px;
+            width: 100%;
+            font-size: 0.95rem;
+            transition: border-color .15s;
+        }
+        textarea:focus, input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+        }
+        .progress-bar { height: 8px; border-radius: 4px; background: #e2e8f0; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #3b82f6, #16a34a); transition: width .5s ease; }
+        .quality-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 32px; height: 32px; border-radius: 50%; font-weight: 700; font-size: 0.9rem;
+        }
+        .q1 { background: #fecaca; color: #991b1b; }
+        .q2 { background: #fed7aa; color: #9a3412; }
+        .q3 { background: #fef08a; color: #854d0e; }
+        .q4 { background: #bbf7d0; color: #166534; }
+        .q5 { background: #86efac; color: #14532d; }
+        .tab { padding: 10px 24px; cursor: pointer; border-bottom: 3px solid transparent; font-weight: 600; color: #64748b; transition: all .15s; }
+        .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .tab:hover { color: var(--primary); }
+        .stat-card { text-align: center; padding: 20px; }
+        .stat-number { font-size: 2rem; font-weight: 800; }
+        .stat-label { font-size: 0.85rem; color: #64748b; margin-top: 4px; }
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,.5);
+            display: flex; align-items: center; justify-content: center; z-index: 100;
+        }
+        .modal { background: white; border-radius: 16px; padding: 32px; max-width: 500px; width: 90%; }
+        .toast {
+            position: fixed; bottom: 24px; right: 24px;
+            padding: 14px 24px; border-radius: 10px; color: white; font-weight: 600;
+            z-index: 200; animation: slideIn .3s ease;
+        }
+        @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .spinner { border: 3px solid #e2e8f0; border-top-color: var(--primary); border-radius: 50%; width: 24px; height: 24px; animation: spin .6s linear infinite; display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .fade-in { animation: fadeIn .3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* List mode */
+        .list-row { border-bottom: 1px solid #f1f5f9; padding: 12px 16px; cursor: pointer; transition: background .1s; }
+        .list-row:hover { background: #f8fafc; }
+        .list-row.reviewed { border-left: 4px solid var(--success); }
+        .list-row.unreviewed { border-left: 4px solid #d1d5db; }
+    </style>
+</head>
+<body>
+    <div id="app" class="max-w-5xl mx-auto px-4 py-6">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">💊 Фармбазис — База знаний</h1>
+                <p class="text-gray-500 text-sm mt-1">Квиз-проверка и управление Q&A</p>
+            </div>
+            <div class="flex gap-2">
+                <button class="btn btn-outline text-sm" onclick="loadStats()">📊 Обновить</button>
+                <button class="btn btn-primary text-sm" onclick="showImportModal()">📥 Импорт данных</button>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div id="stats-panel" class="card mb-6 grid grid-cols-2 md:grid-cols-5 gap-0 divide-x divide-gray-100">
+            <div class="stat-card">
+                <div class="stat-number text-blue-600" id="stat-total">—</div>
+                <div class="stat-label">Всего записей</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number text-green-600" id="stat-reviewed">—</div>
+                <div class="stat-label">Проверено</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number text-orange-500" id="stat-remaining">—</div>
+                <div class="stat-label">Осталось</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number text-purple-600" id="stat-quality">—</div>
+                <div class="stat-label">Ср. качество</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number text-green-500" id="stat-percent">—</div>
+                <div class="stat-label">Прогресс</div>
+            </div>
+        </div>
+
+        <!-- Progress bar -->
+        <div class="progress-bar mb-6">
+            <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+        </div>
+
+        <div id="reindex-status-panel" class="card mb-6 hidden fade-in">
+            <div class="p-5">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">Статус переиндексации ChromaDB</div>
+                        <div id="reindex-status-message" class="text-sm text-gray-500 mt-1">Ожидание запуска</div>
+                    </div>
+                    <div class="text-right">
+                        <div id="reindex-status-badge" class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-gray-100 text-gray-600">idle</div>
+                        <div id="reindex-status-counts" class="text-xs text-gray-400 mt-2">0 / 0</div>
+                    </div>
+                </div>
+                <div class="progress-bar mt-4">
+                    <div class="progress-fill" id="reindex-status-fill" style="width: 0%"></div>
+                </div>
+                <div id="reindex-status-meta" class="text-xs text-gray-400 mt-3"></div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex gap-0 border-b border-gray-200 mb-6">
+            <div class="tab active" data-tab="quiz" onclick="switchTab('quiz')">🎯 Квиз</div>
+            <div class="tab" data-tab="list" onclick="switchTab('list')">📋 Список</div>
+            <div class="tab" data-tab="import" onclick="switchTab('import')">📥 Импорт</div>
+        </div>
+
+        <!-- ==================== QUIZ TAB ==================== -->
+        <div id="tab-quiz">
+            <!-- Category filter -->
+            <div class="flex gap-3 mb-4 items-center">
+                <label class="text-sm font-semibold text-gray-600">Фильтр по категории:</label>
+                <select id="quiz-category" class="w-64" onchange="loadNextQuiz()">
+                    <option value="">Все категории</option>
+                </select>
+            </div>
+
+            <!-- Quiz card -->
+            <div id="quiz-card" class="card p-6 fade-in">
+                <div id="quiz-loading" class="text-center py-12">
+                    <div class="spinner mx-auto mb-4"></div>
+                    <p class="text-gray-500">Загрузка...</p>
+                </div>
+                <div id="quiz-content" class="hidden">
+                    <!-- Item header -->
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <span class="quality-badge" id="quiz-quality">3</span>
+                            <span class="text-sm font-medium text-gray-500" id="quiz-id">—</span>
+                            <span class="text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-medium" id="quiz-category-badge">—</span>
+                        </div>
+                        <button class="text-red-400 hover:text-red-600 text-sm font-medium" onclick="deleteCurrentItem()">🗑 Удалить</button>
+                    </div>
+
+                    <!-- Tags -->
+                    <div class="mb-4" id="quiz-tags-container">
+                        <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Теги</label>
+                        <div id="quiz-tags" class="mt-1 flex flex-wrap gap-1"></div>
+                        <div class="mt-2 flex gap-2">
+                            <input type="text" id="new-tag-input" placeholder="Новый тег..." class="w-48 text-sm py-1 px-3" onkeydown="if(event.key==='Enter'){addTag()}">
+                            <button class="btn btn-outline text-sm py-1 px-3" onclick="addTag()">+</button>
+                        </div>
+                    </div>
+
+                    <!-- Question -->
+                    <div class="mb-4">
+                        <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Вопрос</label>
+                        <textarea id="quiz-question" rows="3" class="mt-1"></textarea>
+                    </div>
+
+                    <!-- Answer -->
+                    <div class="mb-4">
+                        <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Ответ</label>
+                        <textarea id="quiz-answer" rows="6" class="mt-1"></textarea>
+                    </div>
+
+                    <!-- Category edit -->
+                    <div class="mb-4 flex gap-4">
+                        <div class="flex-1">
+                            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Категория</label>
+                            <select id="quiz-cat-edit" class="mt-1"></select>
+                        </div>
+                        <div class="w-32">
+                            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Качество (1-5)</label>
+                            <select id="quiz-quality-edit" class="mt-1">
+                                <option value="1">1 — Плохое</option>
+                                <option value="2">2 — Слабое</option>
+                                <option value="3">3 — Среднее</option>
+                                <option value="4">4 — Хорошее</option>
+                                <option value="5">5 — Отличное</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Action buttons -->
+                    <div class="flex gap-3 mt-6 pt-4 border-t border-gray-100">
+                        <button class="btn btn-success flex-1 text-lg py-3" onclick="approveItem()">
+                            ✅ Одобрить
+                        </button>
+                        <button class="btn btn-primary flex-1 text-lg py-3" onclick="saveAndApprove()">
+                            💾 Сохранить и одобрить
+                        </button>
+                        <button class="btn btn-outline flex-1 text-lg py-3" onclick="skipItem()">
+                            ⏭ Пропустить
+                        </button>
+                    </div>
+
+                    <!-- Keyboard hints -->
+                    <div class="mt-3 text-center text-xs text-gray-400">
+                        Горячие клавиши: <kbd class="bg-gray-100 px-2 py-0.5 rounded">Enter</kbd> Одобрить &nbsp;
+                        <kbd class="bg-gray-100 px-2 py-0.5 rounded">Ctrl+S</kbd> Сохранить и одобрить &nbsp;
+                        <kbd class="bg-gray-100 px-2 py-0.5 rounded">→</kbd> Пропустить
+                    </div>
+                </div>
+
+                <!-- All done -->
+                <div id="quiz-done" class="hidden text-center py-12">
+                    <div class="text-5xl mb-4">🎉</div>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-2">Все записи проверены!</h2>
+                    <p class="text-gray-500">Выберите другую категорию или загрузите новые данные.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== LIST TAB ==================== -->
+        <div id="tab-list" class="hidden">
+            <!-- Search & Filters -->
+            <div class="card p-4 mb-4">
+                <div class="flex gap-3 flex-wrap">
+                    <input type="text" id="list-search" placeholder="Поиск по ID или тексту: tp_general_00002, tp_marking_2215..." class="flex-1 min-w-64" oninput="debounceSearch()">
+                    <select id="list-category" class="w-48" onchange="loadList()">
+                        <option value="">Все категории</option>
+                    </select>
+                    <select id="list-reviewed" class="w-40" onchange="loadList()">
+                        <option value="">Все статусы</option>
+                        <option value="false">Непроверенные</option>
+                        <option value="true">Проверенные</option>
+                    </select>
+                    <button class="btn btn-warning text-sm" onclick="showReindexModal()">🔄 Реиндексация</button>
+                </div>
+            </div>
+
+            <!-- List -->
+            <div class="card overflow-hidden" id="list-container">
+                <div id="list-items"></div>
+                <div id="list-pagination" class="p-4 border-t border-gray-100 flex items-center justify-between"></div>
+            </div>
+        </div>
+
+        <!-- ==================== IMPORT TAB ==================== -->
+        <div id="tab-import" class="hidden">
+            <div class="card p-8 text-center">
+                <div class="text-5xl mb-4">📥</div>
+                <h2 class="text-xl font-bold mb-2">Импорт новых Q&A данных</h2>
+                <p class="text-gray-500 mb-6">
+                    Загрузите JSON-файл с новыми вопросами и ответами.<br>
+                    Дубликаты (по ID) будут пропущены, новые записи добавятся в базу.
+                </p>
+                <div class="max-w-md mx-auto">
+                    <div id="drop-zone" class="border-2 border-dashed border-gray-300 rounded-xl p-8 mb-4 hover:border-blue-400 transition-colors cursor-pointer"
+                         onclick="document.getElementById('import-file').click()"
+                         ondragover="event.preventDefault(); this.classList.add('border-blue-400','bg-blue-50')"
+                         ondragleave="this.classList.remove('border-blue-400','bg-blue-50')"
+                         ondrop="handleDrop(event)">
+                        <div class="text-3xl mb-2">📄</div>
+                        <p class="font-medium text-gray-700">Перетащите JSON-файл сюда</p>
+                        <p class="text-sm text-gray-400 mt-1">или нажмите для выбора</p>
+                        <input type="file" id="import-file" accept=".json" class="hidden" onchange="handleFileSelect(event)">
+                    </div>
+                    <div id="import-file-info" class="hidden mb-4 text-left bg-gray-50 rounded-lg p-4">
+                        <p class="font-medium" id="import-filename">—</p>
+                        <p class="text-sm text-gray-500" id="import-filesize">—</p>
+                    </div>
+                    <button id="import-btn" class="btn btn-primary w-full text-lg py-3 disabled:opacity-50"
+                            onclick="doImport()" disabled>
+                        🚀 Загрузить в базу знаний
+                    </button>
+                    <div id="import-result" class="hidden mt-4 text-left bg-green-50 border border-green-200 rounded-lg p-4"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div id="import-modal" class="modal-overlay hidden" onclick="if(event.target===this)hideImportModal()">
+        <div class="modal">
+            <h3 class="text-lg font-bold mb-4">📥 Быстрый импорт данных</h3>
+            <p class="text-gray-500 mb-4 text-sm">Выберите JSON-файл с новыми Q&A данными для загрузки.</p>
+            <input type="file" id="quick-import-file" accept=".json" class="mb-4">
+            <div class="flex gap-3">
+                <button class="btn btn-primary flex-1" onclick="doQuickImport()">Загрузить</button>
+                <button class="btn btn-outline flex-1" onclick="hideImportModal()">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reindex Modal -->
+    <div id="reindex-modal" class="modal-overlay hidden" onclick="if(event.target===this)hideReindexModal()">
+        <div class="modal">
+            <h3 class="text-lg font-bold mb-4">🔄 Полная переиндексация</h3>
+            <p class="text-gray-500 mb-4 text-sm">
+                Это пересоздаст коллекцию <code>support_tickets</code> в ChromaDB из актуального JSON-файла.
+                Используйте после массовых правок. Бот продолжит работать — коллекция обновится на лету.
+            </p>
+            <div id="reindex-progress" class="hidden mb-4">
+                <div class="flex items-center gap-3 mb-3">
+                    <div class="spinner"></div>
+                    <span class="text-gray-600" id="reindex-progress-label">Переиндексация...</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="reindex-progress-fill" style="width: 0%"></div>
+                </div>
+                <div id="reindex-progress-stats" class="text-xs text-gray-400 mt-2">0 / 0</div>
+            </div>
+            <div id="reindex-result" class="hidden mb-4 bg-green-50 border border-green-200 rounded-lg p-3 text-sm"></div>
+            <div class="flex gap-3">
+                <button id="reindex-btn" class="btn btn-warning flex-1" onclick="doReindex()">Запустить</button>
+                <button class="btn btn-outline flex-1" onclick="hideReindexModal()">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast hidden"></div>
+
+    <script>
+    // ─── Config ───────────────────────────────────────────────────
+    const API = '/api/kb';
+    let currentItem = null;
+    let currentItemId = null;
+    let categories = {};
+    let editedTags = [];
+    let selectedImportFile = null;
+    let searchTimeout = null;
+    let listPage = 1;
+    let reindexPollTimer = null;
+
+    // ─── Init ─────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadCategories();
+        await loadStats();
+        await refreshReindexStatus(true);
+        await loadNextQuiz();
+        setupKeyboard();
+    });
+
+    // ─── API helpers ──────────────────────────────────────────────
+    async function api(path, options = {}, silent = false) {
+        const url = API + path;
+        try {
+            const resp = await fetch(url, options);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                throw new Error(err.detail || `HTTP ${resp.status}`);
+            }
+            return await resp.json();
+        } catch (e) {
+            if (!silent) {
+                showToast(e.message, 'error');
+            }
+            throw e;
+        }
+    }
+
+    // ─── Categories ───────────────────────────────────────────────
+    async function loadCategories() {
+        try {
+            const data = await api('/categories');
+            categories = data.categories;
+            const selects = ['quiz-category', 'list-category', 'quiz-cat-edit'];
+            selects.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const currentVal = el.value;
+                // Keep the first option (All / default)
+                while (el.options.length > (id === 'quiz-cat-edit' ? 0 : 1)) {
+                    el.remove(id === 'quiz-cat-edit' ? 0 : 1);
+                }
+                Object.entries(categories).forEach(([cat, catEn]) => {
+                    const opt = new Option(cat, cat);
+                    el.add(opt);
+                });
+                el.value = currentVal;
+            });
+        } catch (e) { /* ignore */ }
+    }
+
+    // ─── Stats ────────────────────────────────────────────────────
+    async function loadStats() {
+        try {
+            const s = await api('/stats');
+            document.getElementById('stat-total').textContent = s.total;
+            document.getElementById('stat-reviewed').textContent = s.reviewed;
+            document.getElementById('stat-remaining').textContent = s.unreviewed;
+            document.getElementById('stat-quality').textContent = s.avg_quality;
+            const pct = s.total > 0 ? (s.reviewed / s.total * 100).toFixed(1) : 0;
+            document.getElementById('stat-percent').textContent = pct + '%';
+            document.getElementById('progress-fill').style.width = pct + '%';
+        } catch (e) { /* ignore */ }
+    }
+
+    // ─── Quiz Mode ────────────────────────────────────────────────
+    async function loadNextQuiz() {
+        const cat = document.getElementById('quiz-category').value;
+        document.getElementById('quiz-loading').classList.remove('hidden');
+        document.getElementById('quiz-content').classList.add('hidden');
+        document.getElementById('quiz-done').classList.add('hidden');
+
+        try {
+            const params = new URLSearchParams();
+            if (cat) params.set('category', cat);
+            params.set('skip_reviewed', 'true');
+            const data = await api('/quiz/next?' + params);
+
+            if (!data.item) {
+                document.getElementById('quiz-loading').classList.add('hidden');
+                document.getElementById('quiz-done').classList.remove('hidden');
+                return;
+            }
+
+            currentItem = data.item;
+            currentItemId = data.item.id;
+            renderQuizItem(data.item);
+
+            document.getElementById('quiz-loading').classList.add('hidden');
+            document.getElementById('quiz-content').classList.remove('hidden');
+
+            // Update progress
+            if (data.progress) {
+                const p = data.progress;
+                document.getElementById('stat-reviewed').textContent = p.reviewed;
+                document.getElementById('stat-remaining').textContent = p.remaining;
+                document.getElementById('stat-percent').textContent = p.percent + '%';
+                document.getElementById('progress-fill').style.width = p.percent + '%';
+            }
+        } catch (e) {
+            document.getElementById('quiz-loading').classList.add('hidden');
+        }
+    }
+
+    function renderQuizItem(item) {
+        const meta = item.metadata || {};
+        const qs = meta.quality_score || 0;
+
+        document.getElementById('quiz-id').textContent = item.id;
+        document.getElementById('quiz-question').value = meta.question || '';
+        document.getElementById('quiz-answer').value = meta.answer || '';
+
+        // Quality badge
+        const qBadge = document.getElementById('quiz-quality');
+        qBadge.textContent = qs;
+        qBadge.className = 'quality-badge q' + Math.max(1, Math.min(5, qs));
+
+        // Category
+        document.getElementById('quiz-category-badge').textContent = meta.category || 'Прочее';
+        document.getElementById('quiz-cat-edit').value = meta.category || 'Прочее';
+        document.getElementById('quiz-quality-edit').value = String(qs);
+
+        // Tags
+        editedTags = [...(meta.tags || [])];
+        renderTags();
+    }
+
+    function renderTags() {
+        const container = document.getElementById('quiz-tags');
+        container.innerHTML = editedTags.map((tag, i) =>
+            `<span class="tag">${tag}<span class="tag-remove" onclick="removeTag(${i})">×</span></span>`
+        ).join('');
+    }
+
+    function addTag() {
+        const input = document.getElementById('new-tag-input');
+        const val = input.value.trim();
+        if (val && !editedTags.includes(val)) {
+            editedTags.push(val);
+            renderTags();
+        }
+        input.value = '';
+    }
+
+    function removeTag(idx) {
+        editedTags.splice(idx, 1);
+        renderTags();
+    }
+
+    // ─── Quiz Actions ─────────────────────────────────────────────
+    async function approveItem() {
+        if (!currentItemId) return;
+        try {
+            await api(`/items/${currentItemId}/approve`, { method: 'POST' });
+            showToast('✅ Одобрено!', 'success');
+            await loadNextQuiz();
+            await loadStats();
+        } catch (e) { /* error shown by api() */ }
+    }
+
+    async function saveAndApprove() {
+        if (!currentItemId) return;
+        const body = {
+            question: document.getElementById('quiz-question').value,
+            answer: document.getElementById('quiz-answer').value,
+            category: document.getElementById('quiz-cat-edit').value,
+            tags: editedTags,
+            quality_score: parseInt(document.getElementById('quiz-quality-edit').value) || 5,
+        };
+        // Find category_en
+        const catEn = categories[body.category] || 'general';
+        body.category_en = catEn;
+
+        try {
+            await api(`/items/${currentItemId}/save-and-approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            showToast('💾 Сохранено и одобрено!', 'success');
+            await loadNextQuiz();
+            await loadStats();
+        } catch (e) { /* error shown */ }
+    }
+
+    async function skipItem() {
+        showToast('⏭ Пропущено', 'info');
+        // Move to next by loading with skip
+        if (!currentItemId) return;
+        // Mark item with a temporary "skip" so it goes to the end
+        // Actually we just load next — the current one stays unreviewed
+        // But we need to skip it; let's just load next page or shift
+        await loadNextQuizSkipping(currentItemId);
+    }
+
+    let skippedIds = new Set();
+
+    async function loadNextQuizSkipping(skipId) {
+        if (skipId) skippedIds.add(skipId);
+        const cat = document.getElementById('quiz-category').value;
+
+        try {
+            const params = new URLSearchParams();
+            if (cat) params.set('category', cat);
+            params.set('skip_reviewed', 'true');
+            // Load a batch and find first non-skipped
+            const data = await api('/items?' + new URLSearchParams({
+                page: '1', page_size: '50',
+                ...(cat ? { category: cat } : {}),
+                reviewed: 'false',
+            }));
+
+            const candidates = (data.items || []).filter(i => !skippedIds.has(i.id));
+            if (candidates.length === 0) {
+                // Reset skipped and try again, or show done
+                skippedIds.clear();
+                await loadNextQuiz();
+                return;
+            }
+
+            currentItem = candidates[0];
+            currentItemId = candidates[0].id;
+            renderQuizItem(candidates[0]);
+
+            document.getElementById('quiz-loading').classList.add('hidden');
+            document.getElementById('quiz-content').classList.remove('hidden');
+        } catch (e) {
+            await loadNextQuiz();
+        }
+    }
+
+    async function deleteCurrentItem() {
+        if (!currentItemId) return;
+        if (!confirm(`Удалить запись ${currentItemId}? Это действие необратимо.`)) return;
+        try {
+            await api(`/items/${currentItemId}`, { method: 'DELETE' });
+            showToast('🗑 Удалено', 'warning');
+            await loadNextQuiz();
+            await loadStats();
+        } catch (e) { /* error shown */ }
+    }
+
+    // ─── List Mode ────────────────────────────────────────────────
+    function debounceSearch() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => { listPage = 1; loadList(); }, 300);
+    }
+
+    async function loadList() {
+        const search = document.getElementById('list-search').value;
+        const cat = document.getElementById('list-category').value;
+        const reviewed = document.getElementById('list-reviewed').value;
+
+        const params = new URLSearchParams({
+            page: String(listPage),
+            page_size: '20',
+        });
+        if (search) params.set('search', search);
+        if (cat) params.set('category', cat);
+        if (reviewed) params.set('reviewed', reviewed);
+
+        try {
+            const data = await api('/items?' + params);
+            renderList(data);
+        } catch (e) { /* error shown */ }
+    }
+
+    function renderList(data) {
+        const container = document.getElementById('list-items');
+        if (!data.items || data.items.length === 0) {
+            container.innerHTML = '<div class="p-8 text-center text-gray-400">Ничего не найдено</div>';
+            document.getElementById('list-pagination').innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = data.items.map(item => {
+            const meta = item.metadata || {};
+            const reviewed = item.reviewed ? 'reviewed' : 'unreviewed';
+            const qs = meta.quality_score || 0;
+            const tags = (meta.tags || []).map(t => `<span class="tag text-xs">${t}</span>`).join('');
+            return `
+                <div class="list-row ${reviewed}" onclick="openItemInQuiz('${item.id}')">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="quality-badge text-xs q${Math.max(1,Math.min(5,qs))}" style="width:24px;height:24px;font-size:0.75rem">${qs}</span>
+                            <span class="text-xs text-gray-400 w-36 truncate" title="${item.id}">${item.id}</span>
+                            <span class="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">${meta.category || ''}</span>
+                            ${item.reviewed ? '<span class="text-xs text-green-600 font-medium">✓ Проверено</span>' : ''}
+                        </div>
+                        <div class="flex gap-1">${tags}</div>
+                    </div>
+                    <div class="mt-1 text-sm font-medium text-gray-800 truncate">${meta.question || '(нет вопроса)'}</div>
+                    <div class="mt-0.5 text-xs text-gray-500 truncate">${(meta.answer || '').substring(0, 150)}...</div>
+                </div>
+            `;
+        }).join('');
+
+        // Pagination
+        const pag = document.getElementById('list-pagination');
+        const totalPages = data.total_pages;
+        pag.innerHTML = `
+            <span class="text-sm text-gray-500">Стр. ${data.page} из ${totalPages} (всего ${data.total})</span>
+            <div class="flex items-center gap-2">
+                <button class="btn btn-outline text-sm py-1 px-2" onclick="goToPage(1)" ${data.page <= 1 ? 'disabled' : ''} title="Первая страница">⏮</button>
+                <button class="btn btn-outline text-sm py-1 px-3" onclick="goToPage(listPage-1)" ${data.page <= 1 ? 'disabled' : ''}>← Назад</button>
+                <div class="flex items-center gap-1">
+                    <input type="number" id="page-input" class="text-center text-sm py-1 px-2" style="width: 60px; border: 2px solid #e2e8f0; border-radius: 6px;" 
+                           value="${data.page}" min="1" max="${totalPages}" 
+                           onkeydown="if(event.key==='Enter'){goToPage(parseInt(this.value))}"
+                           onblur="goToPage(parseInt(this.value))">
+                    <span class="text-sm text-gray-400">/ ${totalPages}</span>
+                </div>
+                <button class="btn btn-outline text-sm py-1 px-3" onclick="goToPage(listPage+1)" ${data.page >= totalPages ? 'disabled' : ''}>Вперёд →</button>
+                <button class="btn btn-outline text-sm py-1 px-2" onclick="goToPage(${totalPages})" ${data.page >= totalPages ? 'disabled' : ''} title="Последняя страница">⏭</button>
+            </div>
+        `;
+    }
+
+    function goToPage(page) {
+        const totalPages = parseInt(document.getElementById('page-input')?.max) || 1;
+        const newPage = Math.max(1, Math.min(totalPages, page));
+        if (newPage !== listPage && !isNaN(newPage)) {
+            listPage = newPage;
+            loadList();
+        }
+    }
+
+    async function openItemInQuiz(itemId) {
+        try {
+            const item = await api(`/items/${itemId}`);
+            currentItem = item;
+            currentItemId = item.id;
+            renderQuizItem(item);
+            switchTab('quiz');
+            document.getElementById('quiz-loading').classList.add('hidden');
+            document.getElementById('quiz-content').classList.remove('hidden');
+            document.getElementById('quiz-done').classList.add('hidden');
+        } catch (e) { /* error shown */ }
+    }
+
+    // ─── Import ───────────────────────────────────────────────────
+    function handleDrop(e) {
+        e.preventDefault();
+        e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50');
+        if (e.dataTransfer.files.length > 0) {
+            setImportFile(e.dataTransfer.files[0]);
+        }
+    }
+
+    function handleFileSelect(e) {
+        if (e.target.files.length > 0) {
+            setImportFile(e.target.files[0]);
+        }
+    }
+
+    function setImportFile(file) {
+        selectedImportFile = file;
+        document.getElementById('import-file-info').classList.remove('hidden');
+        document.getElementById('import-filename').textContent = file.name;
+        document.getElementById('import-filesize').textContent = formatBytes(file.size);
+        document.getElementById('import-btn').disabled = false;
+        document.getElementById('import-result').classList.add('hidden');
+    }
+
+    async function doImport() {
+        if (!selectedImportFile) return;
+        const btn = document.getElementById('import-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px"></span> Загрузка...';
+
+        const formData = new FormData();
+        formData.append('file', selectedImportFile);
+
+        try {
+            const result = await api('/import', {
+                method: 'POST',
+                body: formData,
+            });
+            const el = document.getElementById('import-result');
+            el.classList.remove('hidden');
+            el.innerHTML = `
+                <p class="font-medium text-green-800">✅ ${result.message}</p>
+                <div class="mt-2 text-sm text-green-700">
+                    <div>Добавлено: <b>${result.added}</b></div>
+                    <div>Дубликатов пропущено: <b>${result.duplicates_skipped}</b></div>
+                    ${result.errors > 0 ? `<div class="text-red-600">Ошибок: <b>${result.errors}</b></div>` : ''}
+                </div>
+            `;
+            showToast(`📥 Импортировано: +${result.added}`, 'success');
+            await loadStats();
+            await loadCategories();
+        } catch (e) { /* error shown */ }
+
+        btn.disabled = false;
+        btn.innerHTML = '🚀 Загрузить в базу знаний';
+    }
+
+    function showImportModal() { document.getElementById('import-modal').classList.remove('hidden'); }
+    function hideImportModal() { document.getElementById('import-modal').classList.add('hidden'); }
+
+    async function doQuickImport() {
+        const fileInput = document.getElementById('quick-import-file');
+        if (!fileInput.files.length) { showToast('Выберите файл', 'error'); return; }
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        try {
+            const result = await api('/import', { method: 'POST', body: formData });
+            showToast(`📥 +${result.added} записей`, 'success');
+            hideImportModal();
+            await loadStats();
+            await loadCategories();
+        } catch (e) { /* error shown */ }
+    }
+
+    // ─── Reindex ──────────────────────────────────────────────────
+    async function showReindexModal() {
+        document.getElementById('reindex-modal').classList.remove('hidden');
+        await refreshReindexStatus(true);
+    }
+    function hideReindexModal() { document.getElementById('reindex-modal').classList.add('hidden'); }
+
+    function formatDateTime(isoString) {
+        if (!isoString) return '—';
+        const date = new Date(isoString);
+        return Number.isNaN(date.getTime()) ? isoString : date.toLocaleString('ru-RU');
+    }
+
+    function updateReindexStatusUI(status) {
+        const panel = document.getElementById('reindex-status-panel');
+        const message = document.getElementById('reindex-status-message');
+        const badge = document.getElementById('reindex-status-badge');
+        const counts = document.getElementById('reindex-status-counts');
+        const fill = document.getElementById('reindex-status-fill');
+        const meta = document.getElementById('reindex-status-meta');
+        const progress = document.getElementById('reindex-progress');
+        const progressLabel = document.getElementById('reindex-progress-label');
+        const progressFill = document.getElementById('reindex-progress-fill');
+        const progressStats = document.getElementById('reindex-progress-stats');
+        const result = document.getElementById('reindex-result');
+        const btn = document.getElementById('reindex-btn');
+
+        const isRunning = status.status === 'running';
+        const isCompleted = status.status === 'completed';
+        const isFailed = status.status === 'failed';
+        const shouldShowPanel = isRunning || isCompleted || isFailed;
+        const processed = status.processed_documents || 0;
+        const total = status.total_documents || 0;
+        const percent = status.progress_percent || 0;
+
+        panel.classList.toggle('hidden', !shouldShowPanel);
+        message.textContent = status.message || 'Ожидание запуска';
+        counts.textContent = `${processed} / ${total}`;
+        fill.style.width = `${percent}%`;
+        progressFill.style.width = `${percent}%`;
+        progressLabel.textContent = status.message || 'Переиндексация...';
+        progressStats.textContent = `${processed} / ${total} (${percent.toFixed(1)}%)`;
+
+        const metaParts = [];
+        if (status.started_at) metaParts.push(`Старт: ${formatDateTime(status.started_at)}`);
+        if (status.finished_at) metaParts.push(`Финиш: ${formatDateTime(status.finished_at)}`);
+        if (status.duration_seconds) metaParts.push(`Длительность: ${status.duration_seconds}с`);
+        if (status.job_id) metaParts.push(`Job: ${status.job_id.slice(0, 8)}`);
+        meta.textContent = metaParts.join(' • ');
+
+        badge.className = 'inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold';
+        if (isRunning) {
+            badge.classList.add('bg-yellow-100', 'text-yellow-800');
+            badge.textContent = 'running';
+            progress.classList.remove('hidden');
+            result.classList.add('hidden');
+            btn.disabled = true;
+            btn.textContent = 'Идёт переиндексация...';
+        } else if (isCompleted) {
+            badge.classList.add('bg-green-100', 'text-green-700');
+            badge.textContent = 'completed';
+            progress.classList.add('hidden');
+            result.classList.remove('hidden');
+            result.className = 'mb-4 bg-green-50 border border-green-200 rounded-lg p-3 text-sm';
+            result.innerHTML = `✅ ${status.message}`;
+            btn.disabled = false;
+            btn.textContent = 'Запустить заново';
+        } else if (isFailed) {
+            badge.classList.add('bg-red-100', 'text-red-700');
+            badge.textContent = 'failed';
+            progress.classList.add('hidden');
+            result.classList.remove('hidden');
+            result.className = 'mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700';
+            result.innerHTML = `❌ ${status.error || status.message}`;
+            btn.disabled = false;
+            btn.textContent = 'Запустить снова';
+        } else {
+            badge.classList.add('bg-gray-100', 'text-gray-600');
+            badge.textContent = status.status || 'idle';
+            progress.classList.add('hidden');
+            result.classList.add('hidden');
+            btn.disabled = false;
+            btn.textContent = 'Запустить';
+        }
+    }
+
+    function startReindexPolling() {
+        if (reindexPollTimer) return;
+        reindexPollTimer = setInterval(() => refreshReindexStatus(true), 2000);
+    }
+
+    function stopReindexPolling() {
+        if (!reindexPollTimer) return;
+        clearInterval(reindexPollTimer);
+        reindexPollTimer = null;
+    }
+
+    async function refreshReindexStatus(silent = false) {
+        try {
+            const status = await api('/reindex/status', {}, silent);
+            updateReindexStatusUI(status);
+            if (status.status === 'running') {
+                startReindexPolling();
+            } else {
+                stopReindexPolling();
+                if (status.status === 'completed') {
+                    await loadStats();
+                }
+            }
+            return status;
+        } catch (e) {
+            stopReindexPolling();
+            if (!silent) throw e;
+            return null;
+        }
+    }
+
+    async function doReindex() {
+        try {
+            const status = await api('/reindex', { method: 'POST' });
+            updateReindexStatusUI(status);
+            if (status.status === 'running') {
+                startReindexPolling();
+                showToast('🔄 Реиндексация запущена', 'info');
+            } else {
+                showToast('ℹ️ Переиндексация уже выполняется', 'info');
+            }
+        } catch (e) { /* error shown */ }
+    }
+
+    // ─── Tabs ─────────────────────────────────────────────────────
+    function switchTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+        document.getElementById('tab-quiz').classList.toggle('hidden', tab !== 'quiz');
+        document.getElementById('tab-list').classList.toggle('hidden', tab !== 'list');
+        document.getElementById('tab-import').classList.toggle('hidden', tab !== 'import');
+
+        if (tab === 'list') { loadList(); }
+    }
+
+    // ─── Keyboard ─────────────────────────────────────────────────
+    function setupKeyboard() {
+        document.addEventListener('keydown', (e) => {
+            // Don't intercept when typing in inputs
+            if (['textarea', 'input', 'select'].includes(e.target.tagName.toLowerCase())) {
+                if (e.key === 'Escape') e.target.blur();
+                return;
+            }
+            if (e.key === 'Enter') { e.preventDefault(); approveItem(); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); skipItem(); }
+            if (e.ctrlKey && e.key === 's') { e.preventDefault(); saveAndApprove(); }
+        });
+    }
+
+    // ─── Toast ────────────────────────────────────────────────────
+    function showToast(msg, type = 'info') {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.style.background = type === 'success' ? '#16a34a' : type === 'error' ? '#dc2626' : type === 'warning' ? '#d97706' : '#2563eb';
+        el.classList.remove('hidden');
+        setTimeout(() => el.classList.add('hidden'), 3000);
+    }
+
+    // ─── Util ─────────────────────────────────────────────────────
+    function formatBytes(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+    </script>
+</body>
+</html>

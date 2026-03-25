@@ -1,0 +1,32 @@
+# Core
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-dotenv==1.0.1
+python-multipart==0.0.9
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# LLM & RAG (YandexGPT)
+langchain==0.3.14
+langchain-community==0.3.14
+langchain-chroma==0.2.2
+chromadb==0.6.3
+pymorphy3==2.0.2
+
+# HTML Parsing
+beautifulsoup4==4.12.3
+lxml==5.3.0
+
+# Document import
+python-docx==1.1.2
+
+# Database
+aiosqlite==0.20.0
+sqlalchemy[asyncio]==2.0.36
+
+# Telegram Bot
+python-telegram-bot==21.10
+
+# Utilities
+httpx==0.28.1
+Pillow==11.1.0
