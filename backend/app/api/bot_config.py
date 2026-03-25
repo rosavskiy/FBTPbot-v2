@@ -167,6 +167,23 @@ async def reload_reasons():
     return {"status": "reloaded", "total": len(reasons)}
 
 
+@router.get("/template")
+async def download_template():
+    """Скачать шаблон .docx для импорта причин обращения."""
+    candidates = [
+        Path(__file__).resolve().parents[3] / "templates" / "Шаблон причины обращения.docx",
+        Path("/app/templates/Шаблон причины обращения.docx"),
+    ]
+    template_path = next((p for p in candidates if p.exists()), None)
+    if not template_path:
+        raise HTTPException(status_code=404, detail="Шаблон не найден")
+    return FileResponse(
+        path=str(template_path),
+        filename="Шаблон причины обращения.docx",
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
 class ImportResult(BaseModel):
     imported: int = 0
     skipped: int = 0

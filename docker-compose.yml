@@ -11,6 +11,7 @@ services:
     volumes:
       - ./backend/data:/app/data
       - ./brains:/app/brains:ro
+      - ./templates:/app/templates:ro
     restart: unless-stopped
 
   tg-bot:
