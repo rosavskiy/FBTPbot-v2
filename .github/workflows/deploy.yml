@@ -1,0 +1,62 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        env:
+          SERVER: ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}
+          DEPLOY_DIR: /opt/FBTPbot-v2
+        run: |
+          # Sync files (exclude runtime data, git, node_modules)
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='__pycache__' \
+            --exclude='.venv' \
+            --exclude='*.pyc' \
+            --exclude='backend/data' \
+            --exclude='backend/.env' \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            ./ $SERVER:$DEPLOY_DIR/
+
+          # Rebuild and restart on server
+          ssh -o StrictHostKeyChecking=no $SERVER "
+            cd $DEPLOY_DIR &&
+            docker compose build --parallel &&
+            docker compose up -d &&
+            docker image prune -f
+          "
+
+      - name: Health check
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          sleep 10
+          STATUS=$(curl -sf http://$SERVER_HOST:8000/api/health | jq -r '.status' 2>/dev/null || echo "fail")
+          if [ "$STATUS" = "ok" ]; then
+            echo "✅ Backend is healthy"
+          else
+            echo "⚠️ Backend health check returned: $STATUS"
+          fi
+          HTTP_CODE=$(curl -so /dev/null -w '%{http_code}' http://$SERVER_HOST)
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Frontend is serving (HTTP $HTTP_CODE)"
+          else
+            echo "⚠️ Frontend returned HTTP $HTTP_CODE"
+          fi
