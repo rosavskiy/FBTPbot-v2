@@ -151,8 +151,11 @@ export function ChatWidget() {
       {isOpen && (
         <div className="widget-window">
           <div className="widget-header">
-            <span>💊 Техподдержка Фармбазис</span>
-            <button onClick={() => setIsOpen(false)}>✕</button>
+            <div className="widget-header-left">
+              <div className="widget-header-icon">Ф</div>
+              <span>Техподдержка Фармбазис</span>
+            </div>
+            <button onClick={() => setIsOpen(false)} aria-label="Закрыть">✕</button>
           </div>
 
           <div className="widget-messages">

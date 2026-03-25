@@ -56,7 +56,7 @@ def save_reasons(data: ContactReasonsData, backup: bool = True) -> None:
             _make_backup(path)
 
         path.write_text(
-            data.model_dump_json(indent=2, ensure_ascii=False),
+            json.dumps(data.model_dump(mode="json"), indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
         _cached_data = data

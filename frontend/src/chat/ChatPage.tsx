@@ -175,10 +175,13 @@ export function ChatPage() {
     <div className="chat-page">
       <header className="chat-header">
         <div className="chat-header-logo">
-          <div className="chat-header-icon">💊</div>
+          <div className="chat-header-icon">Ф</div>
           <div>
             <h1>Фармбазис — Техподдержка</h1>
-            <span className="chat-header-subtitle">ИИ-ассистент</span>
+            <span className="chat-header-subtitle">
+              <span className="chat-header-status" />
+              ИИ-ассистент онлайн
+            </span>
           </div>
         </div>
       </header>
@@ -187,7 +190,7 @@ export function ChatPage() {
         {messages.map((msg, i) => (
           <div key={i} className={`chat-message chat-message-${msg.role}`}>
             <div className="chat-message-avatar">
-              {msg.role === 'user' ? '👤' : '🤖'}
+              {msg.role === 'user' ? 'Вы' : 'ИИ'}
             </div>
             <div className="chat-message-content">
               <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -247,7 +250,7 @@ export function ChatPage() {
 
         {loading && (
           <div className="chat-message chat-message-assistant">
-            <div className="chat-message-avatar">🤖</div>
+            <div className="chat-message-avatar">ИИ</div>
             <div className="chat-message-content chat-typing">
               <span></span><span></span><span></span>
             </div>
@@ -300,8 +303,9 @@ export function ChatPage() {
           className="chat-send-btn"
           onClick={sendMessage}
           disabled={!input.trim() || loading}
+          aria-label="Отправить"
         >
-          ➤
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
         </button>
       </div>
     </div>
