@@ -6,6 +6,7 @@ API панели оператора техподдержки.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -27,6 +28,7 @@ from app.models.schemas import (
     OperatorReplyRequest,
 )
 from app.tg.notifier import get_telegram_notifier
+from app.sheets.gsheet_logger import get_gsheet_logger
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/operator", tags=["operator"])
@@ -185,6 +187,17 @@ async def operator_reply(
         operator_name=operator["display_name"],
         reply_text=request.message,
         reply_to_message_id=escalation.telegram_message_id,
+    )
+
+    # Логируем ответ оператора в Google Sheets
+    asyncio.ensure_future(
+        get_gsheet_logger().log(
+            question=f"[Эскалация {request.escalation_id[:8]}]",
+            answer=request.message,
+            session_id=escalation.session_id,
+            response_type="operator",
+            escalation_info=f"Оператор: {operator['display_name']}, статус: {new_status}",
+        )
     )
 
     return {"status": "ok", "new_status": new_status}

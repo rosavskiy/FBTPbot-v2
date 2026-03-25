@@ -4,6 +4,7 @@ API эндпоинты чата v2 — L1→L2→L3 pipeline.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, Request
@@ -18,6 +19,7 @@ from app.models.schemas import (
     compute_confidence_level,
 )
 from app.rag.engine import get_rag_engine
+from app.sheets.gsheet_logger import get_gsheet_logger
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -79,12 +81,34 @@ async def send_message(
         source_articles=rag_response.source_articles,
     )
 
+    conf_level = compute_confidence_level(rag_response.confidence)
+    conf_label = compute_confidence_label(rag_response.confidence)
+
+    # Логируем в Google Sheets (fire-and-forget)
+    asyncio.ensure_future(
+        get_gsheet_logger().log(
+            question=request.message,
+            answer=rag_response.answer,
+            session_id=session.id,
+            confidence=rag_response.confidence,
+            confidence_level=conf_level.value,
+            confidence_label=conf_label,
+            needs_escalation=rag_response.needs_escalation,
+            source_articles=rag_response.source_articles,
+            detected_reason=rag_response.detected_reason_name,
+            thematic_section=rag_response.thematic_section,
+            response_type="answer",
+            youtube_links=rag_response.youtube_links,
+            has_images=bool(rag_response.images),
+        )
+    )
+
     return ChatResponse(
         answer=rag_response.answer,
         session_id=session.id,
         confidence=rag_response.confidence,
-        confidence_level=compute_confidence_level(rag_response.confidence),
-        confidence_label=compute_confidence_label(rag_response.confidence),
+        confidence_level=conf_level,
+        confidence_label=conf_label,
         needs_escalation=rag_response.needs_escalation,
         source_articles=rag_response.source_articles,
         youtube_links=rag_response.youtube_links,

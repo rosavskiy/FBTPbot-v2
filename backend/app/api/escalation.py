@@ -4,6 +4,7 @@ API эндпоинты эскалации — передача запросов 
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends
@@ -18,6 +19,7 @@ from app.models.schemas import (
     FeedbackResponse,
 )
 from app.tg.notifier import get_telegram_notifier
+from app.sheets.gsheet_logger import get_gsheet_logger
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/escalation", tags=["escalation"])
@@ -73,6 +75,18 @@ async def create_escalation(
 
     if tg_message_id:
         await db_service.set_telegram_message_id(escalation.id, tg_message_id)
+
+    # Логируем эскалацию в Google Sheets
+    asyncio.ensure_future(
+        get_gsheet_logger().log(
+            question=last_question,
+            answer=last_answer,
+            session_id=request.session_id,
+            response_type="escalation",
+            escalation_info=f"Причина: {request.reason or 'не указана'}, контакт: {request.contact_info or 'нет'}",
+            needs_escalation=True,
+        )
+    )
 
     # Считаем позицию в очереди
     pending = await db_service.get_pending_escalations()

@@ -36,6 +36,7 @@ from telegram.ext import (
 
 from app.config import settings
 from app.rag.engine import get_rag_engine
+from app.sheets.gsheet_logger import get_gsheet_logger
 
 # ── Logging ──
 logging.basicConfig(
@@ -196,6 +197,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             _add_to_history(user_id, "assistant", rag_response.answer)
             await update.message.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+            # Логируем в Google Sheets
+            await get_gsheet_logger().log(
+                question=original_query,
+                answer=rag_response.answer,
+                session_id=f"tg_{user_id}",
+                confidence=rag_response.confidence,
+                needs_escalation=rag_response.needs_escalation,
+                detected_reason=rag_response.detected_reason_name,
+                thematic_section=rag_response.thematic_section,
+                source_articles=rag_response.source_articles,
+                youtube_links=rag_response.youtube_links,
+                has_images=bool(rag_response.images),
+                response_type="tg_clarification",
+            )
             return
 
     # Сбросить контекст уточнения при новом вопросе
@@ -239,6 +255,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     logger.info(f"[TG] DONE|answer_len={len(rag_response.answer)}|user={username}")
     await update.message.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+    # Логируем в Google Sheets
+    await get_gsheet_logger().log(
+        question=text,
+        answer=rag_response.answer,
+        session_id=f"tg_{user_id}",
+        confidence=rag_response.confidence,
+        needs_escalation=rag_response.needs_escalation,
+        detected_reason=rag_response.detected_reason_name,
+        thematic_section=rag_response.thematic_section,
+        source_articles=rag_response.source_articles,
+        youtube_links=rag_response.youtube_links,
+        has_images=bool(rag_response.images),
+        response_type="tg",
+    )
 
 
 # ═══════════════════════════════════════════════════
@@ -312,6 +343,21 @@ async def handle_reason_callback(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     except Exception:
         await query.message.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+    # Логируем в Google Sheets
+    await get_gsheet_logger().log(
+        question=original_query,
+        answer=rag_response.answer,
+        session_id=f"tg_{user_id}",
+        confidence=rag_response.confidence,
+        needs_escalation=rag_response.needs_escalation,
+        detected_reason=rag_response.detected_reason_name,
+        thematic_section=rag_response.thematic_section,
+        source_articles=rag_response.source_articles,
+        youtube_links=rag_response.youtube_links,
+        has_images=bool(rag_response.images),
+        response_type="tg_callback",
+    )
 
 
 # ═══════════════════════════════════════════════════

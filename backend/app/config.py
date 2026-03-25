@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     # Contact Reasons
     contact_reasons_path: str = "./data/contact_reasons.json"
 
+    # Google Sheets
+    google_sheets_credentials_file: str = ""
+    google_sheets_spreadsheet_id: str = ""
+
     # CORS
     cors_origins: str = '["http://localhost:3000","http://localhost:5173"]'
 
