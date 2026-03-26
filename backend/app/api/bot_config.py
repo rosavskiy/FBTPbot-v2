@@ -79,15 +79,11 @@ class TestClassifyResponse(BaseModel):
 class LLMSettingsPayload(BaseModel):
     llm_provider: str = Field(default="yandex")
     show_llm_in_chat: bool = False
-    yandex_api_key: str = ""
-    yandex_folder_id: str = ""
-    yandex_gpt_model: str = "yandexgpt"
-    yandex_embedding_model: str = "text-search-query"
-    deepseek_api_key: str = ""
-    deepseek_model: str = "deepseek-chat"
 
 
-class LLMSettingsResponse(LLMSettingsPayload):
+class LLMSettingsResponse(BaseModel):
+    llm_provider: str = "yandex"
+    show_llm_in_chat: bool = False
     available_providers: list[str] = Field(default_factory=lambda: ["yandex", "deepseek"])
     active_provider: str = "yandex"
     active_model: str = "yandexgpt"
@@ -196,12 +192,6 @@ def _persist_llm_settings(payload: LLMSettingsPayload) -> Path:
     values = {
         "LLM_PROVIDER": _normalize_provider_or_422(payload.llm_provider),
         "SHOW_LLM_IN_CHAT": "true" if payload.show_llm_in_chat else "false",
-        "YANDEX_API_KEY": payload.yandex_api_key.strip(),
-        "YANDEX_FOLDER_ID": payload.yandex_folder_id.strip(),
-        "YANDEX_GPT_MODEL": payload.yandex_gpt_model.strip() or "yandexgpt",
-        "YANDEX_EMBEDDING_MODEL": payload.yandex_embedding_model.strip() or "text-search-query",
-        "DEEPSEEK_API_KEY": payload.deepseek_api_key.strip(),
-        "DEEPSEEK_MODEL": payload.deepseek_model.strip() or "deepseek-chat",
     }
     for key, value in values.items():
         lines = _upsert_env_line(lines, key, value)
@@ -215,12 +205,6 @@ def _apply_llm_settings(payload: LLMSettingsPayload) -> None:
         {
             "llm_provider": payload.llm_provider,
             "show_llm_in_chat": str(payload.show_llm_in_chat).lower(),
-            "yandex_api_key": payload.yandex_api_key,
-            "yandex_folder_id": payload.yandex_folder_id,
-            "yandex_gpt_model": payload.yandex_gpt_model,
-            "yandex_embedding_model": payload.yandex_embedding_model,
-            "deepseek_api_key": payload.deepseek_api_key,
-            "deepseek_model": payload.deepseek_model,
         }
     )
 
@@ -231,12 +215,6 @@ def _get_llm_settings_response() -> LLMSettingsResponse:
     return LLMSettingsResponse(
         llm_provider=snapshot["llm_provider"],
         show_llm_in_chat=snapshot["show_llm_in_chat"] == "true",
-        yandex_api_key=snapshot["yandex_api_key"],
-        yandex_folder_id=snapshot["yandex_folder_id"],
-        yandex_gpt_model=snapshot["yandex_gpt_model"],
-        yandex_embedding_model=snapshot["yandex_embedding_model"],
-        deepseek_api_key=snapshot["deepseek_api_key"],
-        deepseek_model=snapshot["deepseek_model"],
         active_provider=str(active["provider"]),
         active_model=str(active["model"]),
         active_label=str(active["label"]),
@@ -354,24 +332,21 @@ async def get_llm_settings():
 
 @router.put("/llm-settings", response_model=LLMSettingsResponse)
 async def update_llm_settings(payload: LLMSettingsPayload):
-    """Сохранить настройки LLM в .env и применить их без рестарта процесса."""
-    provider = _normalize_provider_or_422(payload.llm_provider)
-    if provider == "yandex" and (not payload.yandex_api_key.strip() or not payload.yandex_folder_id.strip()):
-        raise HTTPException(status_code=422, detail="Для Yandex заполните API key и folder id")
-    if provider == "deepseek" and not payload.deepseek_api_key.strip():
-        raise HTTPException(status_code=422, detail="Для DeepSeek заполните API key")
+    """Сохранить только выбор провайдера и флаг показа модели в чате."""
+    _normalize_provider_or_422(payload.llm_provider)
 
     env_path = _persist_llm_settings(payload)
+    snapshot = get_llm_settings_snapshot()
     runtime_path = save_runtime_llm_settings(
         {
             "llm_provider": payload.llm_provider,
             "show_llm_in_chat": str(payload.show_llm_in_chat).lower(),
-            "yandex_api_key": payload.yandex_api_key,
-            "yandex_folder_id": payload.yandex_folder_id,
-            "yandex_gpt_model": payload.yandex_gpt_model,
-            "yandex_embedding_model": payload.yandex_embedding_model,
-            "deepseek_api_key": payload.deepseek_api_key,
-            "deepseek_model": payload.deepseek_model,
+            "yandex_api_key": snapshot["yandex_api_key"],
+            "yandex_folder_id": snapshot["yandex_folder_id"],
+            "yandex_gpt_model": snapshot["yandex_gpt_model"],
+            "yandex_embedding_model": snapshot["yandex_embedding_model"],
+            "deepseek_api_key": snapshot["deepseek_api_key"],
+            "deepseek_model": snapshot["deepseek_model"],
         }
     )
     _apply_llm_settings(payload)
