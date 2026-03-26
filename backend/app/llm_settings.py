@@ -51,7 +51,9 @@ def get_llm_settings_snapshot() -> dict[str, str]:
                 snapshot[key] = value
 
     snapshot["llm_provider"] = normalize_llm_provider(snapshot["llm_provider"])
-    snapshot["show_llm_in_chat"] = "true" if str(snapshot["show_llm_in_chat"]).strip().lower() in {"1", "true", "yes", "on"} else "false"
+    snapshot["show_llm_in_chat"] = (
+        "true" if str(snapshot["show_llm_in_chat"]).strip().lower() in {"1", "true", "yes", "on"} else "false"
+    )
     snapshot["yandex_gpt_model"] = snapshot["yandex_gpt_model"].strip() or "yandexgpt"
     snapshot["yandex_embedding_model"] = snapshot["yandex_embedding_model"].strip() or "text-search-query"
     snapshot["deepseek_model"] = snapshot["deepseek_model"].strip() or "deepseek-chat"
@@ -81,7 +83,9 @@ def save_runtime_llm_settings(payload: Mapping[str, str]) -> Path:
     runtime_path.parent.mkdir(parents=True, exist_ok=True)
     data = {key: str(payload.get(key, "")) for key in LLM_SETTING_KEYS}
     data["llm_provider"] = normalize_llm_provider(data["llm_provider"])
-    data["show_llm_in_chat"] = "true" if data["show_llm_in_chat"].strip().lower() in {"1", "true", "yes", "on"} else "false"
+    data["show_llm_in_chat"] = (
+        "true" if data["show_llm_in_chat"].strip().lower() in {"1", "true", "yes", "on"} else "false"
+    )
     data["yandex_gpt_model"] = data["yandex_gpt_model"].strip() or "yandexgpt"
     data["yandex_embedding_model"] = data["yandex_embedding_model"].strip() or "text-search-query"
     data["deepseek_model"] = data["deepseek_model"].strip() or "deepseek-chat"

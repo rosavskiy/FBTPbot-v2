@@ -147,18 +147,14 @@ def _reason_to_docx_lines(reason: ContactReason) -> list[str]:
         description = sanitize_cell(complaint.description)
         context = sanitize_cell(complaint.context)
         response_template = sanitize_cell(complaint.response_template)
-        lines.append(
-            f"| {description} | {context} | {response_template} |"
-        )
+        lines.append(f"| {description} | {context} | {response_template} |")
 
     lines.extend(["", "---", "", "### Раздел: Готовые ответы"])
     lines.extend(["", "| Вопрос пользователя | Идеальный ответ |", "| :--- | :--- |"])
     for example in reason.example_answers:
         question = sanitize_cell(example.user_question)
         answer = sanitize_cell(example.ideal_answer)
-        lines.append(
-            f"| {question} | {answer} |"
-        )
+        lines.append(f"| {question} | {answer} |")
     return lines
 
 
