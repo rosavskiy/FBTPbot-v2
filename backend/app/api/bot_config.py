@@ -13,10 +13,10 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
+from docx import Document
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from docx import Document
 
 from app.config import settings
 from app.database.reason_store import (
@@ -144,22 +144,20 @@ def _reason_to_docx_lines(reason: ContactReason) -> list[str]:
     lines.extend(["", "### Раздел: Эскалация на специалиста"])
     lines.extend(["", "| Ситуация | Признаки | Действие |", "| :--- | :--- | :--- |"])
     for complaint in reason.typical_complaints:
+        description = sanitize_cell(complaint.description)
+        context = sanitize_cell(complaint.context)
+        response_template = sanitize_cell(complaint.response_template)
         lines.append(
-            "| {description} | {context} | {response_template} |".format(
-                description=sanitize_cell(complaint.description),
-                context=sanitize_cell(complaint.context),
-                response_template=sanitize_cell(complaint.response_template),
-            )
+            f"| {description} | {context} | {response_template} |"
         )
 
     lines.extend(["", "---", "", "### Раздел: Готовые ответы"])
     lines.extend(["", "| Вопрос пользователя | Идеальный ответ |", "| :--- | :--- |"])
     for example in reason.example_answers:
+        question = sanitize_cell(example.user_question)
+        answer = sanitize_cell(example.ideal_answer)
         lines.append(
-            "| {question} | {answer} |".format(
-                question=sanitize_cell(example.user_question),
-                answer=sanitize_cell(example.ideal_answer),
-            )
+            f"| {question} | {answer} |"
         )
     return lines
 

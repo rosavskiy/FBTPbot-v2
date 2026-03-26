@@ -12,13 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import get_db
 from app.database.service import DatabaseService
+from app.llm_settings import get_active_llm_display
 from app.models.schemas import (
     ChatRequest,
     ChatResponse,
     compute_confidence_label,
     compute_confidence_level,
 )
-from app.llm_settings import get_active_llm_display
 from app.rag.engine import get_rag_engine
 from app.sheets.gsheet_logger import get_gsheet_logger
 
