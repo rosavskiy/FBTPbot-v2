@@ -14,6 +14,7 @@ interface Message {
 
 export function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false)
+  const [activeLlmLabel, setActiveLlmLabel] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
@@ -49,6 +50,7 @@ export function ChatWidget() {
       const response: ChatResponse = await api.sendMessage(trimmed, sessionId || undefined)
 
       if (!sessionId) setSessionId(response.session_id)
+      setActiveLlmLabel(response.show_llm_in_chat ? response.llm_label || null : null)
 
       const botMsg: Message = {
         role: 'assistant',
@@ -110,6 +112,7 @@ export function ChatWidget() {
     try {
       const response: ChatResponse = await api.sendMessage(text, sessionId || undefined)
       if (!sessionId) setSessionId(response.session_id)
+      setActiveLlmLabel(response.show_llm_in_chat ? response.llm_label || null : null)
 
       const botMsg: Message = {
         role: 'assistant',
@@ -153,7 +156,10 @@ export function ChatWidget() {
           <div className="widget-header">
             <div className="widget-header-left">
               <div className="widget-header-icon">Ф</div>
-              <span>Техподдержка Фармбазис</span>
+              <div className="widget-header-meta">
+                <span>Техподдержка Фармбазис</span>
+                {activeLlmLabel && <span className="widget-llm-badge">{activeLlmLabel}</span>}
+              </div>
             </div>
             <button onClick={() => setIsOpen(false)} aria-label="Закрыть">✕</button>
           </div>

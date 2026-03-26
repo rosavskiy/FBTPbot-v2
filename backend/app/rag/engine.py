@@ -6,7 +6,7 @@ RAG-движок v2 для ИИ-техподдержки Фармбазис.
   L2: Определение тематического раздела (classifier/section_classifier.py)
   L3: Генерация ответа — этот модуль
 
-LLM: YandexGPT (Yandex Cloud Foundation Models API)
+LLM: настраиваемый провайдер (YandexGPT / DeepSeek)
 Embeddings: Yandex Embeddings (для ChromaDB fallback)
 """
 
@@ -22,6 +22,7 @@ import httpx
 from app.classifier.reason_classifier import L1Result, classify_reason
 from app.classifier.section_classifier import L2Result, classify_section
 from app.config import settings
+from app.llm_settings import get_llm_settings_snapshot
 from app.models.reason_schemas import ContactReason
 
 logger = logging.getLogger(__name__)
@@ -121,12 +122,13 @@ class YandexGPTClient:
         """
         url = f"{self.BASE_URL}/completion"
         headers = {
-            "Authorization": f"Api-Key {settings.yandex_api_key}",
+            "Authorization": f"Api-Key {get_llm_settings_snapshot()['yandex_api_key']}",
             "Content-Type": "application/json",
         }
+        llm_settings = get_llm_settings_snapshot()
 
         body = {
-            "modelUri": settings.yandex_gpt_model_uri,
+            "modelUri": f"gpt://{llm_settings['yandex_folder_id']}/{llm_settings['yandex_gpt_model']}/latest",
             "completionOptions": {
                 "stream": False,
                 "temperature": temperature,
@@ -157,13 +159,14 @@ class YandexGPTClient:
     async def embed(self, text: str) -> list[float]:
         """Получить эмбеддинг текста через Yandex Embeddings API."""
         url = f"{self.BASE_URL}/textEmbedding"
+        llm_settings = get_llm_settings_snapshot()
         headers = {
-            "Authorization": f"Api-Key {settings.yandex_api_key}",
+            "Authorization": f"Api-Key {llm_settings['yandex_api_key']}",
             "Content-Type": "application/json",
         }
 
         body = {
-            "modelUri": settings.yandex_embedding_model_uri,
+            "modelUri": f"emb://{llm_settings['yandex_folder_id']}/{llm_settings['yandex_embedding_model']}/latest",
             "text": text,
         }
 
@@ -174,11 +177,89 @@ class YandexGPTClient:
         return response.json()["embedding"]
 
 
-class RAGEngine:
-    """RAG-движок v2: L1→L2→L3 pipeline + YandexGPT."""
+class DeepSeekClient:
+    """Клиент для DeepSeek Chat Completions API."""
+
+    BASE_URL = "https://api.deepseek.com"
 
     def __init__(self):
-        self.llm = YandexGPTClient()
+        self._client = httpx.AsyncClient(timeout=60.0)
+
+    async def close(self) -> None:
+        await self._client.aclose()
+
+    async def complete(
+        self,
+        messages: list[dict],
+        temperature: float = 0.1,
+        max_tokens: int = 800,
+    ) -> str:
+        url = f"{self.BASE_URL}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {get_llm_settings_snapshot()['deepseek_api_key']}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        llm_settings = get_llm_settings_snapshot()
+        payload_messages = [
+            {
+                "role": message["role"],
+                "content": message.get("content", message.get("text", "")),
+            }
+            for message in messages
+        ]
+        body = {
+            "model": llm_settings["deepseek_model"],
+            "messages": payload_messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": False,
+            "response_format": {"type": "text"},
+        }
+
+        _start = _time.time()
+        response = await self._client.post(url, headers=headers, json=body)
+        _elapsed = _time.time() - _start
+
+        if response.status_code != 200:
+            error_text = response.text
+            logger.error(f"DeepSeek API error {response.status_code}: {error_text}")
+            raise RuntimeError(f"DeepSeek API error: {response.status_code}")
+
+        data = response.json()
+        result_text = data["choices"][0]["message"]["content"]
+        usage = data.get("usage", {})
+        logger.info(
+            f"[DEEPSEEK] time={_elapsed:.1f}s | "
+            f"input_tokens={usage.get('prompt_tokens', '?')} | "
+            f"output_tokens={usage.get('completion_tokens', '?')}"
+        )
+        return result_text
+
+
+class RAGEngine:
+    """RAG-движок v2: L1→L2→L3 pipeline + выбранный LLM-провайдер."""
+
+    def __init__(self):
+        self.llm = None
+        self._provider = None
+
+    def _create_llm_client(self):
+        provider = get_llm_settings_snapshot()["llm_provider"]
+        if provider == "deepseek":
+            logger.info("[ENGINE] Using DeepSeek provider")
+            return DeepSeekClient()
+        logger.info("[ENGINE] Using Yandex provider")
+        return YandexGPTClient()
+
+    async def _ensure_llm_client(self) -> None:
+        provider = get_llm_settings_snapshot()["llm_provider"]
+        if self.llm is not None and self._provider == provider:
+            return
+        if self.llm is not None:
+            await self.llm.close()
+        self.llm = self._create_llm_client()
+        self._provider = provider
 
     def _parse_confidence(self, answer: str) -> tuple[str, float, str]:
         """Извлечение блока confidence из ответа LLM."""
@@ -307,7 +388,7 @@ class RAGEngine:
                 classification_method=f"L1:{l1_method}/L2:{l2.method}",
             )
 
-        # ── L3: Генерация ответа через YandexGPT ──
+        # ── L3: Генерация ответа через выбранный LLM ──
         context = self._build_reason_context(reason, l2, question)
         section_title = l2.section.title if l2.section else "Общий"
 
@@ -332,12 +413,15 @@ class RAGEngine:
         )
         messages.append({"role": "user", "text": user_message})
 
-        logger.info(f"[ENGINE] L3 YandexGPT call | reason={reason.name} | section={section_title}")
+        logger.info(
+            f"[ENGINE] L3 provider={settings.llm_provider_normalized} | reason={reason.name} | section={section_title}"
+        )
 
         try:
+            await self._ensure_llm_client()
             raw_answer = await self.llm.complete(messages, temperature=0.1, max_tokens=800)
         except Exception as e:
-            logger.error(f"YandexGPT error: {e}")
+            logger.error(f"LLM error ({settings.llm_provider_normalized}): {e}")
             return RAGResponse(
                 answer="Техническая ошибка. Попробуйте позже или обратитесь к оператору.",
                 confidence=0.0,
@@ -391,6 +475,7 @@ class RAGEngine:
         ]
 
         try:
+            await self._ensure_llm_client()
             response = await self.llm.complete(messages, temperature=0.0, max_tokens=100)
             # Парсим JSON ответ
             json_match = re.search(r'\{[^{}]*"choice"\s*:\s*(\d+)', response)
@@ -508,5 +593,6 @@ async def close_rag_engine() -> None:
     """Закрыть HTTP-клиент RAG-движка при завершении."""
     global _engine
     if _engine is not None:
-        await _engine.llm.close()
+        if _engine.llm is not None:
+            await _engine.llm.close()
         _engine = None

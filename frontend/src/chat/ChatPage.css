@@ -59,6 +59,19 @@
   gap: 6px;
 }
 
+.chat-llm-badge {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-light);
+  color: var(--accent-dark);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .chat-header-status {
   width: 6px;
   height: 6px;

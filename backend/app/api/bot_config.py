@@ -6,20 +6,31 @@ CRUD-операции + тестирование классификации.
 
 from __future__ import annotations
 
+import io
 import logging
+import re
 import tempfile
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from docx import Document
 
+from app.config import settings
 from app.database.reason_store import (
     delete_reason,
     get_all_reasons,
     get_reason,
     invalidate_cache,
     upsert_reason,
+)
+from app.llm_settings import (
+    apply_llm_settings_snapshot,
+    get_active_llm_display,
+    get_llm_settings_snapshot,
+    save_runtime_llm_settings,
 )
 from app.models.reason_schemas import ContactReason
 
@@ -63,6 +74,179 @@ class TestClassifyResponse(BaseModel):
     l2_best_qa: str | None = None
     l2_best_example_score: float | None = None
     l2_best_example: str | None = None
+
+
+class LLMSettingsPayload(BaseModel):
+    llm_provider: str = Field(default="yandex")
+    show_llm_in_chat: bool = False
+    yandex_api_key: str = ""
+    yandex_folder_id: str = ""
+    yandex_gpt_model: str = "yandexgpt"
+    yandex_embedding_model: str = "text-search-query"
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-chat"
+
+
+class LLMSettingsResponse(LLMSettingsPayload):
+    available_providers: list[str] = Field(default_factory=lambda: ["yandex", "deepseek"])
+    active_provider: str = "yandex"
+    active_model: str = "yandexgpt"
+    active_label: str = "Yandex / yandexgpt"
+
+
+def _normalize_provider_or_422(provider: str) -> str:
+    normalized = (provider or "").strip().lower()
+    if normalized not in {"yandex", "deepseek"}:
+        raise HTTPException(status_code=422, detail="Допустимые провайдеры: yandex, deepseek")
+    return normalized
+
+
+def _reason_to_docx_lines(reason: ContactReason) -> list[str]:
+    def sanitize_cell(value: str) -> str:
+        return (value or "").replace("|", "/").strip()
+
+    lines = [
+        f"## БАЗА ЗНАНИЙ: {reason.name} (ПОЛНАЯ ВЕРСИЯ)",
+        "",
+        "### Раздел: Маркеры классификации",
+        "",
+        "#### Глаголы-маркеры",
+    ]
+
+    verb_lines = [f"- {item}" for item in reason.markers.verbs] or ["- "]
+    noun_lines = [f"- {item}" for item in reason.markers.nouns] or ["- "]
+    numeric_lines = [f"- {item}" for item in reason.markers.numeric_tags] or ["- "]
+    phrase_lines = [f"- {item}" for item in reason.markers.phrase_masks] or ["- "]
+    lines.extend(verb_lines)
+    lines.extend(["", "#### Существительные-маркеры"])
+    lines.extend(noun_lines)
+    lines.extend(["", "#### Числовые теги"])
+    lines.extend(numeric_lines)
+    lines.extend(["", "#### Фразовые маски (100%-маркеры)"])
+    lines.extend(phrase_lines)
+
+    for section_index, section in enumerate(reason.thematic_sections, start=1):
+        lines.extend(["", "---", "", f"### Раздел {section_index}. {section.title}"])
+        for qa_index, qa in enumerate(section.qa_pairs, start=1):
+            answer_lines = [line.rstrip() for line in qa.answer.splitlines()] or [""]
+            first_answer_line = answer_lines[0] if answer_lines else ""
+            lines.extend(
+                [
+                    "",
+                    f"**Вопрос {qa_index}. {qa.question}**",
+                    "",
+                    f"**Ответ:** {first_answer_line}",
+                ]
+            )
+            lines.extend(answer_lines[1:])
+            lines.extend(["", "---"])
+
+    lines.extend(["", "### Раздел: Эскалация на специалиста"])
+    lines.extend(["", "| Ситуация | Признаки | Действие |", "| :--- | :--- | :--- |"])
+    for complaint in reason.typical_complaints:
+        lines.append(
+            "| {description} | {context} | {response_template} |".format(
+                description=sanitize_cell(complaint.description),
+                context=sanitize_cell(complaint.context),
+                response_template=sanitize_cell(complaint.response_template),
+            )
+        )
+
+    lines.extend(["", "---", "", "### Раздел: Готовые ответы"])
+    lines.extend(["", "| Вопрос пользователя | Идеальный ответ |", "| :--- | :--- |"])
+    for example in reason.example_answers:
+        lines.append(
+            "| {question} | {answer} |".format(
+                question=sanitize_cell(example.user_question),
+                answer=sanitize_cell(example.ideal_answer),
+            )
+        )
+    return lines
+
+
+def _build_reason_docx(reason: ContactReason) -> io.BytesIO:
+    document = Document()
+    for line in _reason_to_docx_lines(reason):
+        document.add_paragraph(line)
+    buffer = io.BytesIO()
+    document.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
+def _make_export_filename(reason: ContactReason) -> str:
+    base = re.sub(r"[^\w\-]+", "_", reason.id or reason.name, flags=re.UNICODE).strip("_")
+    return f"{base or 'contact_reason'}.docx"
+
+
+def _upsert_env_line(lines: list[str], key: str, value: str) -> list[str]:
+    new_line = f"{key}={value}"
+    for index, line in enumerate(lines):
+        if line.startswith(f"{key}="):
+            lines[index] = new_line
+            return lines
+    if lines and lines[-1].strip():
+        lines.append("")
+    lines.append(new_line)
+    return lines
+
+
+def _persist_llm_settings(payload: LLMSettingsPayload) -> Path:
+    env_path = settings.env_file_path
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    if env_path.exists():
+        lines = env_path.read_text(encoding="utf-8").splitlines()
+    else:
+        lines = []
+
+    values = {
+        "LLM_PROVIDER": _normalize_provider_or_422(payload.llm_provider),
+        "SHOW_LLM_IN_CHAT": "true" if payload.show_llm_in_chat else "false",
+        "YANDEX_API_KEY": payload.yandex_api_key.strip(),
+        "YANDEX_FOLDER_ID": payload.yandex_folder_id.strip(),
+        "YANDEX_GPT_MODEL": payload.yandex_gpt_model.strip() or "yandexgpt",
+        "YANDEX_EMBEDDING_MODEL": payload.yandex_embedding_model.strip() or "text-search-query",
+        "DEEPSEEK_API_KEY": payload.deepseek_api_key.strip(),
+        "DEEPSEEK_MODEL": payload.deepseek_model.strip() or "deepseek-chat",
+    }
+    for key, value in values.items():
+        lines = _upsert_env_line(lines, key, value)
+
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return env_path
+
+
+def _apply_llm_settings(payload: LLMSettingsPayload) -> None:
+    apply_llm_settings_snapshot(
+        {
+            "llm_provider": payload.llm_provider,
+            "show_llm_in_chat": str(payload.show_llm_in_chat).lower(),
+            "yandex_api_key": payload.yandex_api_key,
+            "yandex_folder_id": payload.yandex_folder_id,
+            "yandex_gpt_model": payload.yandex_gpt_model,
+            "yandex_embedding_model": payload.yandex_embedding_model,
+            "deepseek_api_key": payload.deepseek_api_key,
+            "deepseek_model": payload.deepseek_model,
+        }
+    )
+
+
+def _get_llm_settings_response() -> LLMSettingsResponse:
+    snapshot = get_llm_settings_snapshot()
+    active = get_active_llm_display()
+    return LLMSettingsResponse(
+        llm_provider=snapshot["llm_provider"],
+        show_llm_in_chat=snapshot["show_llm_in_chat"] == "true",
+        yandex_api_key=snapshot["yandex_api_key"],
+        yandex_folder_id=snapshot["yandex_folder_id"],
+        yandex_gpt_model=snapshot["yandex_gpt_model"],
+        yandex_embedding_model=snapshot["yandex_embedding_model"],
+        deepseek_api_key=snapshot["deepseek_api_key"],
+        deepseek_model=snapshot["deepseek_model"],
+        active_provider=str(active["provider"]),
+        active_model=str(active["model"]),
+        active_label=str(active["label"]),
+    )
 
 
 # ── Endpoints ──
@@ -168,6 +352,43 @@ async def reload_reasons():
     return {"status": "reloaded", "total": len(reasons)}
 
 
+@router.get("/llm-settings", response_model=LLMSettingsResponse)
+async def get_llm_settings():
+    """Получить текущие настройки LLM-провайдера."""
+    return _get_llm_settings_response()
+
+
+@router.put("/llm-settings", response_model=LLMSettingsResponse)
+async def update_llm_settings(payload: LLMSettingsPayload):
+    """Сохранить настройки LLM в .env и применить их без рестарта процесса."""
+    provider = _normalize_provider_or_422(payload.llm_provider)
+    if provider == "yandex" and (not payload.yandex_api_key.strip() or not payload.yandex_folder_id.strip()):
+        raise HTTPException(status_code=422, detail="Для Yandex заполните API key и folder id")
+    if provider == "deepseek" and not payload.deepseek_api_key.strip():
+        raise HTTPException(status_code=422, detail="Для DeepSeek заполните API key")
+
+    env_path = _persist_llm_settings(payload)
+    runtime_path = save_runtime_llm_settings(
+        {
+            "llm_provider": payload.llm_provider,
+            "show_llm_in_chat": str(payload.show_llm_in_chat).lower(),
+            "yandex_api_key": payload.yandex_api_key,
+            "yandex_folder_id": payload.yandex_folder_id,
+            "yandex_gpt_model": payload.yandex_gpt_model,
+            "yandex_embedding_model": payload.yandex_embedding_model,
+            "deepseek_api_key": payload.deepseek_api_key,
+            "deepseek_model": payload.deepseek_model,
+        }
+    )
+    _apply_llm_settings(payload)
+
+    from app.rag.engine import close_rag_engine
+
+    await close_rag_engine()
+    logger.info("LLM settings updated and persisted to %s and %s", env_path, runtime_path)
+    return _get_llm_settings_response()
+
+
 @router.get("/template")
 async def download_template():
     """Скачать шаблон .docx для импорта причин обращения."""
@@ -182,6 +403,19 @@ async def download_template():
         path=str(template_path),
         filename="Шаблон причины обращения.docx",
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+
+@router.post("/export-docx")
+async def export_docx(reason: ContactReason):
+    """Экспорт текущей причины обращения в .docx-формат, совместимый с импортом."""
+    file_like = _build_reason_docx(reason)
+    filename = _make_export_filename(reason)
+    headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"}
+    return StreamingResponse(
+        file_like,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers=headers,
     )
 
 

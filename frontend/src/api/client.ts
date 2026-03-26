@@ -21,6 +21,10 @@ export interface ChatResponse {
   has_images: boolean
   response_type: 'answer' | 'clarification'
   suggested_topics: SuggestedTopic[] | null
+  llm_provider?: string | null
+  llm_model?: string | null
+  llm_label?: string | null
+  show_llm_in_chat?: boolean
 }
 
 export interface EscalationResponse {

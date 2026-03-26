@@ -89,6 +89,24 @@
   gap: 10px;
 }
 
+.widget-header-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.widget-llm-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-light);
+  color: var(--accent-dark);
+  font-size: 10px;
+  font-weight: 600;
+}
+
 .widget-header-icon {
   width: 32px;
   height: 32px;

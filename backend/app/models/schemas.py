@@ -87,6 +87,10 @@ class ChatResponse(BaseModel):
     )
     detected_reason: str | None = Field(None, description="Определённая причина обращения (L1)")
     thematic_section: str | None = Field(None, description="Тематический раздел (L2)")
+    llm_provider: str | None = Field(None, description="Активный LLM-провайдер")
+    llm_model: str | None = Field(None, description="Активная LLM-модель")
+    llm_label: str | None = Field(None, description="Человекочитаемая метка активной LLM")
+    show_llm_in_chat: bool = Field(False, description="Показывать ли активную LLM в интерфейсе чата")
 
 
 # === Эскалация ===

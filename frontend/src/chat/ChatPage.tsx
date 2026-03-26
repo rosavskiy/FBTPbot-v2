@@ -15,6 +15,7 @@ interface Message {
 }
 
 export function ChatPage() {
+  const [activeLlmLabel, setActiveLlmLabel] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
@@ -57,6 +58,8 @@ export function ChatPage() {
       if (!sessionId) {
         setSessionId(response.session_id)
       }
+
+      setActiveLlmLabel(response.show_llm_in_chat ? response.llm_label || null : null)
 
       const botMessage: Message = {
         role: 'assistant',
@@ -145,6 +148,7 @@ export function ChatPage() {
     try {
       const response: ChatResponse = await api.sendMessage(text, sessionId || undefined)
       if (!sessionId) setSessionId(response.session_id)
+      setActiveLlmLabel(response.show_llm_in_chat ? response.llm_label || null : null)
 
       const botMessage: Message = {
         role: 'assistant',
@@ -182,6 +186,7 @@ export function ChatPage() {
               <span className="chat-header-status" />
               ИИ-ассистент онлайн
             </span>
+            {activeLlmLabel && <span className="chat-llm-badge">{activeLlmLabel}</span>}
           </div>
         </div>
       </header>

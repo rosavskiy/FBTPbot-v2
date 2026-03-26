@@ -21,6 +21,7 @@ backend/data/chroma_db/
 backend/data/images/
 backend/data/support_kb.json
 backend/data/contact_reasons.json
+backend/data/llm_settings.json
 backend/data/backups/
 backend/data/google_credentials*.json*
 

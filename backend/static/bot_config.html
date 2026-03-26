@@ -453,6 +453,7 @@
         <a href="/api/bot-config/template" class="btn btn-secondary" style="text-decoration:none">📄 Скачать шаблон</a>
         <input type="file" id="importFileInput" accept=".docx" style="display:none" onchange="importDocx(this)">
         <button class="btn btn-success" onclick="document.getElementById('importFileInput').click()">📥 Импорт .docx</button>
+        <button class="btn btn-secondary" onclick="exportCurrentReason()">📤 Экспорт .docx</button>
         <button class="btn btn-secondary" onclick="reloadReasons()">🔄 Перезагрузить</button>
     </div>
 </div>
@@ -471,6 +472,55 @@
 
     <!-- Main content -->
     <div class="main" id="mainContent">
+        <div class="card">
+            <div class="card-title">🤖 Настройки LLM</div>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; align-items:end;">
+                <div class="form-row" style="margin-bottom:0;">
+                    <div class="form-label">Активный провайдер</div>
+                    <select class="form-input" id="llmProvider" onchange="toggleLlmProviderFields()">
+                        <option value="yandex">Yandex</option>
+                        <option value="deepseek">DeepSeek</option>
+                    </select>
+                </div>
+                <div class="form-row" style="margin-bottom:0;">
+                    <div class="form-label">Yandex folder id</div>
+                    <input type="text" class="form-input" id="yandexFolderId" placeholder="b1g...">
+                </div>
+                <div class="form-row" style="margin-bottom:0;">
+                    <div class="form-label">Yandex GPT model</div>
+                    <input type="text" class="form-input" id="yandexGptModel" placeholder="yandexgpt">
+                </div>
+                <div class="form-row" style="margin-bottom:0;">
+                    <div class="form-label">Yandex embedding model</div>
+                    <input type="text" class="form-input" id="yandexEmbeddingModel" placeholder="text-search-query">
+                </div>
+                <div class="form-row" style="margin-bottom:0;">
+                    <div class="form-label">DeepSeek model</div>
+                    <input type="text" class="form-input" id="deepseekModel" placeholder="deepseek-chat">
+                </div>
+            </div>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:12px; margin-top:12px;">
+                <div class="form-row" id="yandexApiKeyRow" style="margin-bottom:0;">
+                    <div class="form-label">Yandex API key</div>
+                    <input type="password" class="form-input" id="yandexApiKey" placeholder="Введите ключ Yandex Cloud">
+                </div>
+                <div class="form-row" id="deepseekApiKeyRow" style="margin-bottom:0;">
+                    <div class="form-label">DeepSeek API key</div>
+                    <input type="password" class="form-input" id="deepseekApiKey" placeholder="Введите ключ DeepSeek">
+                </div>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:center; margin-top:14px;">
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:#cfcfcf;">
+                    <input type="checkbox" id="showLlmInChat">
+                    Показывать активную модель в чате
+                </label>
+                <div id="activeLlmIndicator" style="font-size:12px; color:#9ca3af;">Активно сейчас: неизвестно</div>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; margin-top:14px;">
+                <button class="btn btn-primary" onclick="saveLlmSettings()">💾 Сохранить LLM</button>
+                <div style="font-size:12px; color:#888;">Настройки сохраняются в .env и сразу применяются к новым запросам.</div>
+            </div>
+        </div>
         <div class="empty-state" id="emptyState">Выберите причину обращения из списка слева</div>
         <div id="reasonEditor" style="display:none">
             <!-- Name & Active -->
@@ -591,7 +641,11 @@ let currentReason = null;
 let isNewReason = false;
 
 // ── Init ──
-document.addEventListener('DOMContentLoaded', loadReasons);
+document.addEventListener('DOMContentLoaded', initPage);
+
+async function initPage() {
+    await Promise.all([loadReasons(), loadLlmSettings()]);
+}
 
 async function loadReasons() {
     try {
@@ -640,6 +694,59 @@ function createNewReason() {
         thematic_sections: [], typical_complaints: [], example_answers: []
     };
     renderEditor();
+}
+
+async function loadLlmSettings() {
+    try {
+        const r = await fetch(`${API}/llm-settings`);
+        if (!r.ok) throw new Error('Не удалось загрузить LLM-настройки');
+        const data = await r.json();
+        document.getElementById('llmProvider').value = data.llm_provider || 'yandex';
+        document.getElementById('yandexApiKey').value = data.yandex_api_key || '';
+        document.getElementById('yandexFolderId').value = data.yandex_folder_id || '';
+        document.getElementById('yandexGptModel').value = data.yandex_gpt_model || 'yandexgpt';
+        document.getElementById('yandexEmbeddingModel').value = data.yandex_embedding_model || 'text-search-query';
+        document.getElementById('deepseekApiKey').value = data.deepseek_api_key || '';
+        document.getElementById('deepseekModel').value = data.deepseek_model || 'deepseek-chat';
+        document.getElementById('showLlmInChat').checked = Boolean(data.show_llm_in_chat);
+        document.getElementById('activeLlmIndicator').textContent = `Активно сейчас: ${data.active_label || 'неизвестно'}`;
+        toggleLlmProviderFields();
+    } catch (e) {
+        notify('Ошибка загрузки LLM: ' + e.message, 'error');
+    }
+}
+
+function toggleLlmProviderFields() {
+    const provider = document.getElementById('llmProvider').value;
+    document.getElementById('yandexApiKeyRow').style.opacity = provider === 'yandex' ? '1' : '0.65';
+    document.getElementById('deepseekApiKeyRow').style.opacity = provider === 'deepseek' ? '1' : '0.65';
+}
+
+async function saveLlmSettings() {
+    const payload = {
+        llm_provider: document.getElementById('llmProvider').value,
+        show_llm_in_chat: document.getElementById('showLlmInChat').checked,
+        yandex_api_key: document.getElementById('yandexApiKey').value.trim(),
+        yandex_folder_id: document.getElementById('yandexFolderId').value.trim(),
+        yandex_gpt_model: document.getElementById('yandexGptModel').value.trim(),
+        yandex_embedding_model: document.getElementById('yandexEmbeddingModel').value.trim(),
+        deepseek_api_key: document.getElementById('deepseekApiKey').value.trim(),
+        deepseek_model: document.getElementById('deepseekModel').value.trim(),
+    };
+
+    try {
+        const r = await fetch(`${API}/llm-settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Ошибка сохранения LLM');
+        notify('LLM-настройки сохранены', 'success');
+        await loadLlmSettings();
+    } catch (e) {
+        notify(e.message, 'error');
+    }
 }
 
 // ── Editor rendering ──
@@ -832,10 +939,15 @@ function removeExample(idx) {
 }
 
 // ── CRUD ──
-async function saveReason() {
+function syncCurrentReasonFromForm() {
+    if (!currentReason) return;
     currentReason.id = document.getElementById('reasonId').value.trim();
     currentReason.name = document.getElementById('reasonName').value.trim();
     currentReason.is_active = document.getElementById('reasonActive').checked;
+}
+
+async function saveReason() {
+    syncCurrentReasonFromForm();
 
     if (!currentReason.id || !currentReason.name) {
         notify('Заполните ID и название', 'error');
@@ -891,6 +1003,47 @@ async function reloadReasons() {
     await fetch(`${API}/reload`, { method: 'POST' });
     await loadReasons();
     notify('Перезагружено', 'success');
+}
+
+async function exportCurrentReason() {
+    if (!currentReason) {
+        notify('Сначала выберите или создайте причину обращения', 'error');
+        return;
+    }
+
+    syncCurrentReasonFromForm();
+    if (!currentReason.id || !currentReason.name) {
+        notify('Для экспорта заполните ID и название причины', 'error');
+        return;
+    }
+
+    try {
+        const r = await fetch(`${API}/export-docx`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(currentReason),
+        });
+
+        if (!r.ok) {
+            const data = await r.json();
+            throw new Error(data.detail || 'Ошибка экспорта');
+        }
+
+        const blob = await r.blob();
+        const href = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const disposition = r.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename\*=UTF-8''([^;]+)/);
+        link.href = href;
+        link.download = match ? decodeURIComponent(match[1]) : `${currentReason.id || 'contact_reason'}.docx`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(href);
+        notify('Файл выгружен', 'success');
+    } catch (e) {
+        notify(e.message, 'error');
+    }
 }
 
 async function importDocx(input) {

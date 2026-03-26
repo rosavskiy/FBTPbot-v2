@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,10 +14,16 @@ class Settings(BaseSettings):
     )
 
     # YandexGPT
+    llm_provider: str = "yandex"
+    show_llm_in_chat: bool = False
     yandex_api_key: str = ""
     yandex_folder_id: str = ""
     yandex_gpt_model: str = "yandexgpt"
     yandex_embedding_model: str = "text-search-query"
+
+    # DeepSeek
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-chat"
 
     # ChromaDB
     chroma_persist_dir: str = "./data/chroma_db"
@@ -43,6 +50,7 @@ class Settings(BaseSettings):
     rag_chunk_overlap: int = 200
     rag_top_k: int = 5
     rag_confidence_threshold: float = 0.3
+    runtime_llm_settings_path: str = "./data/llm_settings.json"
 
     # Contact Reasons
     contact_reasons_path: str = "./data/contact_reasons.json"
@@ -66,6 +74,23 @@ class Settings(BaseSettings):
     @property
     def yandex_embedding_model_uri(self) -> str:
         return f"emb://{self.yandex_folder_id}/{self.yandex_embedding_model}/latest"
+
+    @property
+    def llm_provider_normalized(self) -> str:
+        provider = (self.llm_provider or "yandex").strip().lower()
+        return provider if provider in {"yandex", "deepseek"} else "yandex"
+
+    @property
+    def env_file_path(self) -> Path:
+        candidates = [
+            Path.cwd() / ".env",
+            Path(__file__).resolve().parents[1] / ".env",
+            Path(__file__).resolve().parents[2] / ".env",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return candidates[1]
 
 
 settings = Settings()

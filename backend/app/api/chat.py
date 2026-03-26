@@ -18,6 +18,7 @@ from app.models.schemas import (
     compute_confidence_label,
     compute_confidence_level,
 )
+from app.llm_settings import get_active_llm_display
 from app.rag.engine import get_rag_engine
 from app.sheets.gsheet_logger import get_gsheet_logger
 
@@ -83,6 +84,7 @@ async def send_message(
 
     conf_level = compute_confidence_level(rag_response.confidence)
     conf_label = compute_confidence_label(rag_response.confidence)
+    llm_display = get_active_llm_display()
 
     # Логируем в Google Sheets (fire-and-forget)
     asyncio.ensure_future(
@@ -116,4 +118,8 @@ async def send_message(
         response_type="answer",
         detected_reason=rag_response.detected_reason_name,
         thematic_section=rag_response.thematic_section,
+        llm_provider=str(llm_display["provider"]),
+        llm_model=str(llm_display["model"]),
+        llm_label=str(llm_display["label"]),
+        show_llm_in_chat=bool(llm_display["show_in_chat"]),
     )
