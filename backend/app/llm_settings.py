@@ -9,6 +9,7 @@ from app.config import settings
 LLM_SETTING_KEYS = (
     "llm_provider",
     "show_llm_in_chat",
+    "llm_temperature",
     "yandex_api_key",
     "yandex_folder_id",
     "yandex_gpt_model",
@@ -31,6 +32,7 @@ def get_llm_settings_snapshot() -> dict[str, str]:
     snapshot = {
         "llm_provider": settings.llm_provider_normalized,
         "show_llm_in_chat": "true" if settings.show_llm_in_chat else "false",
+        "llm_temperature": str(settings.llm_temperature),
         "yandex_api_key": settings.yandex_api_key,
         "yandex_folder_id": settings.yandex_folder_id,
         "yandex_gpt_model": settings.yandex_gpt_model,
@@ -54,6 +56,10 @@ def get_llm_settings_snapshot() -> dict[str, str]:
     snapshot["show_llm_in_chat"] = (
         "true" if str(snapshot["show_llm_in_chat"]).strip().lower() in {"1", "true", "yes", "on"} else "false"
     )
+    try:
+        snapshot["llm_temperature"] = str(max(0.0, min(1.0, float(snapshot.get("llm_temperature") or "0.1"))))
+    except (ValueError, TypeError):
+        snapshot["llm_temperature"] = "0.1"
     snapshot["yandex_gpt_model"] = snapshot["yandex_gpt_model"].strip() or "yandexgpt"
     snapshot["yandex_embedding_model"] = snapshot["yandex_embedding_model"].strip() or "text-search-query"
     snapshot["deepseek_model"] = snapshot["deepseek_model"].strip() or "deepseek-chat"
@@ -68,6 +74,10 @@ def apply_llm_settings_snapshot(payload: Mapping[str, str]) -> None:
         "yes",
         "on",
     }
+    try:
+        settings.llm_temperature = max(0.0, min(1.0, float(payload.get("llm_temperature", settings.llm_temperature))))
+    except (ValueError, TypeError):
+        pass
     settings.yandex_api_key = str(payload.get("yandex_api_key", settings.yandex_api_key)).strip()
     settings.yandex_folder_id = str(payload.get("yandex_folder_id", settings.yandex_folder_id)).strip()
     settings.yandex_gpt_model = str(payload.get("yandex_gpt_model", settings.yandex_gpt_model)).strip() or "yandexgpt"
@@ -86,6 +96,10 @@ def save_runtime_llm_settings(payload: Mapping[str, str]) -> Path:
     data["show_llm_in_chat"] = (
         "true" if data["show_llm_in_chat"].strip().lower() in {"1", "true", "yes", "on"} else "false"
     )
+    try:
+        data["llm_temperature"] = str(max(0.0, min(1.0, float(data.get("llm_temperature") or "0.1"))))
+    except (ValueError, TypeError):
+        data["llm_temperature"] = "0.1"
     data["yandex_gpt_model"] = data["yandex_gpt_model"].strip() or "yandexgpt"
     data["yandex_embedding_model"] = data["yandex_embedding_model"].strip() or "text-search-query"
     data["deepseek_model"] = data["deepseek_model"].strip() or "deepseek-chat"

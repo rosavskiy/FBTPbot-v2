@@ -16,6 +16,7 @@ from app.llm_settings import get_active_llm_display
 from app.models.schemas import (
     ChatRequest,
     ChatResponse,
+    DebugTrace,
     compute_confidence_label,
     compute_confidence_level,
 )
@@ -71,6 +72,7 @@ async def send_message(
     rag_response = await rag_engine.ask(
         question=request.message,
         chat_history=chat_history,
+        debug=request.debug,
     )
 
     # Сохраняем ответ бота
@@ -122,4 +124,5 @@ async def send_message(
         llm_model=str(llm_display["model"]),
         llm_label=str(llm_display["label"]),
         show_llm_in_chat=bool(llm_display["show_in_chat"]),
+        debug_trace=DebugTrace(**rag_response.debug_trace) if rag_response.debug_trace else None,
     )

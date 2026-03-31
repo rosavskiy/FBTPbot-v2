@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     yandex_gpt_model: str = "yandexgpt"
     yandex_embedding_model: str = "text-search-query"
 
+    llm_temperature: float = 0.1
+
     # DeepSeek
     deepseek_api_key: str = ""
     deepseek_model: str = "deepseek-chat"

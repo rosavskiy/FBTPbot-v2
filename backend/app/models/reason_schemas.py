@@ -36,6 +36,30 @@ class ExampleQA(BaseModel):
     ideal_answer: str = Field(..., description="Идеальный ответ бота")
 
 
+class EscalationQAPair(BaseModel):
+    """Пара вопрос-ответ для 100%-эскалации на оператора."""
+
+    question: str = Field(..., description="Паттерн вопроса пользователя")
+    answer: str = Field("", description="Шаблон ответа при эскалации (опционально)")
+
+
+class EscalationMetrics(BaseModel):
+    """Метрики для определения 100%-эскалации."""
+
+    score_threshold: float = Field(0.7, ge=0.0, le=1.0, description="Порог overlap для срабатывания Q&A-эскалации")
+    keyword_patterns: list[str] = Field(
+        default_factory=list, description="Фразовые маски для 100%-эскалации (точное совпадение)"
+    )
+
+
+class EscalationRules(BaseModel):
+    """Правила 100%-эскалации на сотрудника ТП для причины обращения."""
+
+    enabled: bool = Field(False, description="Включены ли правила принудительной эскалации")
+    qa_pairs: list[EscalationQAPair] = Field(default_factory=list, description="Q&A-паттерны для эскалации")
+    metrics: EscalationMetrics = Field(default_factory=EscalationMetrics, description="Метрики эскалации")
+
+
 class Markers(BaseModel):
     """4 типа маркеров для L1-классификации."""
 
@@ -61,6 +85,7 @@ class ContactReason(BaseModel):
     thematic_sections: list[ThematicSection] = Field(default_factory=list, description="Тематические разделы (L2)")
     typical_complaints: list[Complaint] = Field(default_factory=list, description="Типовые жалобы с шаблонами ответов")
     example_answers: list[ExampleQA] = Field(default_factory=list, description="Примеры готовых ответов")
+    escalation_rules: EscalationRules = Field(default_factory=EscalationRules, description="Правила 100%-эскалации на ТП")
 
 
 class ContactReasonsData(BaseModel):

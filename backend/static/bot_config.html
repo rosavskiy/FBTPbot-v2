@@ -440,6 +440,90 @@
             color: #fca5a5;
             border: 1px solid rgba(239,68,68,0.2);
         }
+
+        /* ── Debug Chat Modal ── */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            z-index: 2000; display: none; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: var(--gray-900); border-radius: var(--radius-lg);
+            width: 90vw; max-width: 900px; height: 85vh;
+            display: flex; flex-direction: column;
+            border: 1px solid var(--gray-700);
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+        }
+        .modal-header {
+            padding: 14px 20px; display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid var(--gray-800);
+        }
+        .modal-header h2 { font-size: 15px; font-weight: 600; color: var(--gray-100); }
+        .modal-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+        .modal-footer {
+            padding: 12px 16px; border-top: 1px solid var(--gray-800);
+            display: flex; gap: 8px;
+        }
+        .modal-footer input { flex: 1; }
+
+        /* Debug chat messages */
+        .debug-msg { max-width: 95%; }
+        .debug-msg.user {
+            align-self: flex-end; background: var(--accent); color: white;
+            padding: 8px 14px; border-radius: 12px 12px 4px 12px; font-size: 14px;
+        }
+        .debug-msg.bot { align-self: flex-start; }
+        .debug-msg .bot-answer {
+            background: var(--gray-800); padding: 10px 14px; border-radius: 4px 12px 12px 12px;
+            font-size: 14px; color: var(--gray-200); white-space: pre-wrap;
+        }
+        .debug-msg .bot-meta {
+            margin-top: 4px; font-size: 11px; color: var(--gray-500);
+            display: flex; gap: 12px; flex-wrap: wrap;
+        }
+        .debug-msg .bot-meta span { white-space: nowrap; }
+        .debug-trace-toggle {
+            margin-top: 6px; font-size: 12px; color: var(--accent);
+            cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 4px;
+        }
+        .debug-trace-toggle:hover { text-decoration: underline; }
+        .debug-trace-panel {
+            display: none; margin-top: 8px; background: var(--gray-950);
+            border: 1px solid var(--gray-800); border-radius: var(--radius-sm);
+            padding: 12px; font-size: 12px; color: var(--gray-300);
+            max-height: 500px; overflow-y: auto;
+        }
+        .debug-trace-panel.open { display: block; }
+        .debug-trace-panel h4 {
+            font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--gray-500); margin: 10px 0 4px 0; font-weight: 600;
+        }
+        .debug-trace-panel h4:first-child { margin-top: 0; }
+        .debug-trace-panel table { width: 100%; border-collapse: collapse; margin: 4px 0 8px 0; }
+        .debug-trace-panel table th {
+            text-align: left; padding: 4px 6px; font-size: 10px; color: var(--gray-500);
+            border-bottom: 1px solid var(--gray-800); text-transform: uppercase;
+        }
+        .debug-trace-panel table td {
+            padding: 4px 6px; font-size: 12px; border-bottom: 1px solid rgba(39,39,42,0.3);
+            font-family: var(--font-mono);
+        }
+        .debug-trace-panel pre {
+            background: var(--gray-900); padding: 8px; border-radius: 4px;
+            font-size: 11px; max-height: 200px; overflow: auto;
+            white-space: pre-wrap; word-break: break-all;
+            font-family: var(--font-mono); color: var(--gray-300);
+        }
+        .debug-expand {
+            font-size: 11px; color: var(--accent); cursor: pointer; user-select: none;
+        }
+        .debug-expand:hover { text-decoration: underline; }
+        .debug-expandable { display: none; }
+        .debug-expandable.open { display: block; }
+
+        /* Escalation chip */
+        .chip.esc-keyword { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.2); color: #fca5a5; }
     </style>
 </head>
 <body>
@@ -459,6 +543,10 @@
                 <input type="checkbox" id="showLlmInChat">
                 Показывать модель в чате
             </label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#cfcfcf; white-space:nowrap;" title="Температура генерации LLM (0 = детерминированно, 1 = креативно)">
+                🌡️ <input type="range" id="llmTemperature" min="0" max="1" step="0.01" value="0.1" style="width:80px; vertical-align:middle;">
+                <span id="llmTempValue" style="min-width:30px; font-family:var(--font-mono); font-size:12px;">0.10</span>
+            </label>
             <button class="btn btn-secondary" onclick="saveLlmSettings()">LLM</button>
             <span id="activeLlmIndicator" style="font-size:12px; color:#9ca3af; white-space:nowrap;">Активно: неизвестно</span>
         </div>
@@ -467,6 +555,7 @@
         <button class="btn btn-success" onclick="document.getElementById('importFileInput').click()">📥 Импорт .docx</button>
         <button class="btn btn-secondary" onclick="exportCurrentReason()">📤 Экспорт .docx</button>
         <button class="btn btn-secondary" onclick="reloadReasons()">🔄 Перезагрузить</button>
+        <button class="btn btn-primary" onclick="openDebugChat()">🐛 Debug-чат</button>
     </div>
 </div>
 
@@ -556,6 +645,46 @@
                 <div id="sectionsAccordion"></div>
             </div>
 
+            <!-- Escalation Rules (L1.5) -->
+            <div class="card">
+                <div class="card-title">🚨 Правила 100%-эскалации (L1.5)
+                    <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+                        <label class="toggle">
+                            <input type="checkbox" id="escalationEnabled" onchange="currentReason.escalation_rules.enabled=this.checked">
+                            <span class="slider"></span>
+                        </label>
+                        <span style="font-size:12px; color:#888">Включено</span>
+                    </div>
+                </div>
+                <div id="escalationRulesBody">
+                    <div class="form-row">
+                        <div class="form-label">Порог overlap для Q&A-эскалации (score_threshold)</div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <input type="range" id="escalationThreshold" min="0" max="1" step="0.05" value="0.7" style="flex:1;"
+                                onchange="currentReason.escalation_rules.metrics.score_threshold=parseFloat(this.value); document.getElementById('escalationThresholdVal').textContent=parseFloat(this.value).toFixed(2);"
+                                oninput="document.getElementById('escalationThresholdVal').textContent=parseFloat(this.value).toFixed(2);">
+                            <span id="escalationThresholdVal" style="min-width:35px; font-family:var(--font-mono); font-size:13px;">0.70</span>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-label">Фразовые маски эскалации (keyword_patterns)</div>
+                        <div class="chips-container" id="escKeywordChips"></div>
+                        <div class="chip-input-row">
+                            <input type="text" id="escKeywordInput" placeholder="ошибка при печати чека..." onkeydown="if(event.key==='Enter')addEscKeyword()">
+                            <button class="btn btn-sm btn-secondary" onclick="addEscKeyword()">+</button>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-label">Q&A-пары для 100%-эскалации
+                            <button class="btn btn-sm btn-secondary" onclick="addEscQA()" style="margin-left:8px">+ Q&A</button>
+                        </div>
+                        <div id="escQAContainer"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Typical Complaints -->
             <div class="card">
                 <div class="card-title">⚠️ Типовые жалобы
@@ -590,6 +719,25 @@
                 </div>
                 <button class="btn btn-danger" onclick="deleteReason()">🗑 Удалить</button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Debug Chat Modal -->
+<div class="modal-overlay" id="debugModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>🐛 Debug-чат (трейсинг pipeline)</h2>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <span id="debugSessionInfo" style="font-size:11px; color:var(--gray-500); font-family:var(--font-mono);"></span>
+                <button class="btn btn-sm btn-secondary" onclick="resetDebugSession()">🔄 Новая сессия</button>
+                <button class="btn btn-sm btn-danger" onclick="closeDebugChat()">✕</button>
+            </div>
+        </div>
+        <div class="modal-body" id="debugMessages"></div>
+        <div class="modal-footer">
+            <input type="text" class="form-input" id="debugInput" placeholder="Введите вопрос для debug-тестирования..." onkeydown="if(event.key==='Enter')sendDebugMessage()">
+            <button class="btn btn-primary" onclick="sendDebugMessage()">Отправить</button>
         </div>
     </div>
 </div>
@@ -654,7 +802,8 @@ function createNewReason() {
     currentReason = {
         id: '', name: '', is_active: true,
         markers: { verbs: [], nouns: [], numeric_tags: [], phrase_masks: [] },
-        thematic_sections: [], typical_complaints: [], example_answers: []
+        thematic_sections: [], typical_complaints: [], example_answers: [],
+        escalation_rules: { enabled: false, qa_pairs: [], metrics: { score_threshold: 0.7, keyword_patterns: [] } }
     };
     renderEditor();
 }
@@ -666,16 +815,25 @@ async function loadLlmSettings() {
         const data = await r.json();
         document.getElementById('llmProvider').value = data.llm_provider || 'yandex';
         document.getElementById('showLlmInChat').checked = Boolean(data.show_llm_in_chat);
+        const temp = data.llm_temperature != null ? data.llm_temperature : 0.1;
+        document.getElementById('llmTemperature').value = temp;
+        document.getElementById('llmTempValue').textContent = parseFloat(temp).toFixed(2);
         document.getElementById('activeLlmIndicator').textContent = `Активно: ${data.active_label || 'неизвестно'}`;
     } catch (e) {
         notify('Ошибка загрузки LLM: ' + e.message, 'error');
     }
 }
 
+// Temperature slider live update
+document.getElementById('llmTemperature').addEventListener('input', function() {
+    document.getElementById('llmTempValue').textContent = parseFloat(this.value).toFixed(2);
+});
+
 async function saveLlmSettings() {
     const payload = {
         llm_provider: document.getElementById('llmProvider').value,
         show_llm_in_chat: document.getElementById('showLlmInChat').checked,
+        llm_temperature: parseFloat(document.getElementById('llmTemperature').value),
     };
 
     try {
@@ -718,6 +876,9 @@ function renderEditor() {
 
     // Examples
     renderExamples();
+
+    // Escalation Rules
+    renderEscalationRules();
 }
 
 function renderChips(type, items) {
@@ -1038,6 +1199,239 @@ function notify(msg, type = 'success') {
     el.textContent = msg;
     el.className = `notification ${type} show`;
     setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Escalation Rules ──
+function renderEscalationRules() {
+    if (!currentReason.escalation_rules) {
+        currentReason.escalation_rules = { enabled: false, qa_pairs: [], metrics: { score_threshold: 0.7, keyword_patterns: [] } };
+    }
+    const rules = currentReason.escalation_rules;
+    if (!rules.metrics) rules.metrics = { score_threshold: 0.7, keyword_patterns: [] };
+    if (!rules.qa_pairs) rules.qa_pairs = [];
+
+    document.getElementById('escalationEnabled').checked = rules.enabled;
+    document.getElementById('escalationThreshold').value = rules.metrics.score_threshold;
+    document.getElementById('escalationThresholdVal').textContent = parseFloat(rules.metrics.score_threshold).toFixed(2);
+
+    // Keyword chips
+    const chipContainer = document.getElementById('escKeywordChips');
+    chipContainer.innerHTML = '';
+    (rules.metrics.keyword_patterns || []).forEach((kw, idx) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip esc-keyword';
+        chip.innerHTML = `${kw} <span class="remove" onclick="removeEscKeyword(${idx})">×</span>`;
+        chipContainer.appendChild(chip);
+    });
+
+    // QA pairs
+    const qaContainer = document.getElementById('escQAContainer');
+    qaContainer.innerHTML = '';
+    rules.qa_pairs.forEach((qa, qi) => {
+        const div = document.createElement('div');
+        div.className = 'qa-pair';
+        div.innerHTML = `
+            <div class="qa-actions"><button class="btn btn-sm btn-danger" onclick="removeEscQA(${qi})">×</button></div>
+            <div class="form-label">Вопрос-паттерн</div>
+            <textarea class="form-input" rows="1" onchange="currentReason.escalation_rules.qa_pairs[${qi}].question=this.value">${qa.question}</textarea>
+            <div class="form-label" style="margin-top:6px">Шаблон ответа при эскалации (опционально)</div>
+            <textarea class="form-input" rows="1" onchange="currentReason.escalation_rules.qa_pairs[${qi}].answer=this.value">${qa.answer || ''}</textarea>
+        `;
+        qaContainer.appendChild(div);
+    });
+}
+
+function addEscKeyword() {
+    const input = document.getElementById('escKeywordInput');
+    const values = input.value.split(',').map(v => v.trim()).filter(v => v);
+    if (!values.length) return;
+    const arr = currentReason.escalation_rules.metrics.keyword_patterns;
+    values.forEach(v => { if (!arr.includes(v)) arr.push(v); });
+    input.value = '';
+    renderEscalationRules();
+}
+
+function removeEscKeyword(idx) {
+    currentReason.escalation_rules.metrics.keyword_patterns.splice(idx, 1);
+    renderEscalationRules();
+}
+
+function addEscQA() {
+    currentReason.escalation_rules.qa_pairs.push({ question: '', answer: '' });
+    renderEscalationRules();
+}
+
+function removeEscQA(idx) {
+    currentReason.escalation_rules.qa_pairs.splice(idx, 1);
+    renderEscalationRules();
+}
+
+// ── Debug Chat ──
+let debugSessionId = null;
+let debugMsgCounter = 0;
+
+function openDebugChat() {
+    document.getElementById('debugModal').classList.add('open');
+    document.getElementById('debugInput').focus();
+    updateDebugSessionInfo();
+}
+
+function closeDebugChat() {
+    document.getElementById('debugModal').classList.remove('open');
+}
+
+function resetDebugSession() {
+    debugSessionId = null;
+    debugMsgCounter = 0;
+    document.getElementById('debugMessages').innerHTML = '';
+    updateDebugSessionInfo();
+    notify('Сессия сброшена', 'success');
+}
+
+function updateDebugSessionInfo() {
+    const el = document.getElementById('debugSessionInfo');
+    el.textContent = debugSessionId ? `session: ${debugSessionId.substring(0, 8)}…` : 'новая сессия';
+}
+
+async function sendDebugMessage() {
+    const input = document.getElementById('debugInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+
+    const container = document.getElementById('debugMessages');
+
+    // User message
+    const userDiv = document.createElement('div');
+    userDiv.className = 'debug-msg user';
+    userDiv.textContent = msg;
+    container.appendChild(userDiv);
+
+    // Loading indicator
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'debug-msg bot';
+    loadingDiv.innerHTML = '<div class="bot-answer" style="color:var(--gray-500);">⏳ Обработка...</div>';
+    container.appendChild(loadingDiv);
+    container.scrollTop = container.scrollHeight;
+
+    try {
+        const payload = { message: msg, debug: true };
+        if (debugSessionId) payload.session_id = debugSessionId;
+
+        const r = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Ошибка');
+
+        debugSessionId = data.session_id;
+        updateDebugSessionInfo();
+
+        container.removeChild(loadingDiv);
+
+        const botDiv = document.createElement('div');
+        botDiv.className = 'debug-msg bot';
+        const traceId = 'trace_' + (++debugMsgCounter);
+        const expandablePromptId = 'prompt_' + debugMsgCounter;
+        const expandableRawId = 'raw_' + debugMsgCounter;
+
+        let metaHtml = `
+            <span>🎯 Confidence: <b>${(data.confidence * 100).toFixed(0)}%</b> (${data.confidence_level})</span>
+            <span>📋 ${data.confidence_label}</span>
+        `;
+        if (data.detected_reason) metaHtml += `<span>📌 ${data.detected_reason}</span>`;
+        if (data.thematic_section) metaHtml += `<span>📂 ${data.thematic_section}</span>`;
+        if (data.needs_escalation) metaHtml += `<span style="color:#fca5a5">⚠️ Эскалация</span>`;
+
+        let traceHtml = '';
+        const t = data.debug_trace;
+        if (t) {
+            // LLM involvement badge
+            const involvementLabels = {
+                'none': '🔇 Без LLM',
+                'classification_only': '🏷️ Только классификация',
+                'generation': '✍️ Генерация ответа',
+                'classification+generation': '🏷️+✍️ Классификация + Генерация',
+            };
+            const invLabel = involvementLabels[t.llm_involvement] || t.llm_involvement;
+
+            traceHtml += `<h4>L1 — Классификация причины</h4>`;
+            traceHtml += `<div>Метод: <b>${t.l1_method}</b> | Уверенность: <b>${t.l1_confident ? 'Да' : 'Нет'}</b> | Причина: <b>${t.l1_reason || '—'}</b></div>`;
+            if (t.l1_candidates && t.l1_candidates.length) {
+                traceHtml += `<table><tr><th>Причина</th><th>Score</th><th>Фразы</th><th>Числа</th><th>Сущ.</th><th>Глаг.</th></tr>`;
+                t.l1_candidates.forEach(c => {
+                    traceHtml += `<tr><td>${c.reason_name}</td><td>${c.score.toFixed(1)}</td>
+                        <td>${(c.phrase_matches||[]).join(', ')||'—'}</td>
+                        <td>${(c.numeric_matches||[]).join(', ')||'—'}</td>
+                        <td>${(c.noun_matches||[]).join(', ')||'—'}</td>
+                        <td>${(c.verb_matches||[]).join(', ')||'—'}</td></tr>`;
+                });
+                traceHtml += `</table>`;
+            }
+
+            if (t.escalation_check) {
+                traceHtml += `<h4>L1.5 — Проверка 100%-эскалации</h4>`;
+                if (t.escalation_check.matched) {
+                    traceHtml += `<div style="color:#fca5a5">✅ Сработало! Триггер: <b>${t.escalation_check.trigger}</b>`;
+                    if (t.escalation_check.pattern) traceHtml += ` | Паттерн: "${t.escalation_check.pattern}"`;
+                    if (t.escalation_check.question) traceHtml += ` | Q&A: "${t.escalation_check.question}" (score: ${t.escalation_check.score?.toFixed(2)})`;
+                    traceHtml += `</div>`;
+                } else {
+                    traceHtml += `<div style="color:#86efac">Не сработало</div>`;
+                }
+            }
+
+            if (t.l2_method) {
+                traceHtml += `<h4>L2 — Тематический раздел</h4>`;
+                traceHtml += `<div>Метод: <b>${t.l2_method}</b> | Раздел: <b>${t.l2_section || '—'}</b></div>`;
+                traceHtml += `<div>QA Score: ${t.l2_best_qa_score?.toFixed(2) ?? '—'} | Example Score: ${t.l2_best_example_score?.toFixed(2) ?? '—'} | Complaint Score: ${t.l2_best_complaint_score?.toFixed(2) ?? '—'}</div>`;
+            }
+
+            traceHtml += `<h4>LLM</h4>`;
+            traceHtml += `<div>Участие: <b>${invLabel}</b>`;
+            if (t.llm_provider) traceHtml += ` | Провайдер: <b>${t.llm_provider}</b>`;
+            if (t.llm_temperature != null) traceHtml += ` | Temperature: <b>${t.llm_temperature}</b>`;
+            traceHtml += `</div>`;
+
+            if (t.llm_prompt) {
+                traceHtml += `<div class="debug-expand" onclick="this.nextElementSibling.classList.toggle('open')">▸ Показать промпт</div>`;
+                traceHtml += `<div class="debug-expandable"><pre>${escapeHtml(t.llm_prompt)}</pre></div>`;
+            }
+            if (t.llm_raw_response) {
+                traceHtml += `<div class="debug-expand" onclick="this.nextElementSibling.classList.toggle('open')">▸ Показать сырой ответ LLM</div>`;
+                traceHtml += `<div class="debug-expandable"><pre>${escapeHtml(t.llm_raw_response)}</pre></div>`;
+            }
+
+            traceHtml += `<h4>Confidence</h4>`;
+            traceHtml += `<div>Значение: <b>${t.confidence_parsed?.toFixed(2) ?? '—'}</b> | Причина: ${t.confidence_reason || '—'}</div>`;
+
+            traceHtml += `<div style="margin-top:8px; color:var(--gray-500)">⏱ Время обработки: ${t.processing_time_ms} мс</div>`;
+        }
+
+        botDiv.innerHTML = `
+            <div class="bot-answer">${escapeHtml(data.answer)}</div>
+            <div class="bot-meta">${metaHtml}</div>
+            ${t ? `<div class="debug-trace-toggle" onclick="document.getElementById('${traceId}').classList.toggle('open'); this.querySelector('.arrow').textContent = document.getElementById('${traceId}').classList.contains('open') ? '▾' : '▸'"><span class="arrow">▸</span> Debug Trace</div>
+            <div class="debug-trace-panel" id="${traceId}">${traceHtml}</div>` : ''}
+        `;
+        container.appendChild(botDiv);
+    } catch (e) {
+        container.removeChild(loadingDiv);
+        const errDiv = document.createElement('div');
+        errDiv.className = 'debug-msg bot';
+        errDiv.innerHTML = `<div class="bot-answer" style="color:#fca5a5">❌ ${e.message}</div>`;
+        container.appendChild(errDiv);
+    }
+
+    container.scrollTop = container.scrollHeight;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
 }
 </script>
 </body>

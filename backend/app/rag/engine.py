@@ -90,6 +90,8 @@ class RAGResponse:
     classification_method: str = ""
     # Для уточнения — список кандидатов [{reason_id, reason_name, score}]
     clarification_candidates: list[dict] = field(default_factory=list)
+    # Debug trace (заполняется только при debug=True)
+    debug_trace: dict | None = None
 
 
 class YandexGPTClient:
@@ -313,11 +315,50 @@ class RAGEngine:
 
         return "\n\n---\n\n".join(parts) if parts else "Нет дополнительного контекста."
 
+    def _check_forced_escalation(self, question: str, reason: ContactReason) -> dict:
+        """Проверка правил 100%-эскалации (L1.5).
+
+        Проверяет keyword_patterns (точное фразовое совпадение) и Q&A-пары
+        (overlap лемм ≥ score_threshold). При совпадении возвращает matched=True.
+        """
+        rules = reason.escalation_rules
+        if not rules.enabled:
+            return {"matched": False}
+
+        text_lower = re.sub(r"\s+", " ", question.lower().strip())
+
+        # 1. Проверка keyword_patterns (фразовые маски)
+        for pattern in rules.metrics.keyword_patterns:
+            if pattern.lower().strip() in text_lower:
+                return {"matched": True, "trigger": "keyword", "pattern": pattern, "answer": ""}
+
+        # 2. Проверка Q&A-пар (overlap score)
+        if rules.qa_pairs:
+            from app.classifier.section_classifier import _text_to_lemma_set, _overlap_score
+
+            query_lemmas = _text_to_lemma_set(question)
+            threshold = rules.metrics.score_threshold
+
+            for qa in rules.qa_pairs:
+                qa_lemmas = _text_to_lemma_set(qa.question)
+                score = _overlap_score(query_lemmas, qa_lemmas)
+                if score >= threshold:
+                    return {
+                        "matched": True,
+                        "trigger": "qa_pair",
+                        "question": qa.question,
+                        "score": score,
+                        "answer": qa.answer,
+                    }
+
+        return {"matched": False}
+
     async def ask(
         self,
         question: str,
         chat_history: list[dict] | None = None,
         reason_id: str | None = None,
+        debug: bool = False,
     ) -> RAGResponse:
         """Основной метод: полный pipeline L1→L2→L3.
 
@@ -325,12 +366,18 @@ class RAGEngine:
             question: Вопрос пользователя.
             chat_history: История чата.
             reason_id: Принудительная причина обращения (пропускает L1).
+            debug: Собирать полный trace pipeline.
 
         Returns:
             RAGResponse с ответом и метаданными.
         """
         _start = _time.time()
         logger.info(f"[ENGINE] query={question}" + (f" forced_reason={reason_id}" if reason_id else ""))
+
+        # Debug trace accumulator
+        trace: dict = {} if debug else {}
+        llm_used_for_classify = False
+        llm_used_for_generate = False
 
         # ── L1: Определение причины обращения ──
         if reason_id:
@@ -346,22 +393,53 @@ class RAGEngine:
                     classification_method="forced_invalid",
                 )
             l1_method = "forced"
+            l1_confident = True
+            l1_candidates_data: list[dict] = []
         else:
             l1 = classify_reason(question)
 
+            l1_candidates_data = [
+                {
+                    "reason_id": c.reason.id,
+                    "reason_name": c.reason.name,
+                    "score": c.score,
+                    "phrase_matches": c.phrase_matches,
+                    "numeric_matches": c.numeric_matches,
+                    "noun_matches": c.noun_matches,
+                    "verb_matches": c.verb_matches,
+                }
+                for c in l1.candidates[:5]
+            ]
+
             if l1.method == "none":
                 logger.info("[ENGINE] L1=none → escalation")
-                return RAGResponse(
+                resp = RAGResponse(
                     answer="Не удалось определить тему вашего обращения. Передаю вопрос оператору.",
                     confidence=0.0,
                     confidence_reason="L1: причина обращения не определена",
                     needs_escalation=True,
                     classification_method="none",
                 )
+                if debug:
+                    resp.debug_trace = {
+                        "l1_method": "none", "l1_confident": False,
+                        "l1_reason": None, "l1_reason_id": None,
+                        "l1_candidates": l1_candidates_data,
+                        "escalation_check": None, "l2_method": None, "l2_section": None,
+                        "l2_best_qa_score": None, "l2_best_example_score": None,
+                        "l2_best_complaint_score": None,
+                        "llm_prompt": None, "llm_raw_response": None,
+                        "llm_provider": None, "llm_temperature": None,
+                        "confidence_parsed": 0.0, "confidence_reason": "L1: причина обращения не определена",
+                        "llm_involvement": "none",
+                        "processing_time_ms": int((_time.time() - _start) * 1000),
+                    }
+                return resp
 
             # Если неоднозначно — пробуем LLM-классификацию
             if not l1.is_confident and l1.needs_clarification:
                 l1 = await self._llm_classify_reason(question, l1)
+                llm_used_for_classify = True
 
             if l1.reason is None:
                 # LLM тоже не определил — уточнение
@@ -369,7 +447,46 @@ class RAGEngine:
 
             reason = l1.reason
             l1_method = l1.method
+            l1_confident = l1.is_confident
         logger.info(f"[ENGINE] L1={reason.name} method={l1_method}")
+
+        # ── L1.5: Проверка правил 100%-эскалации ──
+        escalation_check = self._check_forced_escalation(question, reason)
+        if escalation_check["matched"]:
+            _total = _time.time() - _start
+            logger.info(
+                f"[ENGINE] L1.5=forced_escalation | trigger={escalation_check['trigger']} | time={_total:.1f}s"
+            )
+            esc_answer = escalation_check.get("answer") or (
+                "По данному вопросу необходима консультация специалиста техподдержки. "
+                "Передаю ваше обращение оператору."
+            )
+            resp = RAGResponse(
+                answer=esc_answer,
+                confidence=0.0,
+                confidence_reason="L1.5: 100%-эскалация по правилам причины обращения",
+                needs_escalation=True,
+                detected_reason=reason.id,
+                detected_reason_name=reason.name,
+                classification_method=f"L1:{l1_method}/L1.5:forced_escalation",
+            )
+            if debug:
+                resp.debug_trace = {
+                    "l1_method": l1_method, "l1_confident": l1_confident,
+                    "l1_reason": reason.name, "l1_reason_id": reason.id,
+                    "l1_candidates": l1_candidates_data,
+                    "escalation_check": escalation_check,
+                    "l2_method": None, "l2_section": None,
+                    "l2_best_qa_score": None, "l2_best_example_score": None,
+                    "l2_best_complaint_score": None,
+                    "llm_prompt": None, "llm_raw_response": None,
+                    "llm_provider": None, "llm_temperature": None,
+                    "confidence_parsed": 0.0,
+                    "confidence_reason": "L1.5: 100%-эскалация по правилам причины обращения",
+                    "llm_involvement": "classification_only" if llm_used_for_classify else "none",
+                    "processing_time_ms": int(_total * 1000),
+                }
+            return resp
 
         # ── L2: Определение тематического раздела ──
         l2 = classify_section(question, reason)
@@ -378,7 +495,7 @@ class RAGEngine:
         if l2.method == "example_match" and l2.best_example:
             _total = _time.time() - _start
             logger.info(f"[ENGINE] L2=example_match → direct answer | time={_total:.1f}s")
-            return RAGResponse(
+            resp = RAGResponse(
                 answer=_truncate_to_bytes(l2.best_example.ideal_answer, MAX_ANSWER_BYTES),
                 confidence=0.95,
                 confidence_reason="Точное совпадение с примером ответа",
@@ -387,6 +504,25 @@ class RAGEngine:
                 thematic_section=l2.section.title if l2.section else "",
                 classification_method=f"L1:{l1_method}/L2:{l2.method}",
             )
+            if debug:
+                resp.debug_trace = {
+                    "l1_method": l1_method, "l1_confident": l1_confident,
+                    "l1_reason": reason.name, "l1_reason_id": reason.id,
+                    "l1_candidates": l1_candidates_data,
+                    "escalation_check": escalation_check,
+                    "l2_method": l2.method,
+                    "l2_section": l2.section.title if l2.section else None,
+                    "l2_best_qa_score": l2.best_qa_score,
+                    "l2_best_example_score": l2.best_example_score,
+                    "l2_best_complaint_score": l2.best_complaint_score,
+                    "llm_prompt": None, "llm_raw_response": None,
+                    "llm_provider": None, "llm_temperature": None,
+                    "confidence_parsed": 0.95,
+                    "confidence_reason": "Точное совпадение с примером ответа",
+                    "llm_involvement": "classification_only" if llm_used_for_classify else "none",
+                    "processing_time_ms": int(_total * 1000),
+                }
+            return resp
 
         # ── L3: Генерация ответа через выбранный LLM ──
         context = self._build_reason_context(reason, l2, question)
@@ -417,9 +553,15 @@ class RAGEngine:
             f"[ENGINE] L3 provider={settings.llm_provider_normalized} | reason={reason.name} | section={section_title}"
         )
 
+        llm_snapshot = get_llm_settings_snapshot()
+        llm_temp = float(llm_snapshot.get("llm_temperature", "0.1"))
+        llm_provider_name = llm_snapshot["llm_provider"]
+        raw_answer = None
+
         try:
             await self._ensure_llm_client()
-            raw_answer = await self.llm.complete(messages, temperature=0.1, max_tokens=800)
+            raw_answer = await self.llm.complete(messages, temperature=llm_temp, max_tokens=800)
+            llm_used_for_generate = True
         except Exception as e:
             logger.error(f"LLM error ({settings.llm_provider_normalized}): {e}")
             return RAGResponse(
@@ -445,7 +587,17 @@ class RAGEngine:
             f"time={_total:.1f}s | method=L1:{l1_method}/L2:{l2.method}"
         )
 
-        return RAGResponse(
+        # Определяем степень участия LLM
+        if llm_used_for_classify and llm_used_for_generate:
+            llm_involvement = "classification+generation"
+        elif llm_used_for_generate:
+            llm_involvement = "generation"
+        elif llm_used_for_classify:
+            llm_involvement = "classification_only"
+        else:
+            llm_involvement = "none"
+
+        resp = RAGResponse(
             answer=clean_answer,
             confidence=confidence,
             confidence_reason=conf_reason,
@@ -455,6 +607,33 @@ class RAGEngine:
             thematic_section=section_title,
             classification_method=f"L1:{l1_method}/L2:{l2.method}",
         )
+
+        if debug:
+            # Формируем промпт как текст для отображения
+            prompt_text = "\n\n".join(
+                f"[{m['role']}]\n{m.get('text', m.get('content', ''))}" for m in messages
+            )
+            resp.debug_trace = {
+                "l1_method": l1_method, "l1_confident": l1_confident,
+                "l1_reason": reason.name, "l1_reason_id": reason.id,
+                "l1_candidates": l1_candidates_data,
+                "escalation_check": escalation_check,
+                "l2_method": l2.method,
+                "l2_section": l2.section.title if l2.section else None,
+                "l2_best_qa_score": l2.best_qa_score,
+                "l2_best_example_score": l2.best_example_score,
+                "l2_best_complaint_score": l2.best_complaint_score,
+                "llm_prompt": prompt_text,
+                "llm_raw_response": raw_answer,
+                "llm_provider": llm_provider_name,
+                "llm_temperature": llm_temp,
+                "confidence_parsed": confidence,
+                "confidence_reason": conf_reason,
+                "llm_involvement": llm_involvement,
+                "processing_time_ms": int(_total * 1000),
+            }
+
+        return resp
 
     async def _llm_classify_reason(self, question: str, l1: L1Result) -> L1Result:
         """LLM-классификация причины обращения при неоднозначности."""

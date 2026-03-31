@@ -114,6 +114,15 @@ def parse_docx(path: Path) -> dict:
     example_rows: list[dict] = []
     in_examples_section = False
 
+    # Escalation rules (L1.5)
+    escalation_rules: dict = {
+        "enabled": False,
+        "qa_pairs": [],
+        "metrics": {"score_threshold": 0.7, "keyword_patterns": []},
+    }
+    in_escalation_rules_section = False
+    current_esc_rules_sub: Optional[str] = None  # "keywords" | "qa"
+
     def _flush_qa():
         nonlocal current_qa, collecting_answer
         if current_qa and current_section is not None:
@@ -228,19 +237,30 @@ def parse_docx(path: Path) -> dict:
                 in_markers_section = True
                 in_escalation_section = False
                 in_examples_section = False
+                in_escalation_rules_section = False
                 current_marker_type = None
+                continue
+            elif "100%" in upper or "L1.5" in upper or ("ПРАВИЛА" in upper and "ЭСКАЛАЦИ" in upper):
+                _flush_section()
+                in_markers_section = False
+                in_escalation_section = False
+                in_examples_section = False
+                in_escalation_rules_section = True
+                current_esc_rules_sub = None
                 continue
             elif "ЭСКАЛАЦИ" in upper or "СПЕЦИАЛИСТ" in upper:
                 _flush_section()
                 in_markers_section = False
                 in_escalation_section = True
                 in_examples_section = False
+                in_escalation_rules_section = False
                 continue
             elif "ГОТОВЫЕ ОТВЕТЫ" in upper:
                 _flush_section()
                 in_markers_section = False
                 in_escalation_section = False
                 in_examples_section = True
+                in_escalation_rules_section = False
                 continue
             else:
                 # Normal Q&A section
@@ -248,6 +268,7 @@ def parse_docx(path: Path) -> dict:
                 in_markers_section = False
                 in_escalation_section = False
                 in_examples_section = False
+                in_escalation_rules_section = False
                 current_section = {
                     "id": slugify(section_title),
                     "title": section_title,
@@ -299,6 +320,51 @@ def parse_docx(path: Path) -> dict:
                 continue
             if ptype == ParaType.SEPARATOR:
                 in_escalation_section = False
+                continue
+
+        # ── Inside escalation rules (L1.5) section ──
+        if in_escalation_rules_section:
+            low = text_stripped.lower()
+            # Status line: **Статус:** Включено / Выключено
+            if "статус" in low:
+                escalation_rules["enabled"] = "включен" in low
+                continue
+            # Threshold line: **Порог совпадения:** 0.7
+            if "порог" in low:
+                m_thr = re.search(r"(\d+(?:[.,]\d+)?)", text_stripped)
+                if m_thr:
+                    escalation_rules["metrics"]["score_threshold"] = float(
+                        m_thr.group(1).replace(",", ".")
+                    )
+                continue
+            # Subsection headings
+            if ptype == ParaType.SUBSECTION:
+                sub_lower = text_stripped.lower()
+                if "ключев" in sub_lower or "фраз" in sub_lower:
+                    current_esc_rules_sub = "keywords"
+                elif "пар" in sub_lower or "вопрос" in sub_lower:
+                    current_esc_rules_sub = "qa"
+                continue
+            # Keyword list items
+            if current_esc_rules_sub == "keywords" and ptype == ParaType.LIST_ITEM:
+                item = text_stripped[2:].strip()
+                if item and item != "(пусто)":
+                    escalation_rules["metrics"]["keyword_patterns"].append(item)
+                continue
+            # QA table rows
+            if current_esc_rules_sub == "qa" and ptype == ParaType.TABLE_ROW:
+                cells = [c.strip() for c in text_stripped.split("|")]
+                cells = [c for c in cells if c and not c.startswith(":---")]
+                if len(cells) >= 2:
+                    q = clean_bold(cells[0])
+                    a = clean_bold(cells[1])
+                    if q and a and q.lower() not in ("вопрос", ""):
+                        escalation_rules["qa_pairs"].append(
+                            {"question": q, "answer": a}
+                        )
+                continue
+            if ptype == ParaType.SEPARATOR:
+                in_escalation_rules_section = False
                 continue
 
         # ── Inside examples section ──
@@ -354,6 +420,7 @@ def parse_docx(path: Path) -> dict:
         "thematic_sections": sections,
         "typical_complaints": escalation_rows,
         "example_answers": example_rows,
+        "escalation_rules": escalation_rules,
     }
 
 

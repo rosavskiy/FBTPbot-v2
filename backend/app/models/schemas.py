@@ -56,6 +56,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000, description="Сообщение пользователя")
     session_id: str | None = Field(None, description="ID сессии (для продолжения диалога)")
+    debug: bool = Field(False, description="Включить debug-трейсинг pipeline")
 
 
 class SuggestedTopicSchema(BaseModel):
@@ -63,6 +64,30 @@ class SuggestedTopicSchema(BaseModel):
     article_id: str = Field(..., description="ID статьи")
     score: float = Field(0.0, description="Релевантность (0-1)")
     snippet: str = Field("", description="Краткий фрагмент текста")
+
+
+class DebugTrace(BaseModel):
+    """Полный trace pipeline L1→L1.5→L2→L3 для debug-чата."""
+
+    l1_method: str = Field("", description="Метод L1-классификации")
+    l1_confident: bool = Field(False, description="Уверенность L1")
+    l1_reason: str | None = Field(None, description="Определённая причина")
+    l1_reason_id: str | None = Field(None, description="ID причины")
+    l1_candidates: list[dict] = Field(default_factory=list, description="Кандидаты L1 с scores")
+    escalation_check: dict | None = Field(None, description="Результат проверки L1.5 эскалации")
+    l2_method: str | None = Field(None, description="Метод L2-классификации")
+    l2_section: str | None = Field(None, description="Найденный раздел")
+    l2_best_qa_score: float | None = Field(None, description="Лучший QA score")
+    l2_best_example_score: float | None = Field(None, description="Лучший example score")
+    l2_best_complaint_score: float | None = Field(None, description="Лучший complaint score")
+    llm_prompt: str | None = Field(None, description="Полный промпт отправленный LLM")
+    llm_raw_response: str | None = Field(None, description="Сырой ответ LLM")
+    llm_provider: str | None = Field(None, description="Использованный провайдер")
+    llm_temperature: float | None = Field(None, description="Использованная температура")
+    confidence_parsed: float | None = Field(None, description="Распарсенный confidence")
+    confidence_reason: str | None = Field(None, description="Причина confidence")
+    llm_involvement: str = Field("none", description="Степень участия LLM: none / classification_only / generation / classification+generation")
+    processing_time_ms: int = Field(0, description="Время обработки в мс")
 
 
 class ChatResponse(BaseModel):
@@ -91,6 +116,7 @@ class ChatResponse(BaseModel):
     llm_model: str | None = Field(None, description="Активная LLM-модель")
     llm_label: str | None = Field(None, description="Человекочитаемая метка активной LLM")
     show_llm_in_chat: bool = Field(False, description="Показывать ли активную LLM в интерфейсе чата")
+    debug_trace: DebugTrace | None = Field(None, description="Debug-трейс pipeline (только при debug=true)")
 
 
 # === Эскалация ===

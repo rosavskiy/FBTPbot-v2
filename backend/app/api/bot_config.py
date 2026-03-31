@@ -79,11 +79,13 @@ class TestClassifyResponse(BaseModel):
 class LLMSettingsPayload(BaseModel):
     llm_provider: str = Field(default="yandex")
     show_llm_in_chat: bool = False
+    llm_temperature: float = Field(default=0.1, ge=0.0, le=1.0)
 
 
 class LLMSettingsResponse(BaseModel):
     llm_provider: str = "yandex"
     show_llm_in_chat: bool = False
+    llm_temperature: float = 0.1
     available_providers: list[str] = Field(default_factory=lambda: ["yandex", "deepseek"])
     active_provider: str = "yandex"
     active_model: str = "yandexgpt"
@@ -151,6 +153,22 @@ def _reason_to_docx_lines(reason: ContactReason) -> list[str]:
         question = sanitize_cell(example.user_question)
         answer = sanitize_cell(example.ideal_answer)
         lines.append(f"| {question} | {answer} |")
+
+    # ── Escalation rules (L1.5) ──
+    esc = reason.escalation_rules
+    lines.extend(["", "---", "", "### Раздел: Правила 100%-эскалации (L1.5)"])
+    lines.append(f"**Статус:** {'Включено' if esc.enabled else 'Выключено'}")
+    lines.append(f"**Порог совпадения:** {esc.metrics.score_threshold}")
+    lines.extend(["", "#### Ключевые фразы"])
+    kw_lines = [f"- {kw}" for kw in esc.metrics.keyword_patterns] or ["- "]
+    lines.extend(kw_lines)
+    lines.extend(["", "#### Пары вопрос-ответ для эскалации"])
+    lines.extend(["| Вопрос | Ответ |", "| :--- | :--- |"])
+    for pair in esc.qa_pairs:
+        q = sanitize_cell(pair.question)
+        a = sanitize_cell(pair.answer)
+        lines.append(f"| {q} | {a} |")
+
     return lines
 
 
@@ -192,6 +210,7 @@ def _persist_llm_settings(payload: LLMSettingsPayload) -> Path:
     values = {
         "LLM_PROVIDER": _normalize_provider_or_422(payload.llm_provider),
         "SHOW_LLM_IN_CHAT": "true" if payload.show_llm_in_chat else "false",
+        "LLM_TEMPERATURE": str(payload.llm_temperature),
     }
     for key, value in values.items():
         lines = _upsert_env_line(lines, key, value)
@@ -205,6 +224,7 @@ def _apply_llm_settings(payload: LLMSettingsPayload) -> None:
         {
             "llm_provider": payload.llm_provider,
             "show_llm_in_chat": str(payload.show_llm_in_chat).lower(),
+            "llm_temperature": str(payload.llm_temperature),
         }
     )
 
@@ -215,6 +235,7 @@ def _get_llm_settings_response() -> LLMSettingsResponse:
     return LLMSettingsResponse(
         llm_provider=snapshot["llm_provider"],
         show_llm_in_chat=snapshot["show_llm_in_chat"] == "true",
+        llm_temperature=float(snapshot.get("llm_temperature", "0.1")),
         active_provider=str(active["provider"]),
         active_model=str(active["model"]),
         active_label=str(active["label"]),
@@ -341,6 +362,7 @@ async def update_llm_settings(payload: LLMSettingsPayload):
         {
             "llm_provider": payload.llm_provider,
             "show_llm_in_chat": str(payload.show_llm_in_chat).lower(),
+            "llm_temperature": str(payload.llm_temperature),
             "yandex_api_key": snapshot["yandex_api_key"],
             "yandex_folder_id": snapshot["yandex_folder_id"],
             "yandex_gpt_model": snapshot["yandex_gpt_model"],
