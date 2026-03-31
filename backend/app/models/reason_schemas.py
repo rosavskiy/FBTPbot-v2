@@ -85,7 +85,9 @@ class ContactReason(BaseModel):
     thematic_sections: list[ThematicSection] = Field(default_factory=list, description="Тематические разделы (L2)")
     typical_complaints: list[Complaint] = Field(default_factory=list, description="Типовые жалобы с шаблонами ответов")
     example_answers: list[ExampleQA] = Field(default_factory=list, description="Примеры готовых ответов")
-    escalation_rules: EscalationRules = Field(default_factory=EscalationRules, description="Правила 100%-эскалации на ТП")
+    escalation_rules: EscalationRules = Field(
+        default_factory=EscalationRules, description="Правила 100%-эскалации на ТП"
+    )
 
 
 class ContactReasonsData(BaseModel):

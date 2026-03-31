@@ -86,7 +86,9 @@ class DebugTrace(BaseModel):
     llm_temperature: float | None = Field(None, description="Использованная температура")
     confidence_parsed: float | None = Field(None, description="Распарсенный confidence")
     confidence_reason: str | None = Field(None, description="Причина confidence")
-    llm_involvement: str = Field("none", description="Степень участия LLM: none / classification_only / generation / classification+generation")
+    llm_involvement: str = Field(
+        "none", description="Степень участия LLM: none / classification_only / generation / classification+generation"
+    )
     processing_time_ms: int = Field(0, description="Время обработки в мс")
 
 

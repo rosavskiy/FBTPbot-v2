@@ -334,7 +334,7 @@ class RAGEngine:
 
         # 2. Проверка Q&A-пар (overlap score)
         if rules.qa_pairs:
-            from app.classifier.section_classifier import _text_to_lemma_set, _overlap_score
+            from app.classifier.section_classifier import _overlap_score, _text_to_lemma_set
 
             query_lemmas = _text_to_lemma_set(question)
             threshold = rules.metrics.score_threshold
@@ -375,7 +375,6 @@ class RAGEngine:
         logger.info(f"[ENGINE] query={question}" + (f" forced_reason={reason_id}" if reason_id else ""))
 
         # Debug trace accumulator
-        trace: dict = {} if debug else {}
         llm_used_for_classify = False
         llm_used_for_generate = False
 
@@ -422,15 +421,23 @@ class RAGEngine:
                 )
                 if debug:
                     resp.debug_trace = {
-                        "l1_method": "none", "l1_confident": False,
-                        "l1_reason": None, "l1_reason_id": None,
+                        "l1_method": "none",
+                        "l1_confident": False,
+                        "l1_reason": None,
+                        "l1_reason_id": None,
                         "l1_candidates": l1_candidates_data,
-                        "escalation_check": None, "l2_method": None, "l2_section": None,
-                        "l2_best_qa_score": None, "l2_best_example_score": None,
+                        "escalation_check": None,
+                        "l2_method": None,
+                        "l2_section": None,
+                        "l2_best_qa_score": None,
+                        "l2_best_example_score": None,
                         "l2_best_complaint_score": None,
-                        "llm_prompt": None, "llm_raw_response": None,
-                        "llm_provider": None, "llm_temperature": None,
-                        "confidence_parsed": 0.0, "confidence_reason": "L1: причина обращения не определена",
+                        "llm_prompt": None,
+                        "llm_raw_response": None,
+                        "llm_provider": None,
+                        "llm_temperature": None,
+                        "confidence_parsed": 0.0,
+                        "confidence_reason": "L1: причина обращения не определена",
                         "llm_involvement": "none",
                         "processing_time_ms": int((_time.time() - _start) * 1000),
                     }
@@ -454,9 +461,7 @@ class RAGEngine:
         escalation_check = self._check_forced_escalation(question, reason)
         if escalation_check["matched"]:
             _total = _time.time() - _start
-            logger.info(
-                f"[ENGINE] L1.5=forced_escalation | trigger={escalation_check['trigger']} | time={_total:.1f}s"
-            )
+            logger.info(f"[ENGINE] L1.5=forced_escalation | trigger={escalation_check['trigger']} | time={_total:.1f}s")
             esc_answer = escalation_check.get("answer") or (
                 "По данному вопросу необходима консультация специалиста техподдержки. "
                 "Передаю ваше обращение оператору."
@@ -472,15 +477,21 @@ class RAGEngine:
             )
             if debug:
                 resp.debug_trace = {
-                    "l1_method": l1_method, "l1_confident": l1_confident,
-                    "l1_reason": reason.name, "l1_reason_id": reason.id,
+                    "l1_method": l1_method,
+                    "l1_confident": l1_confident,
+                    "l1_reason": reason.name,
+                    "l1_reason_id": reason.id,
                     "l1_candidates": l1_candidates_data,
                     "escalation_check": escalation_check,
-                    "l2_method": None, "l2_section": None,
-                    "l2_best_qa_score": None, "l2_best_example_score": None,
+                    "l2_method": None,
+                    "l2_section": None,
+                    "l2_best_qa_score": None,
+                    "l2_best_example_score": None,
                     "l2_best_complaint_score": None,
-                    "llm_prompt": None, "llm_raw_response": None,
-                    "llm_provider": None, "llm_temperature": None,
+                    "llm_prompt": None,
+                    "llm_raw_response": None,
+                    "llm_provider": None,
+                    "llm_temperature": None,
                     "confidence_parsed": 0.0,
                     "confidence_reason": "L1.5: 100%-эскалация по правилам причины обращения",
                     "llm_involvement": "classification_only" if llm_used_for_classify else "none",
@@ -506,8 +517,10 @@ class RAGEngine:
             )
             if debug:
                 resp.debug_trace = {
-                    "l1_method": l1_method, "l1_confident": l1_confident,
-                    "l1_reason": reason.name, "l1_reason_id": reason.id,
+                    "l1_method": l1_method,
+                    "l1_confident": l1_confident,
+                    "l1_reason": reason.name,
+                    "l1_reason_id": reason.id,
                     "l1_candidates": l1_candidates_data,
                     "escalation_check": escalation_check,
                     "l2_method": l2.method,
@@ -515,8 +528,10 @@ class RAGEngine:
                     "l2_best_qa_score": l2.best_qa_score,
                     "l2_best_example_score": l2.best_example_score,
                     "l2_best_complaint_score": l2.best_complaint_score,
-                    "llm_prompt": None, "llm_raw_response": None,
-                    "llm_provider": None, "llm_temperature": None,
+                    "llm_prompt": None,
+                    "llm_raw_response": None,
+                    "llm_provider": None,
+                    "llm_temperature": None,
                     "confidence_parsed": 0.95,
                     "confidence_reason": "Точное совпадение с примером ответа",
                     "llm_involvement": "classification_only" if llm_used_for_classify else "none",
@@ -610,12 +625,12 @@ class RAGEngine:
 
         if debug:
             # Формируем промпт как текст для отображения
-            prompt_text = "\n\n".join(
-                f"[{m['role']}]\n{m.get('text', m.get('content', ''))}" for m in messages
-            )
+            prompt_text = "\n\n".join(f"[{m['role']}]\n{m.get('text', m.get('content', ''))}" for m in messages)
             resp.debug_trace = {
-                "l1_method": l1_method, "l1_confident": l1_confident,
-                "l1_reason": reason.name, "l1_reason_id": reason.id,
+                "l1_method": l1_method,
+                "l1_confident": l1_confident,
+                "l1_reason": reason.name,
+                "l1_reason_id": reason.id,
                 "l1_candidates": l1_candidates_data,
                 "escalation_check": escalation_check,
                 "l2_method": l2.method,
