@@ -119,11 +119,14 @@ def _extract_lemmas(text: str) -> tuple[set[str], set[str]]:
 
 
 def _check_phrase_masks(text_normalized: str, reason: ContactReason) -> list[str]:
-    """Проверить совпадение фразовых масок (100%-маркеры)."""
+    """Проверить совпадение фразовых масок (100%-маркеры) по границам слов."""
     matches = []
     for mask in reason.markers.phrase_masks:
         mask_lower = mask.lower().strip()
-        if mask_lower and mask_lower in text_normalized:
+        if not mask_lower:
+            continue
+        pattern = r"(?<!\w)" + re.escape(mask_lower) + r"(?!\w)"
+        if re.search(pattern, text_normalized):
             matches.append(mask)
     return matches
 
