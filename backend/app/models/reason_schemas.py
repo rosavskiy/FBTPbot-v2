@@ -60,6 +60,27 @@ class EscalationRules(BaseModel):
     metrics: EscalationMetrics = Field(default_factory=EscalationMetrics, description="Метрики эскалации")
 
 
+class ClassificationRules(BaseModel):
+    """Правила классификации L1 для причины обращения.
+
+    Позволяют задавать per-reason порог баллов и обязательные типы маркеров.
+    Если обязательный маркер не найден — бот задаёт уточняющий вопрос.
+    """
+
+    enabled: bool = Field(False, description="Включены ли правила классификации для этой причины")
+    min_score_threshold: float | None = Field(
+        None, ge=0.0, description="Минимальный порог L1-баллов для этой причины (None = глобальный)"
+    )
+    required_markers: list[str] = Field(
+        default_factory=list,
+        description="Обязательные типы маркеров: 'numeric_tag', 'phrase_mask', 'noun', 'verb'",
+    )
+    clarification_text: str = Field(
+        "",
+        description="Текст уточняющего вопроса (если пусто — стандартный)",
+    )
+
+
 class Markers(BaseModel):
     """4 типа маркеров для L1-классификации."""
 
@@ -87,6 +108,9 @@ class ContactReason(BaseModel):
     example_answers: list[ExampleQA] = Field(default_factory=list, description="Примеры готовых ответов")
     escalation_rules: EscalationRules = Field(
         default_factory=EscalationRules, description="Правила 100%-эскалации на ТП"
+    )
+    classification_rules: ClassificationRules = Field(
+        default_factory=ClassificationRules, description="Правила классификации L1 (пороги, обязательные маркеры)"
     )
 
 

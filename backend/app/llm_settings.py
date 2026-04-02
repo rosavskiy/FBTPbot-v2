@@ -18,6 +18,23 @@ LLM_SETTING_KEYS = (
     "deepseek_model",
 )
 
+# ── Ключи настроек классификации L1 ──
+CLASSIFICATION_SETTING_KEYS = (
+    "l1_global_min_score",
+    "l1_weight_phrase_mask",
+    "l1_weight_numeric_tag",
+    "l1_weight_noun",
+    "l1_weight_verb",
+)
+
+CLASSIFICATION_DEFAULTS: dict[str, float] = {
+    "l1_global_min_score": 5.0,
+    "l1_weight_phrase_mask": 10.0,
+    "l1_weight_numeric_tag": 5.0,
+    "l1_weight_noun": 2.0,
+    "l1_weight_verb": 1.0,
+}
+
 
 def normalize_llm_provider(provider: str) -> str:
     normalized = (provider or "yandex").strip().lower()
@@ -120,3 +137,47 @@ def get_active_llm_display() -> dict[str, str | bool]:
         "label": f"{provider_title} / {model}",
         "show_in_chat": snapshot["show_llm_in_chat"] == "true",
     }
+
+
+# ── Classification settings (L1 weights & global threshold) ──
+
+
+def get_classification_settings() -> dict[str, float]:
+    """Получить текущие настройки классификации L1 (веса маркеров + глобальный порог)."""
+    result = dict(CLASSIFICATION_DEFAULTS)
+
+    runtime_path = get_runtime_llm_settings_path()
+    if runtime_path.exists():
+        try:
+            payload = json.loads(runtime_path.read_text(encoding="utf-8"))
+        except Exception:
+            payload = {}
+        for key in CLASSIFICATION_SETTING_KEYS:
+            raw = payload.get(key)
+            if raw is not None:
+                try:
+                    result[key] = float(raw)
+                except (ValueError, TypeError):
+                    pass
+
+    return result
+
+
+def save_classification_settings(data: dict[str, float]) -> None:
+    """Сохранить настройки классификации L1 в runtime JSON."""
+    runtime_path = get_runtime_llm_settings_path()
+    runtime_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Прочитать существующий JSON, добавить/обновить classification keys
+    existing: dict = {}
+    if runtime_path.exists():
+        try:
+            existing = json.loads(runtime_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = {}
+
+    for key in CLASSIFICATION_SETTING_KEYS:
+        if key in data:
+            existing[key] = data[key]
+
+    runtime_path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")

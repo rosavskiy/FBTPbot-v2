@@ -29,7 +29,9 @@ from app.database.reason_store import (
 from app.llm_settings import (
     apply_llm_settings_snapshot,
     get_active_llm_display,
+    get_classification_settings,
     get_llm_settings_snapshot,
+    save_classification_settings,
     save_runtime_llm_settings,
 )
 from app.models.reason_schemas import ContactReason
@@ -90,6 +92,22 @@ class LLMSettingsResponse(BaseModel):
     active_provider: str = "yandex"
     active_model: str = "yandexgpt"
     active_label: str = "Yandex / yandexgpt"
+
+
+class ClassificationSettingsPayload(BaseModel):
+    l1_global_min_score: float = Field(default=5.0, ge=0.0, le=100.0)
+    l1_weight_phrase_mask: float = Field(default=10.0, ge=0.0, le=50.0)
+    l1_weight_numeric_tag: float = Field(default=5.0, ge=0.0, le=50.0)
+    l1_weight_noun: float = Field(default=2.0, ge=0.0, le=50.0)
+    l1_weight_verb: float = Field(default=1.0, ge=0.0, le=50.0)
+
+
+class ClassificationSettingsResponse(BaseModel):
+    l1_global_min_score: float = 5.0
+    l1_weight_phrase_mask: float = 10.0
+    l1_weight_numeric_tag: float = 5.0
+    l1_weight_noun: float = 2.0
+    l1_weight_verb: float = 1.0
 
 
 def _normalize_provider_or_422(provider: str) -> str:
@@ -168,6 +186,14 @@ def _reason_to_docx_lines(reason: ContactReason) -> list[str]:
         q = sanitize_cell(pair.question)
         a = sanitize_cell(pair.answer)
         lines.append(f"| {q} | {a} |")
+
+    # ── Classification rules (L1.1) ──
+    cls = reason.classification_rules
+    lines.extend(["", "---", "", "### Раздел: Правила классификации (L1.1)"])
+    lines.append(f"**Статус:** {'Включено' if cls.enabled else 'Выключено'}")
+    lines.append(f"**Минимальный порог:** {cls.min_score_threshold if cls.min_score_threshold is not None else 'глобальный'}")
+    lines.append(f"**Обязательные маркеры:** {', '.join(cls.required_markers) if cls.required_markers else 'нет'}")
+    lines.append(f"**Текст уточняющего вопроса:** {cls.clarification_text or 'стандартный'}")
 
     return lines
 
@@ -378,6 +404,21 @@ async def update_llm_settings(payload: LLMSettingsPayload):
     await close_rag_engine()
     logger.info("LLM settings updated and persisted to %s and %s", env_path, runtime_path)
     return _get_llm_settings_response()
+
+
+@router.get("/classification-settings", response_model=ClassificationSettingsResponse)
+async def get_cls_settings():
+    """Получить текущие настройки классификации L1 (веса маркеров + глобальный порог)."""
+    data = get_classification_settings()
+    return ClassificationSettingsResponse(**data)
+
+
+@router.put("/classification-settings", response_model=ClassificationSettingsResponse)
+async def update_cls_settings(payload: ClassificationSettingsPayload):
+    """Сохранить настройки классификации L1."""
+    save_classification_settings(payload.model_dump())
+    logger.info("Classification settings updated: %s", payload.model_dump())
+    return ClassificationSettingsResponse(**get_classification_settings())
 
 
 @router.get("/template")

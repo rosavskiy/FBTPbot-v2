@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 import pymorphy3
 
 from app.database.reason_store import get_all_reasons
+from app.llm_settings import get_classification_settings
 from app.models.reason_schemas import ContactReason
 
 logger = logging.getLogger(__name__)
@@ -34,17 +35,30 @@ def _get_morph() -> pymorphy3.MorphAnalyzer:
     return _morph
 
 
-# ── Веса маркеров ──
-WEIGHT_PHRASE_MASK = 10.0
-WEIGHT_NUMERIC_TAG = 5.0
-WEIGHT_NOUN = 2.0
-WEIGHT_VERB = 1.0
+# ── Дефолтные веса маркеров (переопределяются через UI → llm_settings.json) ──
+DEFAULT_WEIGHT_PHRASE_MASK = 10.0
+DEFAULT_WEIGHT_NUMERIC_TAG = 5.0
+DEFAULT_WEIGHT_NOUN = 2.0
+DEFAULT_WEIGHT_VERB = 1.0
+DEFAULT_GLOBAL_MIN_SCORE = 5.0
 
 # Минимальный gap между 1-м и 2-м кандидатом для уверенного выбора
 MIN_SCORE_GAP = 3.0
 
 # Минимальный score для хоть какого-то совпадения
 MIN_SCORE_THRESHOLD = 1.0
+
+
+def _get_weights() -> dict[str, float]:
+    """Получить текущие веса маркеров и глобальный порог из настроек."""
+    cs = get_classification_settings()
+    return {
+        "phrase_mask": cs.get("l1_weight_phrase_mask", DEFAULT_WEIGHT_PHRASE_MASK),
+        "numeric_tag": cs.get("l1_weight_numeric_tag", DEFAULT_WEIGHT_NUMERIC_TAG),
+        "noun": cs.get("l1_weight_noun", DEFAULT_WEIGHT_NOUN),
+        "verb": cs.get("l1_weight_verb", DEFAULT_WEIGHT_VERB),
+        "global_min_score": cs.get("l1_global_min_score", DEFAULT_GLOBAL_MIN_SCORE),
+    }
 
 
 @dataclass
@@ -67,7 +81,9 @@ class L1Result:
     candidates: list[ClassificationCandidate] = field(default_factory=list)
     is_confident: bool = False
     needs_clarification: bool = False
-    method: str = ""  # phrase_mask, numeric_tag, marker_score, llm, none
+    method: str = ""  # phrase_mask, numeric_tag, marker_score, llm, below_threshold, none
+    winning_candidate: ClassificationCandidate | None = None
+    marker_weights: dict = field(default_factory=dict)  # текущие веса (для debug trace)
 
 
 def _normalize_text(text: str) -> str:
@@ -178,8 +194,9 @@ def classify_reason(query: str) -> L1Result:
 
     text_normalized = _normalize_text(query)
     user_nouns, user_verbs = _extract_lemmas(query)
+    weights = _get_weights()
 
-    logger.info(f"[L1] query='{query}' | nouns={user_nouns} | verbs={user_verbs}")
+    logger.info(f"[L1] query='{query}' | nouns={user_nouns} | verbs={user_verbs} | weights={weights}")
 
     candidates: list[ClassificationCandidate] = []
 
@@ -189,22 +206,22 @@ def classify_reason(query: str) -> L1Result:
         # 1. Фразовые маски (высший приоритет)
         candidate.phrase_matches = _check_phrase_masks(text_normalized, reason)
         if candidate.phrase_matches:
-            candidate.score += WEIGHT_PHRASE_MASK * len(candidate.phrase_matches)
+            candidate.score += weights["phrase_mask"] * len(candidate.phrase_matches)
 
         # 2. Числовые теги
         candidate.numeric_matches = _check_numeric_tags(query, reason)
         if candidate.numeric_matches:
-            candidate.score += WEIGHT_NUMERIC_TAG * len(candidate.numeric_matches)
+            candidate.score += weights["numeric_tag"] * len(candidate.numeric_matches)
 
         # 3. Существительные
         candidate.noun_matches = _check_nouns(user_nouns, reason)
         if candidate.noun_matches:
-            candidate.score += WEIGHT_NOUN * len(candidate.noun_matches)
+            candidate.score += weights["noun"] * len(candidate.noun_matches)
 
         # 4. Глаголы
         candidate.verb_matches = _check_verbs(user_verbs, reason)
         if candidate.verb_matches:
-            candidate.score += WEIGHT_VERB * len(candidate.verb_matches)
+            candidate.score += weights["verb"] * len(candidate.verb_matches)
 
         if candidate.score > 0:
             candidates.append(candidate)
@@ -227,12 +244,28 @@ def classify_reason(query: str) -> L1Result:
         f"nouns={top.noun_matches} verbs={top.verb_matches}"
     )
 
+    global_min = weights["global_min_score"]
+
+    # ── Глобальный порог: score ниже минимума → below_threshold ──
+    if top.score < global_min:
+        logger.info(
+            f"[L1] RESULT: below_threshold | top_score={top.score:.1f} < global_min={global_min:.1f}"
+        )
+        return L1Result(
+            candidates=candidates,
+            winning_candidate=top,
+            marker_weights=weights,
+            method="below_threshold",
+        )
+
     # Фразовая маска — безусловная уверенность
     if top.phrase_matches:
         return L1Result(
             reason=top.reason,
             candidates=candidates,
             is_confident=True,
+            winning_candidate=top,
+            marker_weights=weights,
             method="phrase_mask",
         )
 
@@ -242,6 +275,8 @@ def classify_reason(query: str) -> L1Result:
             reason=top.reason,
             candidates=candidates,
             is_confident=True,
+            winning_candidate=top,
+            marker_weights=weights,
             method="marker_score",
         )
 
@@ -251,6 +286,8 @@ def classify_reason(query: str) -> L1Result:
             reason=top.reason,
             candidates=candidates,
             is_confident=True,
+            winning_candidate=top,
+            marker_weights=weights,
             method="marker_score",
         )
 
@@ -260,8 +297,10 @@ def classify_reason(query: str) -> L1Result:
             candidates=candidates,
             is_confident=False,
             needs_clarification=True,
+            winning_candidate=top,
+            marker_weights=weights,
             method="ambiguous",
         )
 
     # Слишком низкий score — ничего не нашли
-    return L1Result(method="none")
+    return L1Result(marker_weights=weights, method="none")

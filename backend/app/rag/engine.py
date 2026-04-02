@@ -19,11 +19,11 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from app.classifier.reason_classifier import L1Result, classify_reason
+from app.classifier.reason_classifier import ClassificationCandidate, L1Result, classify_reason
 from app.classifier.section_classifier import L2Result, classify_section
 from app.config import settings
-from app.llm_settings import get_llm_settings_snapshot
-from app.models.reason_schemas import ContactReason
+from app.llm_settings import get_classification_settings, get_llm_settings_snapshot
+from app.models.reason_schemas import ClassificationRules, ContactReason
 
 logger = logging.getLogger(__name__)
 
@@ -315,6 +315,85 @@ class RAGEngine:
 
         return "\n\n---\n\n".join(parts) if parts else "Нет дополнительного контекста."
 
+    @staticmethod
+    def _check_required_markers(
+        candidate: ClassificationCandidate,
+        cls_rules: ClassificationRules,
+    ) -> dict:
+        """Проверка обязательных типов маркеров для причины обращения.
+
+        Returns:
+            {"passed": True/False, "required": [...], "found": [...], "missing": [...], "default_text": "..."}
+        """
+        mapping = {
+            "numeric_tag": candidate.numeric_matches,
+            "phrase_mask": candidate.phrase_matches,
+            "noun": candidate.noun_matches,
+            "verb": candidate.verb_matches,
+        }
+
+        required = cls_rules.required_markers
+        found = [m for m in required if mapping.get(m)]
+        missing = [m for m in required if not mapping.get(m)]
+
+        label_map = {
+            "numeric_tag": "числовой тег (номер ошибки)",
+            "phrase_mask": "фразовая маска",
+            "noun": "существительное-маркер",
+            "verb": "глагол-маркер",
+        }
+        missing_labels = [label_map.get(m, m) for m in missing]
+        default_text = (
+            "Уточните, пожалуйста, детали вашего обращения: "
+            + ", ".join(missing_labels)
+            + ". Напишите подробнее или укажите номер/код."
+        )
+
+        return {
+            "passed": len(missing) == 0,
+            "required": required,
+            "found": found,
+            "missing": missing,
+            "default_text": default_text,
+        }
+
+    def _build_base_debug_trace(
+        self,
+        *,
+        l1_method: str,
+        l1_confident: bool,
+        reason: ContactReason | None,
+        l1_candidates_data: list[dict],
+        escalation_check: dict | None,
+        confidence_reason: str,
+        llm_involvement: str,
+        start_time: float,
+        marker_weights: dict | None = None,
+    ) -> dict:
+        """Сформировать базовый debug_trace без L2/L3 полей."""
+        return {
+            "l1_method": l1_method,
+            "l1_confident": l1_confident,
+            "l1_reason": reason.name if reason else None,
+            "l1_reason_id": reason.id if reason else None,
+            "l1_candidates": l1_candidates_data,
+            "escalation_check": escalation_check,
+            "marker_weights": marker_weights,
+            "l2_method": None,
+            "l2_section": None,
+            "l2_best_qa_score": None,
+            "l2_best_example_score": None,
+            "l2_best_complaint_score": None,
+            "llm_prompt": None,
+            "llm_raw_response": None,
+            "llm_provider": None,
+            "llm_temperature": None,
+            "confidence_parsed": 0.0,
+            "confidence_reason": confidence_reason,
+            "llm_involvement": llm_involvement,
+            "processing_time_ms": int((_time.time() - start_time) * 1000),
+        }
+
     def _check_forced_escalation(self, question: str, reason: ContactReason) -> dict:
         """Проверка правил 100%-эскалации (L1.5).
 
@@ -394,6 +473,7 @@ class RAGEngine:
             l1_method = "forced"
             l1_confident = True
             l1_candidates_data: list[dict] = []
+            l1_winning: ClassificationCandidate | None = None
         else:
             l1 = classify_reason(question)
 
@@ -410,18 +490,25 @@ class RAGEngine:
                 for c in l1.candidates[:5]
             ]
 
-            if l1.method == "none":
-                logger.info("[ENGINE] L1=none → escalation")
+            if l1.method == "none" or l1.method == "below_threshold":
+                is_below = l1.method == "below_threshold"
+                log_reason = "below_threshold" if is_below else "none"
+                logger.info(f"[ENGINE] L1={log_reason} → escalation")
+                top_score = l1.winning_candidate.score if l1.winning_candidate else 0.0
+                answer_text = (
+                    f"Не удалось точно определить тему вашего обращения (score={top_score:.1f}). "
+                    "Передаю вопрос оператору."
+                ) if is_below else "Не удалось определить тему вашего обращения. Передаю вопрос оператору."
                 resp = RAGResponse(
-                    answer="Не удалось определить тему вашего обращения. Передаю вопрос оператору.",
+                    answer=answer_text,
                     confidence=0.0,
-                    confidence_reason="L1: причина обращения не определена",
+                    confidence_reason=f"L1: {log_reason}",
                     needs_escalation=True,
-                    classification_method="none",
+                    classification_method=l1.method,
                 )
                 if debug:
                     resp.debug_trace = {
-                        "l1_method": "none",
+                        "l1_method": l1.method,
                         "l1_confident": False,
                         "l1_reason": None,
                         "l1_reason_id": None,
@@ -437,7 +524,7 @@ class RAGEngine:
                         "llm_provider": None,
                         "llm_temperature": None,
                         "confidence_parsed": 0.0,
-                        "confidence_reason": "L1: причина обращения не определена",
+                        "confidence_reason": f"L1: {log_reason}",
                         "llm_involvement": "none",
                         "processing_time_ms": int((_time.time() - _start) * 1000),
                     }
@@ -455,7 +542,73 @@ class RAGEngine:
             reason = l1.reason
             l1_method = l1.method
             l1_confident = l1.is_confident
+            l1_winning = l1.winning_candidate
         logger.info(f"[ENGINE] L1={reason.name} method={l1_method}")
+
+        # ── L1.1: Per-reason порог баллов ──
+        cls_rules = reason.classification_rules
+        marker_clarification_check: dict | None = None
+        if cls_rules.enabled and l1_method != "forced":
+            winning_score = l1_winning.score if l1_winning else 0.0
+
+            # Per-reason min_score_threshold (если задан, иначе — глобальный уже проверен в L1)
+            if cls_rules.min_score_threshold is not None and winning_score < cls_rules.min_score_threshold:
+                _total = _time.time() - _start
+                logger.info(
+                    f"[ENGINE] L1.1=per_reason_threshold | score={winning_score:.1f} "
+                    f"< threshold={cls_rules.min_score_threshold:.1f} | time={_total:.1f}s"
+                )
+                resp = RAGResponse(
+                    answer=(
+                        f"Не удалось точно определить тему (score={winning_score:.1f}). "
+                        "Передаю вопрос оператору."
+                    ),
+                    confidence=0.0,
+                    confidence_reason="L1.1: score ниже per-reason порога",
+                    needs_escalation=True,
+                    detected_reason=reason.id,
+                    detected_reason_name=reason.name,
+                    classification_method=f"L1:{l1_method}/L1.1:per_reason_threshold",
+                )
+                if debug:
+                    resp.debug_trace = self._build_base_debug_trace(
+                        l1_method=l1_method, l1_confident=l1_confident, reason=reason,
+                        l1_candidates_data=l1_candidates_data, escalation_check=None,
+                        confidence_reason="L1.1: score ниже per-reason порога",
+                        llm_involvement="classification_only" if llm_used_for_classify else "none",
+                        start_time=_start, marker_weights=getattr(l1, "marker_weights", {}),
+                    )
+                return resp
+
+            # Проверка обязательных маркеров
+            if cls_rules.required_markers and l1_winning:
+                marker_clarification_check = self._check_required_markers(l1_winning, cls_rules)
+                if not marker_clarification_check["passed"]:
+                    _total = _time.time() - _start
+                    clarification_text = cls_rules.clarification_text or marker_clarification_check["default_text"]
+                    logger.info(
+                        f"[ENGINE] L1.1=marker_clarification | missing={marker_clarification_check['missing']} | time={_total:.1f}s"
+                    )
+                    resp = RAGResponse(
+                        answer=clarification_text,
+                        confidence=0.3,
+                        confidence_reason="L1.1: обязательный маркер не найден, уточняющий вопрос",
+                        needs_escalation=False,
+                        detected_reason=reason.id,
+                        detected_reason_name=reason.name,
+                        classification_method="marker_clarification",
+                    )
+                    if debug:
+                        trace = self._build_base_debug_trace(
+                            l1_method=l1_method, l1_confident=l1_confident, reason=reason,
+                            l1_candidates_data=l1_candidates_data, escalation_check=None,
+                            confidence_reason="L1.1: обязательный маркер не найден",
+                            llm_involvement="classification_only" if llm_used_for_classify else "none",
+                            start_time=_start, marker_weights=getattr(l1, "marker_weights", {}),
+                        )
+                        trace["marker_clarification_check"] = marker_clarification_check
+                        resp.debug_trace = trace
+                    return resp
 
         # ── L1.5: Проверка правил 100%-эскалации ──
         escalation_check = self._check_forced_escalation(question, reason)
@@ -682,6 +835,8 @@ class RAGEngine:
                         reason=chosen.reason,
                         candidates=l1.candidates,
                         is_confident=True,
+                        winning_candidate=chosen,
+                        marker_weights=l1.marker_weights,
                         method="llm",
                     )
         except Exception as e:
@@ -712,8 +867,10 @@ class RAGEngine:
         """Тестирование классификации без генерации ответа.
 
         Используется в admin-интерфейсе для проверки маркеров.
+        Включает dry-run: показывает пороги, обязательные маркеры и вердикт.
         """
         l1 = classify_reason(question)
+        cls_settings = get_classification_settings()
 
         result = {
             "query": question,
@@ -721,6 +878,8 @@ class RAGEngine:
             "l1_confident": l1.is_confident,
             "l1_reason": l1.reason.name if l1.reason else None,
             "l1_reason_id": l1.reason.id if l1.reason else None,
+            "marker_weights": l1.marker_weights,
+            "global_min_score": cls_settings.get("l1_global_min_score", 5.0),
             "candidates": [
                 {
                     "reason_id": c.reason.id,
@@ -735,7 +894,39 @@ class RAGEngine:
             ],
         }
 
+        # ── Dry-run: проверка порогов и обязательных маркеров ──
+        dry_run: dict = {"verdict": "pass"}
+
+        if l1.method == "below_threshold":
+            top_score = l1.winning_candidate.score if l1.winning_candidate else 0.0
+            dry_run["verdict"] = "escalation"
+            dry_run["reason"] = f"score={top_score:.1f} < global_min={cls_settings.get('l1_global_min_score', 5.0):.1f}"
+        elif l1.method == "none":
+            dry_run["verdict"] = "escalation"
+            dry_run["reason"] = "no matches"
+
         if l1.reason:
+            cls_rules = l1.reason.classification_rules
+            result["per_reason_min_score"] = cls_rules.min_score_threshold
+            result["classification_rules_enabled"] = cls_rules.enabled
+
+            if cls_rules.enabled and l1.winning_candidate:
+                # Per-reason threshold check
+                if cls_rules.min_score_threshold is not None and l1.winning_candidate.score < cls_rules.min_score_threshold:
+                    dry_run["verdict"] = "escalation"
+                    dry_run["reason"] = (
+                        f"score={l1.winning_candidate.score:.1f} < "
+                        f"per_reason_min={cls_rules.min_score_threshold:.1f}"
+                    )
+
+                # Required markers check
+                if cls_rules.required_markers and dry_run["verdict"] != "escalation":
+                    check = self._check_required_markers(l1.winning_candidate, cls_rules)
+                    result["required_markers_check"] = check
+                    if not check["passed"]:
+                        dry_run["verdict"] = "marker_clarification"
+                        dry_run["reason"] = f"missing markers: {check['missing']}"
+
             l2 = classify_section(question, l1.reason)
             result["l2_method"] = l2.method
             result["l2_section"] = l2.section.title if l2.section else None
@@ -744,6 +935,7 @@ class RAGEngine:
             result["l2_best_example_score"] = l2.best_example_score
             result["l2_best_example"] = l2.best_example.user_question if l2.best_example else None
 
+        result["dry_run"] = dry_run
         return result
 
 

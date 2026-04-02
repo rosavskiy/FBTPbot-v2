@@ -548,6 +548,7 @@
                 <span id="llmTempValue" style="min-width:30px; font-family:var(--font-mono); font-size:12px;">0.10</span>
             </label>
             <button class="btn btn-secondary" onclick="saveLlmSettings()">LLM</button>
+            <button class="btn btn-secondary" onclick="openClassificationSettings()" title="Настройки классификации L1 (веса маркеров, пороги)">⚙️ L1</button>
             <span id="activeLlmIndicator" style="font-size:12px; color:#9ca3af; white-space:nowrap;">Активно: неизвестно</span>
         </div>
         <a href="/api/bot-config/template" class="btn btn-secondary" style="text-decoration:none">📄 Скачать шаблон</a>
@@ -633,6 +634,52 @@
                     <div class="chip-input-row">
                         <input type="text" id="phraseInput" placeholder="чек завис на кассе..." onkeydown="if(event.key==='Enter')addChip('phrase')">
                         <button class="btn btn-sm btn-secondary" onclick="addChip('phrase')">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Classification Rules (L1.1) -->
+            <div class="card">
+                <div class="card-title">📋 Правила классификации (L1.1)
+                    <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+                        <label class="toggle">
+                            <input type="checkbox" id="clsRulesEnabled" onchange="ensureClassificationRules(); currentReason.classification_rules.enabled=this.checked">
+                            <span class="slider"></span>
+                        </label>
+                        <span style="font-size:12px; color:#888">Включено</span>
+                    </div>
+                </div>
+                <div id="clsRulesBody">
+                    <div class="form-row">
+                        <div class="form-label" title="Минимальный L1-score для этой причины. Если не задан — используется глобальный порог.">
+                            Минимальный порог L1-баллов (пусто = глобальный)
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <input type="number" class="form-input" id="clsReasonMinScore" placeholder="Глобальный" min="0" max="100" step="1" style="width:120px;"
+                                onchange="ensureClassificationRules(); currentReason.classification_rules.min_score_threshold=this.value?parseFloat(this.value):null">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-label">Обязательные маркеры (если тема определена, но маркер не найден → уточняющий вопрос)</div>
+                        <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:4px;">
+                            <label style="display:flex; align-items:center; gap:4px; font-size:13px; color:#cfcfcf; cursor:pointer;">
+                                <input type="checkbox" id="clsReqNumeric" onchange="updateRequiredMarkers()"> Числовой тег
+                            </label>
+                            <label style="display:flex; align-items:center; gap:4px; font-size:13px; color:#cfcfcf; cursor:pointer;">
+                                <input type="checkbox" id="clsReqPhrase" onchange="updateRequiredMarkers()"> Фразовая маска
+                            </label>
+                            <label style="display:flex; align-items:center; gap:4px; font-size:13px; color:#cfcfcf; cursor:pointer;">
+                                <input type="checkbox" id="clsReqNoun" onchange="updateRequiredMarkers()"> Существительное
+                            </label>
+                            <label style="display:flex; align-items:center; gap:4px; font-size:13px; color:#cfcfcf; cursor:pointer;">
+                                <input type="checkbox" id="clsReqVerb" onchange="updateRequiredMarkers()"> Глагол
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-label">Текст уточняющего вопроса (пусто = стандартный)</div>
+                        <textarea class="form-input" id="clsClarificationText" rows="2" placeholder="Уточните, пожалуйста, номер ошибки или опишите её текстом..."
+                            onchange="ensureClassificationRules(); currentReason.classification_rules.clarification_text=this.value"></textarea>
                     </div>
                 </div>
             </div>
@@ -744,6 +791,66 @@
 
 <div class="notification" id="notification"></div>
 
+<!-- Classification Settings Modal -->
+<div class="modal-overlay" id="clsSettingsModal">
+    <div class="modal" style="max-width:520px">
+        <div class="modal-header">
+            <h2>⚙️ Настройки классификации L1</h2>
+            <button class="btn btn-sm btn-danger" onclick="closeClassificationSettings()">✕</button>
+        </div>
+        <div class="modal-body" style="padding:16px; overflow-y:auto; max-height:70vh;">
+            <div class="form-row">
+                <div class="form-label" title="Если L1-score ниже этого значения — 100% эскалация на оператора">
+                    🚫 Глобальный минимальный порог L1 (ниже → эскалация)
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="range" id="clsGlobalMinScore" min="0" max="50" step="1" value="5" style="flex:1;"
+                        oninput="document.getElementById('clsGlobalMinScoreVal').textContent=this.value">
+                    <span id="clsGlobalMinScoreVal" style="min-width:30px; font-family:var(--font-mono); font-size:13px;">5</span>
+                </div>
+            </div>
+            <hr style="border-color:#333; margin:12px 0">
+            <div class="form-label" style="margin-bottom:8px">🏷️ Веса маркеров (определяют, сколько баллов даёт каждый тип совпадения)</div>
+            <div class="form-row">
+                <div class="form-label" style="font-size:12px">Фразовая маска (phrase_mask)</div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="range" id="clsWeightPhrase" min="0" max="20" step="0.5" value="10" style="flex:1;"
+                        oninput="document.getElementById('clsWeightPhraseVal').textContent=parseFloat(this.value).toFixed(1)">
+                    <span id="clsWeightPhraseVal" style="min-width:30px; font-family:var(--font-mono); font-size:13px;">10.0</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-label" style="font-size:12px">Числовой тег (numeric_tag)</div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="range" id="clsWeightNumeric" min="0" max="20" step="0.5" value="5" style="flex:1;"
+                        oninput="document.getElementById('clsWeightNumericVal').textContent=parseFloat(this.value).toFixed(1)">
+                    <span id="clsWeightNumericVal" style="min-width:30px; font-family:var(--font-mono); font-size:13px;">5.0</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-label" style="font-size:12px">Существительное (noun)</div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="range" id="clsWeightNoun" min="0" max="10" step="0.5" value="2" style="flex:1;"
+                        oninput="document.getElementById('clsWeightNounVal').textContent=parseFloat(this.value).toFixed(1)">
+                    <span id="clsWeightNounVal" style="min-width:30px; font-family:var(--font-mono); font-size:13px;">2.0</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-label" style="font-size:12px">Глагол (verb)</div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="range" id="clsWeightVerb" min="0" max="10" step="0.5" value="1" style="flex:1;"
+                        oninput="document.getElementById('clsWeightVerbVal').textContent=parseFloat(this.value).toFixed(1)">
+                    <span id="clsWeightVerbVal" style="min-width:30px; font-family:var(--font-mono); font-size:13px;">1.0</span>
+                </div>
+            </div>
+            <div style="margin-top:16px; display:flex; gap:8px;">
+                <button class="btn btn-primary" onclick="saveClassificationSettings()">💾 Сохранить</button>
+                <button class="btn btn-secondary" onclick="closeClassificationSettings()">Отмена</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 const API = '/api/bot-config';
 let reasons = [];
@@ -755,7 +862,7 @@ let isNewReason = false;
 document.addEventListener('DOMContentLoaded', initPage);
 
 async function initPage() {
-    await Promise.all([loadReasons(), loadLlmSettings()]);
+    await Promise.all([loadReasons(), loadLlmSettings(), loadClassificationSettings()]);
 }
 
 async function loadReasons() {
@@ -803,7 +910,8 @@ function createNewReason() {
         id: '', name: '', is_active: true,
         markers: { verbs: [], nouns: [], numeric_tags: [], phrase_masks: [] },
         thematic_sections: [], typical_complaints: [], example_answers: [],
-        escalation_rules: { enabled: false, qa_pairs: [], metrics: { score_threshold: 0.7, keyword_patterns: [] } }
+        escalation_rules: { enabled: false, qa_pairs: [], metrics: { score_threshold: 0.7, keyword_patterns: [] } },
+        classification_rules: { enabled: false, min_score_threshold: null, required_markers: [], clarification_text: '' }
     };
     renderEditor();
 }
@@ -851,6 +959,89 @@ async function saveLlmSettings() {
     }
 }
 
+// ── Classification Settings (global) ──
+async function loadClassificationSettings() {
+    try {
+        const r = await fetch(`${API}/classification-settings`);
+        if (!r.ok) return;
+        const data = await r.json();
+        document.getElementById('clsGlobalMinScore').value = data.l1_global_min_score ?? 5;
+        document.getElementById('clsGlobalMinScoreVal').textContent = String(data.l1_global_min_score ?? 5);
+        document.getElementById('clsWeightPhrase').value = data.l1_weight_phrase_mask ?? 10;
+        document.getElementById('clsWeightPhraseVal').textContent = (data.l1_weight_phrase_mask ?? 10).toFixed(1);
+        document.getElementById('clsWeightNumeric').value = data.l1_weight_numeric_tag ?? 5;
+        document.getElementById('clsWeightNumericVal').textContent = (data.l1_weight_numeric_tag ?? 5).toFixed(1);
+        document.getElementById('clsWeightNoun').value = data.l1_weight_noun ?? 2;
+        document.getElementById('clsWeightNounVal').textContent = (data.l1_weight_noun ?? 2).toFixed(1);
+        document.getElementById('clsWeightVerb').value = data.l1_weight_verb ?? 1;
+        document.getElementById('clsWeightVerbVal').textContent = (data.l1_weight_verb ?? 1).toFixed(1);
+    } catch (e) {
+        console.warn('Failed to load classification settings:', e);
+    }
+}
+
+function openClassificationSettings() {
+    document.getElementById('clsSettingsModal').classList.add('open');
+}
+
+function closeClassificationSettings() {
+    document.getElementById('clsSettingsModal').classList.remove('open');
+}
+
+async function saveClassificationSettings() {
+    const payload = {
+        l1_global_min_score: parseFloat(document.getElementById('clsGlobalMinScore').value),
+        l1_weight_phrase_mask: parseFloat(document.getElementById('clsWeightPhrase').value),
+        l1_weight_numeric_tag: parseFloat(document.getElementById('clsWeightNumeric').value),
+        l1_weight_noun: parseFloat(document.getElementById('clsWeightNoun').value),
+        l1_weight_verb: parseFloat(document.getElementById('clsWeightVerb').value),
+    };
+    try {
+        const r = await fetch(`${API}/classification-settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Ошибка сохранения');
+        notify('Настройки классификации сохранены', 'success');
+        closeClassificationSettings();
+    } catch (e) {
+        notify(e.message, 'error');
+    }
+}
+
+// ── Per-reason Classification Rules ──
+function ensureClassificationRules() {
+    if (!currentReason.classification_rules) {
+        currentReason.classification_rules = { enabled: false, min_score_threshold: null, required_markers: [], clarification_text: '' };
+    }
+}
+
+function renderClassificationRules() {
+    ensureClassificationRules();
+    const rules = currentReason.classification_rules;
+    document.getElementById('clsRulesEnabled').checked = rules.enabled;
+    document.getElementById('clsReasonMinScore').value = rules.min_score_threshold != null ? rules.min_score_threshold : '';
+    document.getElementById('clsClarificationText').value = rules.clarification_text || '';
+
+    const markers = rules.required_markers || [];
+    document.getElementById('clsReqNumeric').checked = markers.includes('numeric_tag');
+    document.getElementById('clsReqPhrase').checked = markers.includes('phrase_mask');
+    document.getElementById('clsReqNoun').checked = markers.includes('noun');
+    document.getElementById('clsReqVerb').checked = markers.includes('verb');
+}
+
+function updateRequiredMarkers() {
+    ensureClassificationRules();
+    const markers = [];
+    if (document.getElementById('clsReqNumeric').checked) markers.push('numeric_tag');
+    if (document.getElementById('clsReqPhrase').checked) markers.push('phrase_mask');
+    if (document.getElementById('clsReqNoun').checked) markers.push('noun');
+    if (document.getElementById('clsReqVerb').checked) markers.push('verb');
+    currentReason.classification_rules.required_markers = markers;
+}
+
 // ── Editor rendering ──
 function renderEditor() {
     document.getElementById('emptyState').style.display = 'none';
@@ -879,6 +1070,9 @@ function renderEditor() {
 
     // Escalation Rules
     renderEscalationRules();
+
+    // Classification Rules
+    renderClassificationRules();
 }
 
 function renderChips(type, items) {
@@ -1189,7 +1383,27 @@ async function runTest() {
             body: JSON.stringify({ question: query })
         });
         const data = await r.json();
-        resultEl.textContent = JSON.stringify(data, null, 2);
+        // Build readable output with dry-run verdict
+        let lines = [];
+        const dr = data.dry_run || {};
+        const verdictEmoji = dr.verdict === 'pass' ? '✅' : dr.verdict === 'escalation' ? '🚫' : '❓';
+        lines.push(`${verdictEmoji} ВЕРДИКТ: ${dr.verdict || '?'}${dr.reason ? ' — ' + dr.reason : ''}`);
+        lines.push(`L1: ${data.l1_method} | confident: ${data.l1_confident} | reason: ${data.l1_reason || 'нет'}`);
+        if (data.global_min_score != null) lines.push(`Глобальный порог: ${data.global_min_score} | Per-reason: ${data.per_reason_min_score ?? 'нет'}`);
+        if (data.marker_weights) lines.push(`Веса: phrase=${data.marker_weights.phrase_mask} num=${data.marker_weights.numeric_tag} noun=${data.marker_weights.noun} verb=${data.marker_weights.verb}`);
+        if (data.required_markers_check) {
+            const mc = data.required_markers_check;
+            lines.push(`Маркеры: required=[${mc.required}] found=[${mc.found}] missing=[${mc.missing}]`);
+        }
+        if (data.l2_method) lines.push(`L2: ${data.l2_method} | section: ${data.l2_section || 'нет'} | qa_score: ${data.l2_best_qa_score ?? '—'}`);
+        lines.push('─'.repeat(40));
+        if (data.candidates && data.candidates.length) {
+            lines.push('Кандидаты:');
+            data.candidates.forEach((c, i) => {
+                lines.push(`  ${i+1}. ${c.reason_name} [score=${c.score}] phrases=${JSON.stringify(c.phrase_matches)} nums=${JSON.stringify(c.numeric_matches)} nouns=${JSON.stringify(c.noun_matches)} verbs=${JSON.stringify(c.verb_matches)}`);
+            });
+        }
+        resultEl.textContent = lines.join('\n');
     } catch(e) { resultEl.textContent = 'Ошибка: ' + e.message; }
 }
 
