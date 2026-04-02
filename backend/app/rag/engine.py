@@ -496,9 +496,13 @@ class RAGEngine:
                 logger.info(f"[ENGINE] L1={log_reason} → escalation")
                 top_score = l1.winning_candidate.score if l1.winning_candidate else 0.0
                 answer_text = (
-                    f"Не удалось точно определить тему вашего обращения (score={top_score:.1f}). "
-                    "Передаю вопрос оператору."
-                ) if is_below else "Не удалось определить тему вашего обращения. Передаю вопрос оператору."
+                    (
+                        f"Не удалось точно определить тему вашего обращения (score={top_score:.1f}). "
+                        "Передаю вопрос оператору."
+                    )
+                    if is_below
+                    else "Не удалось определить тему вашего обращения. Передаю вопрос оператору."
+                )
                 resp = RAGResponse(
                     answer=answer_text,
                     confidence=0.0,
@@ -560,8 +564,7 @@ class RAGEngine:
                 )
                 resp = RAGResponse(
                     answer=(
-                        f"Не удалось точно определить тему (score={winning_score:.1f}). "
-                        "Передаю вопрос оператору."
+                        f"Не удалось точно определить тему (score={winning_score:.1f}). " "Передаю вопрос оператору."
                     ),
                     confidence=0.0,
                     confidence_reason="L1.1: score ниже per-reason порога",
@@ -572,11 +575,15 @@ class RAGEngine:
                 )
                 if debug:
                     resp.debug_trace = self._build_base_debug_trace(
-                        l1_method=l1_method, l1_confident=l1_confident, reason=reason,
-                        l1_candidates_data=l1_candidates_data, escalation_check=None,
+                        l1_method=l1_method,
+                        l1_confident=l1_confident,
+                        reason=reason,
+                        l1_candidates_data=l1_candidates_data,
+                        escalation_check=None,
                         confidence_reason="L1.1: score ниже per-reason порога",
                         llm_involvement="classification_only" if llm_used_for_classify else "none",
-                        start_time=_start, marker_weights=getattr(l1, "marker_weights", {}),
+                        start_time=_start,
+                        marker_weights=getattr(l1, "marker_weights", {}),
                     )
                 return resp
 
@@ -600,11 +607,15 @@ class RAGEngine:
                     )
                     if debug:
                         trace = self._build_base_debug_trace(
-                            l1_method=l1_method, l1_confident=l1_confident, reason=reason,
-                            l1_candidates_data=l1_candidates_data, escalation_check=None,
+                            l1_method=l1_method,
+                            l1_confident=l1_confident,
+                            reason=reason,
+                            l1_candidates_data=l1_candidates_data,
+                            escalation_check=None,
                             confidence_reason="L1.1: обязательный маркер не найден",
                             llm_involvement="classification_only" if llm_used_for_classify else "none",
-                            start_time=_start, marker_weights=getattr(l1, "marker_weights", {}),
+                            start_time=_start,
+                            marker_weights=getattr(l1, "marker_weights", {}),
                         )
                         trace["marker_clarification_check"] = marker_clarification_check
                         resp.debug_trace = trace
@@ -912,7 +923,10 @@ class RAGEngine:
 
             if cls_rules.enabled and l1.winning_candidate:
                 # Per-reason threshold check
-                if cls_rules.min_score_threshold is not None and l1.winning_candidate.score < cls_rules.min_score_threshold:
+                if (
+                    cls_rules.min_score_threshold is not None
+                    and l1.winning_candidate.score < cls_rules.min_score_threshold
+                ):
                     dry_run["verdict"] = "escalation"
                     dry_run["reason"] = (
                         f"score={l1.winning_candidate.score:.1f} < "

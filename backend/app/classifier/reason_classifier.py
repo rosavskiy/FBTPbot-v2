@@ -248,9 +248,7 @@ def classify_reason(query: str) -> L1Result:
 
     # ── Глобальный порог: score ниже минимума → below_threshold ──
     if top.score < global_min:
-        logger.info(
-            f"[L1] RESULT: below_threshold | top_score={top.score:.1f} < global_min={global_min:.1f}"
-        )
+        logger.info(f"[L1] RESULT: below_threshold | top_score={top.score:.1f} < global_min={global_min:.1f}")
         return L1Result(
             candidates=candidates,
             winning_candidate=top,

@@ -191,7 +191,9 @@ def _reason_to_docx_lines(reason: ContactReason) -> list[str]:
     cls = reason.classification_rules
     lines.extend(["", "---", "", "### Раздел: Правила классификации (L1.1)"])
     lines.append(f"**Статус:** {'Включено' if cls.enabled else 'Выключено'}")
-    lines.append(f"**Минимальный порог:** {cls.min_score_threshold if cls.min_score_threshold is not None else 'глобальный'}")
+    lines.append(
+        f"**Минимальный порог:** {cls.min_score_threshold if cls.min_score_threshold is not None else 'глобальный'}"
+    )
     lines.append(f"**Обязательные маркеры:** {', '.join(cls.required_markers) if cls.required_markers else 'нет'}")
     lines.append(f"**Текст уточняющего вопроса:** {cls.clarification_text or 'стандартный'}")
 
