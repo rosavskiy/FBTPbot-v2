@@ -40,6 +40,7 @@ HEADER_ROW = [
     "response_type",
     "youtube_links",
     "has_images",
+    "is_debug",
 ]
 
 MSK = timezone(timedelta(hours=3))
@@ -115,6 +116,7 @@ class GoogleSheetLogger:
         response_type: str = "answer",
         youtube_links: list[str] | None = None,
         has_images: bool = False,
+        is_debug: bool = False,
     ) -> None:
         """Добавить строку в таблицу (не блокирует event loop)."""
         if not self._enabled:
@@ -138,6 +140,7 @@ class GoogleSheetLogger:
                     response_type=response_type,
                     youtube_links=youtube_links or [],
                     has_images=has_images,
+                    is_debug=is_debug,
                 )
             except Exception as e:
                 logger.error(f"Ошибка записи в Google Sheets: {e}")
@@ -160,6 +163,7 @@ class GoogleSheetLogger:
         response_type: str,
         youtube_links: list[str],
         has_images: bool,
+        is_debug: bool = False,
     ) -> None:
         if self._sheet is None:
             return
@@ -185,6 +189,7 @@ class GoogleSheetLogger:
             response_type,
             ", ".join(youtube_links),
             "Да" if has_images else "Нет",
+            "debug" if is_debug else "",
         ]
         self._sheet.append_row(row, value_input_option="USER_ENTERED")
 

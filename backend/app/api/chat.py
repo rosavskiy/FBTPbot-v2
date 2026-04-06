@@ -104,6 +104,7 @@ async def send_message(
             response_type="answer",
             youtube_links=rag_response.youtube_links,
             has_images=bool(rag_response.images),
+            is_debug=request.debug,
         )
     )
 
