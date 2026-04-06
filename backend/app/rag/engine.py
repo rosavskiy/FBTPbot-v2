@@ -671,7 +671,7 @@ class RAGEngine:
             _total = _time.time() - _start
             logger.info(f"[ENGINE] L2=example_match → direct answer | time={_total:.1f}s")
             resp = RAGResponse(
-                answer=_truncate_to_bytes(l2.best_example.ideal_answer, MAX_ANSWER_BYTES),
+                answer=_strip_markdown(_truncate_to_bytes(l2.best_example.ideal_answer, MAX_ANSWER_BYTES)),
                 confidence=0.95,
                 confidence_reason="Точное совпадение с примером ответа",
                 detected_reason=reason.id,
@@ -754,6 +754,7 @@ class RAGEngine:
             )
 
         clean_answer, confidence, conf_reason = self._parse_confidence(raw_answer)
+        clean_answer = _strip_markdown(clean_answer)
         clean_answer = _truncate_to_bytes(clean_answer, MAX_ANSWER_BYTES)
 
         needs_escalation = confidence < settings.rag_confidence_threshold
@@ -974,6 +975,33 @@ def _strip_operator_footer(text: str) -> str:
     ]
     for pat in patterns:
         text = re.sub(pat, "", text, flags=re.IGNORECASE | re.MULTILINE).rstrip()
+    return text
+
+
+def _strip_markdown(text: str) -> str:
+    """Убрать Markdown-разметку, оставив чистый текст."""
+    # Блоки кода ``` ... ```
+    text = re.sub(r"```[^\n]*\n(.*?)```", r"\1", text, flags=re.DOTALL)
+    # Inline-код
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    # Заголовки
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # Жирный + курсив (***text*** или ___text___)
+    text = re.sub(r"\*{3}(.+?)\*{3}", r"\1", text)
+    text = re.sub(r"_{3}(.+?)_{3}", r"\1", text)
+    # Жирный (**text** или __text__)
+    text = re.sub(r"\*{2}(.+?)\*{2}", r"\1", text)
+    text = re.sub(r"__(.+?)__", r"\1", text)
+    # Курсив (*text* или _text_) — только если окружён пробелами/началом/концом
+    text = re.sub(r"(?<![\w*])\*([^*]+)\*(?![\w*])", r"\1", text)
+    # Ссылки [text](url)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    # Изображения ![alt](url)
+    text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    # Горизонтальные линии
+    text = re.sub(r"^[-*_]{3,}\s*$", "", text, flags=re.MULTILINE)
+    # Blockquote
+    text = re.sub(r"^>\s?", "", text, flags=re.MULTILINE)
     return text
 
 
