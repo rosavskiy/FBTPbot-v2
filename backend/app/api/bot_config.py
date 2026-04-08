@@ -343,6 +343,18 @@ async def update_reason(reason_id: str, reason: ContactReason):
     return reason
 
 
+@router.patch("/reasons/{reason_id}/folder")
+async def update_reason_folder(reason_id: str, payload: dict):
+    """Обновить только папку причины (для drag-and-drop)."""
+    reason = get_reason(reason_id)
+    if not reason:
+        raise HTTPException(status_code=404, detail="Причина обращения не найдена")
+    reason.folder = payload.get("folder", "")
+    upsert_reason(reason)
+    logger.info(f"Moved reason {reason_id} to folder: {reason.folder!r}")
+    return {"status": "ok", "id": reason_id, "folder": reason.folder}
+
+
 @router.delete("/reasons/{reason_id}")
 async def remove_reason(reason_id: str):
     """Удалить причину обращения."""

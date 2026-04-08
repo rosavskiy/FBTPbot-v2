@@ -133,6 +133,22 @@
             padding: 12px;
             border-top: 1px solid var(--gray-800);
         }
+        /* Drag-and-drop */
+        .sidebar-item[draggable="true"] { cursor: grab; }
+        .sidebar-item.dragging { opacity: 0.4; }
+        .sidebar-item.drag-over { border: 1px dashed var(--accent); background: var(--accent-subtle); }
+        .drag-root-zone {
+            min-height: 24px;
+            border: 1px dashed transparent;
+            border-radius: var(--radius-sm);
+            margin-top: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            color: var(--gray-600);
+            text-align: center;
+            transition: all 0.15s var(--ease);
+        }
+        .drag-root-zone.drag-over { border-color: var(--accent); background: var(--accent-subtle); color: var(--gray-400); }
 
         /* ── Main content ── */
         .main {
@@ -1165,6 +1181,10 @@ function renderSidebar() {
             sidebarCollapsed[fullPath] = !sidebarCollapsed[fullPath];
             renderSidebar();
         };
+        // Drop target: drag reason onto folder header
+        header.ondragover = (e) => handleFolderDragOver(e);
+        header.ondragleave = (e) => handleFolderDragLeave(e);
+        header.ondrop = (e) => handleFolderDrop(e, fullPath);
         folderDiv.appendChild(header);
 
         if (!isCollapsed) {
@@ -1186,6 +1206,9 @@ function renderSidebar() {
                 div.className = `sidebar-item ${r.id === currentReasonId ? 'active' : ''} ${!r.is_active ? 'inactive' : ''}`;
                 div.innerHTML = `<div class="name">${r.name}</div><div class="meta">${r.markers_count} маркеров · ${r.sections_count} разделов · ${r.qa_count} Q&A</div>`;
                 div.onclick = () => selectReason(r.id);
+                div.draggable = true;
+                div.ondragstart = (e) => handleDragStart(e, r.id);
+                div.ondragend = (e) => handleDragEnd(e);
                 folderDiv.appendChild(div);
             });
         }
@@ -1215,11 +1238,82 @@ function renderSidebar() {
         div.className = `sidebar-item ${r.id === currentReasonId ? 'active' : ''} ${!r.is_active ? 'inactive' : ''}`;
         div.innerHTML = `<div class="name">${r.name}</div><div class="meta">${r.markers_count} маркеров · ${r.sections_count} разделов · ${r.qa_count} Q&A</div>`;
         div.onclick = () => selectReason(r.id);
+        div.draggable = true;
+        div.ondragstart = (e) => handleDragStart(e, r.id);
+        div.ondragend = (e) => handleDragEnd(e);
         list.appendChild(div);
     });
+
+    // Drop zone: move to root (no folder)
+    const rootZone = document.createElement('div');
+    rootZone.className = 'drag-root-zone';
+    rootZone.textContent = '⬇ Перетащите сюда — в корень';
+    rootZone.ondragover = (e) => handleFolderDragOver(e);
+    rootZone.ondragleave = (e) => handleFolderDragLeave(e);
+    rootZone.ondrop = (e) => handleFolderDrop(e, '');
+    list.appendChild(rootZone);
 }
 
 function filterReasons() { renderSidebar(); }
+
+// ── Drag-and-drop: move reasons between folders ──
+let dragReasonId = null;
+
+async function moveReasonToFolder(reasonId, folder) {
+    try {
+        const r = await fetch(`${API}/reasons/${reasonId}/folder`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ folder }),
+        });
+        if (!r.ok) throw new Error('Ошибка перемещения');
+        // Update local cache
+        const item = reasons.find(x => x.id === reasonId);
+        if (item) item.folder = folder;
+        renderSidebar();
+        // Update editor if this reason is open
+        if (currentReasonId === reasonId && currentReason) {
+            currentReason.folder = folder;
+            const el = document.getElementById('reasonFolder');
+            if (el) el.value = folder;
+        }
+        notify(`Перемещено в ${folder || 'корень'}`, 'success');
+    } catch (e) { notify(e.message, 'error'); }
+}
+
+function handleDragStart(e, reasonId) {
+    dragReasonId = reasonId;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', reasonId);
+    e.target.classList.add('dragging');
+}
+
+function handleDragEnd(e) {
+    dragReasonId = null;
+    e.target.classList.remove('dragging');
+    document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+}
+
+function handleFolderDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    e.currentTarget.classList.add('drag-over');
+}
+
+function handleFolderDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over');
+}
+
+function handleFolderDrop(e, targetFolder) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+    const reasonId = e.dataTransfer.getData('text/plain');
+    if (!reasonId) return;
+    // Don't move if already in this folder
+    const item = reasons.find(x => x.id === reasonId);
+    if (item && (item.folder || '') === targetFolder) return;
+    moveReasonToFolder(reasonId, targetFolder);
+}
 
 async function selectReason(id) {
     currentReasonId = id;
