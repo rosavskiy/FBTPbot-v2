@@ -524,6 +524,34 @@
 
         /* Escalation chip */
         .chip.esc-keyword { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.2); color: #fca5a5; }
+
+        /* Image grid */
+        .img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 10px; }
+        .img-card {
+            background: var(--gray-800); border: 1px solid var(--gray-700); border-radius: var(--radius-sm);
+            padding: 6px; text-align: center; position: relative; cursor: pointer; transition: border-color 0.15s;
+        }
+        .img-card:hover { border-color: var(--accent); }
+        .img-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-subtle); }
+        .img-card img { width: 100%; height: 80px; object-fit: cover; border-radius: 4px; }
+        .img-card .img-code {
+            font-size: 11px; font-weight: 600; color: var(--accent-light);
+            margin-top: 4px; font-family: var(--font-mono);
+        }
+        .img-card .img-name { font-size: 10px; color: var(--gray-500); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .img-card .img-delete {
+            position: absolute; top: 4px; right: 4px; background: rgba(239,68,68,0.8); color: white;
+            border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 11px;
+            cursor: pointer; display: none; align-items: center; justify-content: center; line-height: 1;
+        }
+        .img-card:hover .img-delete { display: flex; }
+
+        /* Collapsible card */
+        .card-collapsible .card-title { cursor: pointer; user-select: none; }
+        .card-collapsible .card-body { display: none; }
+        .card-collapsible.open .card-body { display: block; }
+        .card-collapsible .card-title .collapse-arrow { transition: transform 0.2s var(--ease); display: inline-block; }
+        .card-collapsible.open .card-title .collapse-arrow { transform: rotate(90deg); }
     </style>
 </head>
 <body>
@@ -547,7 +575,8 @@
                 🌡️ <input type="range" id="llmTemperature" min="0" max="1" step="0.01" value="0.1" style="width:80px; vertical-align:middle;">
                 <span id="llmTempValue" style="min-width:30px; font-family:var(--font-mono); font-size:12px;">0.10</span>
             </label>
-            <button class="btn btn-secondary" onclick="saveLlmSettings()">LLM</button>
+            <button class="btn btn-secondary" onclick="saveLlmSettings()">💾 Сохранить LLM</button>
+            <button class="btn btn-secondary" onclick="openGlobalEscalation()" title="Глобальные правила эскалации L0 (до классификации)">⚙️ L0</button>
             <button class="btn btn-secondary" onclick="openClassificationSettings()" title="Настройки классификации L1 (веса маркеров, пороги)">⚙️ L1</button>
             <span id="activeLlmIndicator" style="font-size:12px; color:#9ca3af; white-space:nowrap;">Активно: неизвестно</span>
         </div>
@@ -575,6 +604,20 @@
     <!-- Main content -->
     <div class="main" id="mainContent">
         <div class="empty-state" id="emptyState">Выберите причину обращения из списка слева</div>
+
+        <!-- Images Section (global, always visible) -->
+        <div class="card card-collapsible" id="imagesCard" onclick="toggleImagesCard(event)">
+            <div class="card-title"><span class="collapse-arrow">▸</span> 🖼️ Изображения</div>
+            <div class="card-body" onclick="event.stopPropagation()">
+                <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
+                    <input type="file" id="imageUploadInput" accept=".png,.jpg,.jpeg,.gif,.webp" style="display:none" onchange="uploadImage(this)">
+                    <button class="btn btn-sm btn-success" onclick="document.getElementById('imageUploadInput').click()">📤 Загрузить</button>
+                    <span style="font-size:12px; color:var(--gray-500)">PNG, JPG, GIF, WEBP (макс. 5 МБ)</span>
+                </div>
+                <div class="img-grid" id="imagesGrid"></div>
+            </div>
+        </div>
+
         <div id="reasonEditor" style="display:none">
             <!-- Name & Active -->
             <div class="card">
@@ -594,6 +637,11 @@
                 <div class="form-row">
                     <div class="form-label">ID (латиница, не меняется после создания)</div>
                     <input type="text" class="form-input" id="reasonId" placeholder="akt_na_spisanie" style="max-width:300px">
+                </div>
+                <div class="form-row">
+                    <div class="form-label">📁 Папка (для группировки, напр. "Группа АРМ/Настройка ККМ")</div>
+                    <input type="text" class="form-input" id="reasonFolder" placeholder="Оставьте пустым для корня" list="foldersList" style="max-width:400px">
+                    <datalist id="foldersList"></datalist>
                 </div>
             </div>
 
@@ -734,18 +782,16 @@
 
             <!-- Typical Complaints -->
             <div class="card">
-                <div class="card-title">⚠️ Типовые жалобы
-                    <button class="btn btn-sm btn-secondary" onclick="addComplaint()" style="margin-left:auto">+ Жалоба</button>
-                </div>
+                <div class="card-title">⚠️ Типовые жалобы</div>
                 <div id="complaintsContainer"></div>
+                <button class="btn btn-sm btn-secondary" onclick="addComplaint()" style="margin-top:10px">+ Жалоба</button>
             </div>
 
             <!-- Example Answers -->
             <div class="card">
-                <div class="card-title">💡 Примеры ответов
-                    <button class="btn btn-sm btn-secondary" onclick="addExample()" style="margin-left:auto">+ Пример</button>
-                </div>
+                <div class="card-title">💡 Примеры ответов</div>
                 <div id="examplesContainer"></div>
+                <button class="btn btn-sm btn-secondary" onclick="addExample()" style="margin-top:10px">+ Пример</button>
             </div>
 
             <!-- Test Classification -->
@@ -765,6 +811,12 @@
                     <button class="btn btn-secondary" onclick="duplicateReason()">📋 Дублировать</button>
                 </div>
                 <button class="btn btn-danger" onclick="deleteReason()">🗑 Удалить</button>
+            </div>
+
+            <!-- Sticky Save Bar -->
+            <div id="stickySaveBar" style="position:sticky; bottom:0; z-index:10; background:var(--gray-900); padding:12px 20px; margin:16px -20px -20px -20px; border-top:1px solid var(--gray-800); display:flex; align-items:center; gap:12px; border-radius:0 0 var(--radius) var(--radius);">
+                <button class="btn btn-primary" onclick="saveReason()">💾 Сохранить</button>
+                <span style="font-size:12px; color:var(--gray-500)">Ctrl+S</span>
             </div>
         </div>
     </div>
@@ -851,18 +903,199 @@
     </div>
 </div>
 
+<!-- Global Escalation (L0) Modal -->
+<div class="modal-overlay" id="l0Modal">
+    <div class="modal" style="max-width:520px">
+        <div class="modal-header">
+            <h2>⚙️ Глобальная эскалация (L0)</h2>
+            <button class="btn btn-sm btn-danger" onclick="closeGlobalEscalation()">✕</button>
+        </div>
+        <div class="modal-body" style="padding:16px; overflow-y:auto; max-height:70vh;">
+            <div style="font-size:13px; color:var(--gray-400); margin-bottom:12px;">
+                Глобальные правила срабатывают <b>до</b> классификации причины обращения (L1).
+                Если фраза из списка найдена в сообщении пользователя — немедленная эскалация на оператора.
+            </div>
+            <div class="form-row">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <label class="toggle">
+                        <input type="checkbox" id="l0Enabled">
+                        <span class="slider"></span>
+                    </label>
+                    <span style="font-size:13px; color:#cfcfcf">Включено</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-label">Фразовые маски эскалации (keyword_patterns)</div>
+                <div class="chips-container" id="l0KeywordChips"></div>
+                <div class="chip-input-row">
+                    <input type="text" id="l0KeywordInput" placeholder="RegID, ошибка лицензии..." onkeydown="if(event.key==='Enter')addL0Keyword()">
+                    <button class="btn btn-sm btn-secondary" onclick="addL0Keyword()">+</button>
+                </div>
+            </div>
+            <div style="margin-top:16px; display:flex; gap:8px;">
+                <button class="btn btn-primary" onclick="saveGlobalEscalation()">💾 Сохранить</button>
+                <button class="btn btn-secondary" onclick="closeGlobalEscalation()">Отмена</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Image Picker Modal -->
+<div class="modal-overlay" id="imagePickerModal">
+    <div class="modal" style="max-width:600px; height:auto; max-height:80vh;">
+        <div class="modal-header">
+            <h2>🖼️ Выбор изображения</h2>
+            <button class="btn btn-sm btn-danger" onclick="closeImagePicker()">✕</button>
+        </div>
+        <div class="modal-body" style="padding:16px; overflow-y:auto;">
+            <div class="img-grid" id="imagePickerGrid"></div>
+            <div id="imagePickerEmpty" style="text-align:center; color:var(--gray-500); padding:20px; display:none;">
+                Нет загруженных изображений. Загрузите в разделе 🖼️ Изображения.
+            </div>
+            <div style="margin-top:16px; display:flex; gap:8px;">
+                <button class="btn btn-primary" onclick="confirmImagePicker()">✅ Привязать выбранные</button>
+                <button class="btn btn-secondary" onclick="closeImagePicker()">Отмена</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 const API = '/api/bot-config';
 let reasons = [];
 let currentReasonId = null;
 let currentReason = null;
 let isNewReason = false;
+let sidebarCollapsed = {};  // folder path → collapsed state
 
 // ── Init ──
 document.addEventListener('DOMContentLoaded', initPage);
 
 async function initPage() {
-    await Promise.all([loadReasons(), loadLlmSettings(), loadClassificationSettings()]);
+    await Promise.all([loadReasons(), loadLlmSettings(), loadClassificationSettings(), loadGlobalEscalation(), loadImages()]);
+}
+
+// ── Images management ──
+let allImages = [];
+let imagePickerExampleIdx = null;
+let imagePickerSelected = new Set();
+
+async function loadImages() {
+    try {
+        const r = await fetch(`${API}/images`);
+        if (!r.ok) return;
+        const data = await r.json();
+        allImages = data.images || [];
+        renderImagesGrid();
+    } catch (e) {
+        console.warn('Failed to load images:', e);
+    }
+}
+
+function renderImagesGrid() {
+    const grid = document.getElementById('imagesGrid');
+    grid.innerHTML = '';
+    if (!allImages.length) {
+        grid.innerHTML = '<div style="color:var(--gray-500); font-size:13px; padding:8px;">Нет загруженных изображений</div>';
+        return;
+    }
+    allImages.forEach(img => {
+        const card = document.createElement('div');
+        card.className = 'img-card';
+        card.innerHTML = `
+            <img src="${img.url}" alt="${img.original_name}" loading="lazy">
+            <div class="img-code">Код: ${img.code}</div>
+            <div class="img-name">${img.original_name}</div>
+            <button class="img-delete" onclick="event.stopPropagation(); deleteImage('${img.code}')" title="Удалить">×</button>
+        `;
+        grid.appendChild(card);
+    });
+}
+
+async function uploadImage(input) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = '';
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const r = await fetch(`${API}/images`, { method: 'POST', body: formData });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Ошибка загрузки');
+        notify(`Изображение загружено, код: ${data.code}`, 'success');
+        await loadImages();
+    } catch (e) {
+        notify(e.message, 'error');
+    }
+}
+
+async function deleteImage(code) {
+    if (!confirm(`Удалить изображение с кодом ${code}?`)) return;
+    try {
+        const r = await fetch(`${API}/images/${code}`, { method: 'DELETE' });
+        if (!r.ok) { const data = await r.json(); throw new Error(data.detail || 'Ошибка'); }
+        notify('Изображение удалено', 'success');
+        await loadImages();
+    } catch (e) {
+        notify(e.message, 'error');
+    }
+}
+
+function toggleImagesCard(e) {
+    const card = document.getElementById('imagesCard');
+    if (e.target.closest('.card-body')) return;
+    card.classList.toggle('open');
+}
+
+// ── Image Picker for ExampleQA ──
+function openImagePicker(exIdx) {
+    imagePickerExampleIdx = exIdx;
+    const existing = currentReason.example_answers[exIdx].image_codes || [];
+    imagePickerSelected = new Set(existing);
+    renderImagePickerGrid();
+    document.getElementById('imagePickerModal').classList.add('open');
+}
+
+function closeImagePicker() {
+    document.getElementById('imagePickerModal').classList.remove('open');
+    imagePickerExampleIdx = null;
+}
+
+function renderImagePickerGrid() {
+    const grid = document.getElementById('imagePickerGrid');
+    const empty = document.getElementById('imagePickerEmpty');
+    grid.innerHTML = '';
+    if (!allImages.length) {
+        empty.style.display = 'block';
+        return;
+    }
+    empty.style.display = 'none';
+    allImages.forEach(img => {
+        const card = document.createElement('div');
+        card.className = 'img-card' + (imagePickerSelected.has(img.code) ? ' selected' : '');
+        card.innerHTML = `
+            <img src="${img.url}" alt="${img.original_name}" loading="lazy">
+            <div class="img-code">Код: ${img.code}</div>
+            <div class="img-name">${img.original_name}</div>
+        `;
+        card.onclick = () => {
+            if (imagePickerSelected.has(img.code)) {
+                imagePickerSelected.delete(img.code);
+            } else {
+                imagePickerSelected.add(img.code);
+            }
+            renderImagePickerGrid();
+        };
+        grid.appendChild(card);
+    });
+}
+
+function confirmImagePicker() {
+    if (imagePickerExampleIdx !== null && currentReason) {
+        currentReason.example_answers[imagePickerExampleIdx].image_codes = Array.from(imagePickerSelected);
+        renderExamples();
+    }
+    closeImagePicker();
 }
 
 async function loadReasons() {
@@ -878,15 +1111,112 @@ function renderSidebar() {
     const search = document.getElementById('searchReasons').value.toLowerCase();
     const list = document.getElementById('reasonsList');
     list.innerHTML = '';
-    reasons
-        .filter(r => r.name.toLowerCase().includes(search) || r.id.toLowerCase().includes(search))
-        .forEach(r => {
-            const div = document.createElement('div');
-            div.className = `sidebar-item ${r.id === currentReasonId ? 'active' : ''} ${!r.is_active ? 'inactive' : ''}`;
-            div.innerHTML = `<div class="name">${r.name}</div><div class="meta">${r.markers_count} маркеров · ${r.sections_count} разделов · ${r.qa_count} Q&A</div>`;
-            div.onclick = () => selectReason(r.id);
-            list.appendChild(div);
+
+    const filtered = reasons.filter(r => 
+        r.name.toLowerCase().includes(search) || 
+        r.id.toLowerCase().includes(search) ||
+        (r.folder || '').toLowerCase().includes(search)
+    );
+
+    // Build tree structure
+    const tree = {};
+    const rootItems = [];
+
+    filtered.forEach(r => {
+        const folder = r.folder || '';
+        if (!folder) {
+            rootItems.push(r);
+        } else {
+            if (!tree[folder]) tree[folder] = [];
+            tree[folder].push(r);
+        }
+    });
+
+    // Get all unique folder paths, sorted
+    const folderPaths = Object.keys(tree).sort();
+
+    // Build nested folder structure
+    const folderTree = {};
+    folderPaths.forEach(path => {
+        const parts = path.split('/');
+        let current = folderTree;
+        parts.forEach(part => {
+            if (!current[part]) current[part] = { _children: {}, _reasons: [] };
+            current = current[part]._children;
         });
+    });
+
+    // Render folder nodes recursively
+    function renderFolderNode(name, fullPath, depth) {
+        const items = tree[fullPath] || [];
+        const folderDiv = document.createElement('div');
+        folderDiv.style.marginLeft = (depth * 12) + 'px';
+
+        const header = document.createElement('div');
+        header.className = 'sidebar-item';
+        header.style.cssText = 'background:transparent; border:none; padding:6px 8px; cursor:pointer; display:flex; align-items:center; gap:6px;';
+        const isCollapsed = sidebarCollapsed[fullPath];
+        header.innerHTML = `
+            <span style="font-size:10px; color:var(--gray-500); transition:transform 0.2s; display:inline-block; ${isCollapsed ? '' : 'transform:rotate(90deg)'}"">▸</span>
+            <span style="font-size:13px; color:var(--gray-400);">📁 ${name}</span>
+            <span style="font-size:10px; color:var(--gray-600); margin-left:auto;">${items.length}</span>
+        `;
+        header.onclick = () => {
+            sidebarCollapsed[fullPath] = !sidebarCollapsed[fullPath];
+            renderSidebar();
+        };
+        folderDiv.appendChild(header);
+
+        if (!isCollapsed) {
+            // Render sub-folders
+            const subPaths = folderPaths.filter(p => {
+                if (!p.startsWith(fullPath + '/')) return false;
+                const rest = p.substring(fullPath.length + 1);
+                return !rest.includes('/');
+            });
+            subPaths.forEach(sp => {
+                const subName = sp.substring(fullPath.length + 1);
+                folderDiv.appendChild(renderFolderNode(subName, sp, depth + 1));
+            });
+
+            // Render reasons in this folder
+            items.forEach(r => {
+                const div = document.createElement('div');
+                div.style.marginLeft = ((depth + 1) * 12) + 'px';
+                div.className = `sidebar-item ${r.id === currentReasonId ? 'active' : ''} ${!r.is_active ? 'inactive' : ''}`;
+                div.innerHTML = `<div class="name">${r.name}</div><div class="meta">${r.markers_count} маркеров · ${r.sections_count} разделов · ${r.qa_count} Q&A</div>`;
+                div.onclick = () => selectReason(r.id);
+                folderDiv.appendChild(div);
+            });
+        }
+
+        return folderDiv;
+    }
+
+    // Render top-level folders (not sub-folders)
+    const topFolders = folderPaths.filter(p => !p.includes('/'));
+    topFolders.forEach(fp => {
+        list.appendChild(renderFolderNode(fp, fp, 0));
+    });
+
+    // Also render sub-folders that have a parent not in the list (orphaned sub-paths)
+    const renderedPaths = new Set();
+    topFolders.forEach(fp => {
+        renderedPaths.add(fp);
+        folderPaths.filter(p => p.startsWith(fp + '/')).forEach(p => renderedPaths.add(p));
+    });
+    folderPaths.filter(p => !renderedPaths.has(p)).forEach(fp => {
+        list.appendChild(renderFolderNode(fp, fp, 0));
+    });
+
+    // Render root items (no folder)
+    rootItems.forEach(r => {
+        const div = document.createElement('div');
+        div.className = `sidebar-item ${r.id === currentReasonId ? 'active' : ''} ${!r.is_active ? 'inactive' : ''}`;
+        div.innerHTML = `<div class="name">${r.name}</div><div class="meta">${r.markers_count} маркеров · ${r.sections_count} разделов · ${r.qa_count} Q&A</div>`;
+        div.onclick = () => selectReason(r.id);
+        list.appendChild(div);
+    });
 }
 
 function filterReasons() { renderSidebar(); }
@@ -907,13 +1237,28 @@ function createNewReason() {
     isNewReason = true;
     currentReasonId = null;
     currentReason = {
-        id: '', name: '', is_active: true,
+        id: '', name: '', is_active: true, folder: '',
         markers: { verbs: [], nouns: [], numeric_tags: [], phrase_masks: [] },
         thematic_sections: [], typical_complaints: [], example_answers: [],
         escalation_rules: { enabled: false, qa_pairs: [], metrics: { score_threshold: 0.7, keyword_patterns: [] } },
         classification_rules: { enabled: false, min_score_threshold: null, required_markers: [], clarification_text: '' }
     };
     renderEditor();
+}
+
+async function loadFoldersList() {
+    try {
+        const r = await fetch(`${API}/folders`);
+        if (!r.ok) return;
+        const data = await r.json();
+        const dl = document.getElementById('foldersList');
+        dl.innerHTML = '';
+        (data.folders || []).forEach(f => {
+            const opt = document.createElement('option');
+            opt.value = f;
+            dl.appendChild(opt);
+        });
+    } catch (e) { /* ignore */ }
 }
 
 async function loadLlmSettings() {
@@ -1011,6 +1356,75 @@ async function saveClassificationSettings() {
     }
 }
 
+// ── Global Escalation (L0) ──
+let l0Keywords = [];
+
+async function loadGlobalEscalation() {
+    try {
+        const r = await fetch(`${API}/global-escalation`);
+        if (!r.ok) return;
+        const data = await r.json();
+        document.getElementById('l0Enabled').checked = data.enabled;
+        l0Keywords = data.keyword_patterns || [];
+        renderL0Keywords();
+    } catch (e) {
+        console.warn('Failed to load L0 escalation:', e);
+    }
+}
+
+function renderL0Keywords() {
+    const container = document.getElementById('l0KeywordChips');
+    container.innerHTML = '';
+    l0Keywords.forEach((kw, idx) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip esc-keyword';
+        chip.innerHTML = `${kw} <span class="remove" onclick="removeL0Keyword(${idx})">×</span>`;
+        container.appendChild(chip);
+    });
+}
+
+function addL0Keyword() {
+    const input = document.getElementById('l0KeywordInput');
+    const values = input.value.split(',').map(v => v.trim()).filter(v => v);
+    if (!values.length) return;
+    values.forEach(v => { if (!l0Keywords.includes(v)) l0Keywords.push(v); });
+    input.value = '';
+    renderL0Keywords();
+}
+
+function removeL0Keyword(idx) {
+    l0Keywords.splice(idx, 1);
+    renderL0Keywords();
+}
+
+function openGlobalEscalation() {
+    document.getElementById('l0Modal').classList.add('open');
+}
+
+function closeGlobalEscalation() {
+    document.getElementById('l0Modal').classList.remove('open');
+}
+
+async function saveGlobalEscalation() {
+    const payload = {
+        enabled: document.getElementById('l0Enabled').checked,
+        keyword_patterns: l0Keywords,
+    };
+    try {
+        const r = await fetch(`${API}/global-escalation`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Ошибка сохранения');
+        notify('Глобальные правила эскалации сохранены', 'success');
+        closeGlobalEscalation();
+    } catch (e) {
+        notify(e.message, 'error');
+    }
+}
+
 // ── Per-reason Classification Rules ──
 function ensureClassificationRules() {
     if (!currentReason.classification_rules) {
@@ -1052,6 +1466,8 @@ function renderEditor() {
     document.getElementById('reasonId').disabled = !isNewReason;
     document.getElementById('reasonName').value = r.name;
     document.getElementById('reasonActive').checked = r.is_active;
+    document.getElementById('reasonFolder').value = r.folder || '';
+    loadFoldersList();
 
     // Markers
     renderChips('verb', r.markers.verbs);
@@ -1214,12 +1630,40 @@ function renderExamples() {
     const container = document.getElementById('examplesContainer');
     container.innerHTML = '';
     currentReason.example_answers.forEach((ex, ei) => {
+        // Migrate legacy user_question → user_questions
+        if (!ex.user_questions || !ex.user_questions.length) {
+            ex.user_questions = ex.user_question ? [ex.user_question] : [''];
+        }
+        if (!ex.image_codes) ex.image_codes = [];
+
         const div = document.createElement('div');
         div.className = 'qa-pair';
+        let questionsHtml = '';
+        ex.user_questions.forEach((q, qi) => {
+            questionsHtml += `
+                <div style="display:flex; gap:6px; align-items:start; margin-bottom:4px;">
+                    <textarea class="form-input" rows="1" style="flex:1" onchange="currentReason.example_answers[${ei}].user_questions[${qi}]=this.value; syncExampleLegacy(${ei})">${q}</textarea>
+                    ${ex.user_questions.length > 1 ? `<button class="btn btn-sm btn-danger" onclick="removeExampleQuestion(${ei},${qi})" title="Удалить вопрос">×</button>` : ''}
+                </div>`;
+        });
+
+        // Image codes badges
+        let imgBadgesHtml = '';
+        if (ex.image_codes.length > 0) {
+            imgBadgesHtml = '<div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;">' +
+                ex.image_codes.map((code, ci) => `<span class="chip" style="font-size:11px; padding:2px 8px;">🖼️ ${code} <span class="remove" onclick="removeExampleImage(${ei},${ci})">×</span></span>`).join('') +
+                '</div>';
+        }
+
         div.innerHTML = `
-            <div class="qa-actions"><button class="btn btn-sm btn-danger" onclick="removeExample(${ei})">×</button></div>
-            <div class="form-label">Вопрос пользователя</div>
-            <textarea class="form-input" rows="1" onchange="currentReason.example_answers[${ei}].user_question=this.value">${ex.user_question}</textarea>
+            <div class="qa-actions">
+                <button class="btn btn-sm btn-secondary" onclick="openImagePicker(${ei})" title="Привязать изображение" style="font-size:11px; padding:3px 6px;">🖼️</button>
+                <button class="btn btn-sm btn-danger" onclick="removeExample(${ei})">×</button>
+            </div>
+            <div class="form-label">Вопросы пользователя</div>
+            <div id="exampleQuestions-${ei}">${questionsHtml}</div>
+            <button class="btn btn-sm btn-secondary" onclick="addExampleQuestion(${ei})" style="margin-top:2px; font-size:11px;">+ Вопрос</button>
+            ${imgBadgesHtml}
             <div class="form-label" style="margin-top:6px">Идеальный ответ</div>
             <textarea class="form-input" rows="3" onchange="currentReason.example_answers[${ei}].ideal_answer=this.value">${ex.ideal_answer}</textarea>
         `;
@@ -1227,8 +1671,29 @@ function renderExamples() {
     });
 }
 
+function addExampleQuestion(exIdx) {
+    currentReason.example_answers[exIdx].user_questions.push('');
+    renderExamples();
+}
+
+function removeExampleQuestion(exIdx, qIdx) {
+    currentReason.example_answers[exIdx].user_questions.splice(qIdx, 1);
+    syncExampleLegacy(exIdx);
+    renderExamples();
+}
+
+function syncExampleLegacy(exIdx) {
+    const ex = currentReason.example_answers[exIdx];
+    ex.user_question = ex.user_questions.length > 0 ? ex.user_questions[0] : '';
+}
+
+function removeExampleImage(exIdx, imgIdx) {
+    currentReason.example_answers[exIdx].image_codes.splice(imgIdx, 1);
+    renderExamples();
+}
+
 function addExample() {
-    currentReason.example_answers.push({ user_question: '', ideal_answer: '' });
+    currentReason.example_answers.push({ user_question: '', user_questions: [''], ideal_answer: '', image_codes: [] });
     renderExamples();
 }
 
@@ -1243,6 +1708,7 @@ function syncCurrentReasonFromForm() {
     currentReason.id = document.getElementById('reasonId').value.trim();
     currentReason.name = document.getElementById('reasonName').value.trim();
     currentReason.is_active = document.getElementById('reasonActive').checked;
+    currentReason.folder = document.getElementById('reasonFolder').value.trim();
 }
 
 async function saveReason() {
@@ -1647,6 +2113,14 @@ function escapeHtml(text) {
     div.textContent = text || '';
     return div.innerHTML;
 }
+
+// Ctrl+S → saveReason
+document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (currentReason) saveReason();
+    }
+});
 </script>
 </body>
 </html>

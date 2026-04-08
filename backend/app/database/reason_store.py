@@ -14,7 +14,7 @@ from pathlib import Path
 from threading import Lock
 
 from app.config import settings
-from app.models.reason_schemas import ContactReason, ContactReasonsData
+from app.models.reason_schemas import ContactReason, ContactReasonsData, GlobalEscalationRules
 
 logger = logging.getLogger(__name__)
 
@@ -131,3 +131,16 @@ def invalidate_cache() -> None:
     """Сбросить кэш (для reload после внешних изменений)."""
     global _cached_data
     _cached_data = None
+
+
+def get_global_escalation() -> GlobalEscalationRules:
+    """Получить глобальные правила эскалации (L0)."""
+    data = get_cached_or_load()
+    return data.global_escalation
+
+
+def save_global_escalation(rules: GlobalEscalationRules) -> None:
+    """Сохранить глобальные правила эскалации (L0)."""
+    data = get_cached_or_load()
+    data.global_escalation = rules
+    save_reasons(data)

@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.bot_config import router as bot_config_router
 from app.api.chat import router as chat_router
 from app.api.escalation import router as escalation_router
+from app.api.images import router as images_router
 from app.api.kb_admin import router as kb_admin_router
 from app.api.operator import router as operator_router
 from app.config import settings
@@ -92,11 +93,17 @@ app.include_router(escalation_router)
 app.include_router(operator_router)
 app.include_router(kb_admin_router)
 app.include_router(bot_config_router)
+app.include_router(images_router)
 
 # Статические файлы (изображения из инструкций)
 images_dir = Path(settings.chroma_persist_dir).parent / "images"
 images_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static/images", StaticFiles(directory=str(images_dir)), name="images")
+
+# Статические файлы для загруженных изображений (bot images)
+bot_images_dir = Path("./data/bot_images")
+bot_images_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static/bot_images", StaticFiles(directory=str(bot_images_dir)), name="bot_images")
 
 # Статические файлы для админки БЗ
 static_dir = Path(__file__).resolve().parent.parent / "static"

@@ -22,8 +22,10 @@ from app.config import settings
 from app.database.reason_store import (
     delete_reason,
     get_all_reasons,
+    get_global_escalation,
     get_reason,
     invalidate_cache,
+    save_global_escalation,
     upsert_reason,
 )
 from app.llm_settings import (
@@ -47,6 +49,7 @@ class ReasonSummary(BaseModel):
     id: str
     name: str
     is_active: bool
+    folder: str = ""
     markers_count: int = 0
     sections_count: int = 0
     qa_count: int = 0
@@ -166,11 +169,13 @@ def _reason_to_docx_lines(reason: ContactReason) -> list[str]:
         lines.append(f"| {description} | {context} | {response_template} |")
 
     lines.extend(["", "---", "", "### Раздел: Готовые ответы"])
-    lines.extend(["", "| Вопрос пользователя | Идеальный ответ |", "| :--- | :--- |"])
+    lines.extend(["", "| Вопрос пользователя | Идеальный ответ | Изображения |", "| :--- | :--- | :--- |"])
     for example in reason.example_answers:
-        question = sanitize_cell(example.user_question)
+        questions = example.user_questions or ([example.user_question] if example.user_question else [])
+        question = sanitize_cell(" ;; ".join(questions))
         answer = sanitize_cell(example.ideal_answer)
-        lines.append(f"| {question} | {answer} |")
+        images = sanitize_cell(",".join(example.image_codes)) if example.image_codes else ""
+        lines.append(f"| {question} | {answer} | {images} |")
 
     # ── Escalation rules (L1.5) ──
     esc = reason.escalation_rules
@@ -287,6 +292,7 @@ async def list_reasons(active_only: bool = False):
                 id=r.id,
                 name=r.name,
                 is_active=r.is_active,
+                folder=r.folder,
                 markers_count=markers_count,
                 sections_count=len(r.thematic_sections),
                 qa_count=qa_count,
@@ -295,6 +301,14 @@ async def list_reasons(active_only: bool = False):
             )
         )
     return ReasonsListResponse(total=len(summaries), reasons=summaries)
+
+
+@router.get("/folders")
+async def list_folders():
+    """Список всех уникальных папок."""
+    reasons = get_all_reasons(active_only=False)
+    folders = sorted({r.folder for r in reasons if r.folder})
+    return {"folders": folders}
 
 
 @router.get("/reasons/{reason_id}", response_model=ContactReason)
@@ -421,6 +435,37 @@ async def update_cls_settings(payload: ClassificationSettingsPayload):
     save_classification_settings(payload.model_dump())
     logger.info("Classification settings updated: %s", payload.model_dump())
     return ClassificationSettingsResponse(**get_classification_settings())
+
+
+# ── Global Escalation (L0) ──
+
+
+class GlobalEscalationRequest(BaseModel):
+    enabled: bool = False
+    keyword_patterns: list[str] = Field(default_factory=list)
+
+
+class GlobalEscalationResponse(BaseModel):
+    enabled: bool = False
+    keyword_patterns: list[str] = Field(default_factory=list)
+
+
+@router.get("/global-escalation", response_model=GlobalEscalationResponse)
+async def get_global_escalation_rules():
+    """Получить глобальные правила эскалации (L0)."""
+    rules = get_global_escalation()
+    return GlobalEscalationResponse(enabled=rules.enabled, keyword_patterns=rules.keyword_patterns)
+
+
+@router.put("/global-escalation", response_model=GlobalEscalationResponse)
+async def update_global_escalation_rules(payload: GlobalEscalationRequest):
+    """Обновить глобальные правила эскалации (L0)."""
+    from app.models.reason_schemas import GlobalEscalationRules
+
+    rules = GlobalEscalationRules(enabled=payload.enabled, keyword_patterns=payload.keyword_patterns)
+    save_global_escalation(rules)
+    logger.info("Global escalation rules updated: enabled=%s, patterns=%d", rules.enabled, len(rules.keyword_patterns))
+    return GlobalEscalationResponse(enabled=rules.enabled, keyword_patterns=rules.keyword_patterns)
 
 
 @router.get("/template")

@@ -98,15 +98,16 @@ def classify_section(query: str, reason: ContactReason) -> L2Result:
     best_example_score = 0.0
 
     for ex in reason.example_answers:
-        ex_lemmas = _text_to_lemma_set(ex.user_question)
-        score = _overlap_score(query_lemmas, ex_lemmas)
-        if score > best_example_score:
-            best_example_score = score
-            best_example = ex
+        for q in ex.user_questions:
+            ex_lemmas = _text_to_lemma_set(q)
+            score = _overlap_score(query_lemmas, ex_lemmas)
+            if score > best_example_score:
+                best_example_score = score
+                best_example = ex
 
     # Если очень хорошее совпадение с примером — сразу ответ без LLM
     if best_example and best_example_score >= 0.7:
-        logger.info(f"[L2] EXACT_EXAMPLE|score={best_example_score:.2f}|q={best_example.user_question[:60]}")
+        logger.info(f"[L2] EXACT_EXAMPLE|score={best_example_score:.2f}|q={best_example.user_questions[0][:60]}")
         return L2Result(
             best_example=best_example,
             best_example_score=best_example_score,

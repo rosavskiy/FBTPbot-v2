@@ -184,7 +184,7 @@ def parse_docx(path: Path) -> dict:
         return []
 
     def _extract_example_from_table_row(text: str) -> Optional[dict]:
-        """Extract example Q&A from table row: | question | answer |"""
+        """Extract example Q&A from table row: | question | answer | images? |"""
         if not text.startswith("|"):
             return None
         cells = [c.strip() for c in text.split("|")]
@@ -196,7 +196,17 @@ def parse_docx(path: Path) -> dict:
             if q.lower() in ("вопрос пользователя", "вопрос", ""):
                 return None
             if q and a:
-                return {"user_question": q, "ideal_answer": a}
+                # Support multiple questions separated by " ;; "
+                questions = [s.strip() for s in q.split(" ;; ") if s.strip()]
+                image_codes = []
+                if len(cells) >= 3 and cells[2].strip():
+                    image_codes = [c.strip() for c in cells[2].split(",") if c.strip()]
+                return {
+                    "user_question": questions[0] if questions else q,
+                    "user_questions": questions if questions else [q],
+                    "ideal_answer": a,
+                    "image_codes": image_codes,
+                }
         return None
 
     def _extract_escalation_from_table_row(text: str) -> Optional[dict]:

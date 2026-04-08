@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class QAPair(BaseModel):
@@ -30,10 +30,25 @@ class Complaint(BaseModel):
 
 
 class ExampleQA(BaseModel):
-    """Пример ответа на частый вопрос (L3)."""
+    """Пример ответа на частый вопрос (L3).
 
-    user_question: str = Field(..., description="Типичный вопрос пользователя")
+    Поддерживает несколько вариантов вопроса с одним идеальным ответом.
+    Поле user_question сохраняется для обратной совместимости.
+    """
+
+    user_question: str = Field("", description="Типичный вопрос пользователя (legacy, для обратной совместимости)")
+    user_questions: list[str] = Field(default_factory=list, description="Варианты вопросов пользователя")
     ideal_answer: str = Field(..., description="Идеальный ответ бота")
+    image_codes: list[str] = Field(default_factory=list, description="Коды привязанных изображений")
+
+    @model_validator(mode="after")
+    def _migrate_user_question(self) -> "ExampleQA":
+        """Миграция: если user_questions пуст, берём user_question."""
+        if not self.user_questions and self.user_question:
+            self.user_questions = [self.user_question]
+        if self.user_questions and not self.user_question:
+            self.user_question = self.user_questions[0]
+        return self
 
 
 class EscalationQAPair(BaseModel):
@@ -102,6 +117,7 @@ class ContactReason(BaseModel):
     id: str = Field(..., description="Уникальный ID, напр. 'akt_na_spisanie'")
     name: str = Field(..., description="Название, напр. 'Акт на списание'")
     is_active: bool = Field(True, description="Активна ли причина")
+    folder: str = Field("", description="Путь папки для группировки, напр. 'Группа АРМ/Настройка ККМ'")
     markers: Markers = Field(default_factory=Markers, description="Маркеры для классификации")
     thematic_sections: list[ThematicSection] = Field(default_factory=list, description="Тематические разделы (L2)")
     typical_complaints: list[Complaint] = Field(default_factory=list, description="Типовые жалобы с шаблонами ответов")
@@ -114,8 +130,20 @@ class ContactReason(BaseModel):
     )
 
 
+class GlobalEscalationRules(BaseModel):
+    """Глобальные правила эскалации (L0) — применяются ДО классификации причины."""
+
+    enabled: bool = Field(False, description="Включены ли глобальные правила эскалации")
+    keyword_patterns: list[str] = Field(
+        default_factory=list, description="Фразовые маски для глобальной 100%-эскалации (точное совпадение в тексте)"
+    )
+
+
 class ContactReasonsData(BaseModel):
     """Корневая модель хранилища причин обращения."""
 
     version: str = Field("1.0", description="Версия формата данных")
     reasons: list[ContactReason] = Field(default_factory=list)
+    global_escalation: GlobalEscalationRules = Field(
+        default_factory=GlobalEscalationRules, description="Глобальные правила эскалации (L0)"
+    )

@@ -296,7 +296,7 @@ class RAGEngine:
         # Если найден точный пример ответа
         if l2.best_example and l2.best_example_score >= 0.5:
             parts.append(
-                f'ПРИМЕР ОТВЕТА (похожий вопрос: "{l2.best_example.user_question}"):\n'
+                f'ПРИМЕР ОТВЕТА (похожий вопрос: "{l2.best_example.user_questions[0] if l2.best_example.user_questions else l2.best_example.user_question}"):\n'
                 f"{l2.best_example.ideal_answer}"
             )
 
@@ -432,6 +432,26 @@ class RAGEngine:
 
         return {"matched": False}
 
+    def _check_global_escalation(self, question: str) -> dict:
+        """Проверка глобальных правил эскалации (L0).
+
+        Проверяет keyword_patterns глобально (до L1-классификации).
+        При совпадении — немедленная эскалация без определения причины.
+        """
+        from app.database.reason_store import get_global_escalation
+
+        rules = get_global_escalation()
+        if not rules.enabled:
+            return {"matched": False}
+
+        text_lower = re.sub(r"\s+", " ", question.lower().strip())
+
+        for pattern in rules.keyword_patterns:
+            if pattern.lower().strip() in text_lower:
+                return {"matched": True, "trigger": "keyword", "pattern": pattern}
+
+        return {"matched": False}
+
     async def ask(
         self,
         question: str,
@@ -456,6 +476,46 @@ class RAGEngine:
         # Debug trace accumulator
         llm_used_for_classify = False
         llm_used_for_generate = False
+
+        # ── L0: Глобальная эскалация (до классификации) ──
+        l0_check = self._check_global_escalation(question)
+        if l0_check["matched"]:
+            _total = _time.time() - _start
+            logger.info(f"[ENGINE] L0=global_escalation | pattern={l0_check['pattern']} | time={_total:.1f}s")
+            resp = RAGResponse(
+                answer=(
+                    "По данному вопросу необходима консультация специалиста техподдержки. "
+                    "Передаю ваше обращение оператору."
+                ),
+                confidence=0.0,
+                confidence_reason="L0: глобальная эскалация по ключевой фразе",
+                needs_escalation=True,
+                classification_method="L0:global_escalation",
+            )
+            if debug:
+                resp.debug_trace = {
+                    "l0_check": l0_check,
+                    "l1_method": None,
+                    "l1_confident": False,
+                    "l1_reason": None,
+                    "l1_reason_id": None,
+                    "l1_candidates": [],
+                    "escalation_check": None,
+                    "l2_method": None,
+                    "l2_section": None,
+                    "l2_best_qa_score": None,
+                    "l2_best_example_score": None,
+                    "l2_best_complaint_score": None,
+                    "llm_prompt": None,
+                    "llm_raw_response": None,
+                    "llm_provider": None,
+                    "llm_temperature": None,
+                    "confidence_parsed": 0.0,
+                    "confidence_reason": "L0: глобальная эскалация по ключевой фразе",
+                    "llm_involvement": "none",
+                    "processing_time_ms": int(_total * 1000),
+                }
+            return resp
 
         # ── L1: Определение причины обращения ──
         if reason_id:
@@ -948,7 +1008,7 @@ class RAGEngine:
             result["l2_best_qa_score"] = l2.best_qa_score
             result["l2_best_qa"] = l2.best_qa.question if l2.best_qa else None
             result["l2_best_example_score"] = l2.best_example_score
-            result["l2_best_example"] = l2.best_example.user_question if l2.best_example else None
+            result["l2_best_example"] = (l2.best_example.user_questions[0] if l2.best_example and l2.best_example.user_questions else (l2.best_example.user_question if l2.best_example else None))
 
         result["dry_run"] = dry_run
         return result
