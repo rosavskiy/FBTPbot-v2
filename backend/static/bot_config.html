@@ -63,7 +63,7 @@
 
         <!-- Images Section (global, always visible) -->
         <div class="card card-collapsible" id="imagesCard" onclick="toggleImagesCard(event)">
-            <div class="card-title"><span class="collapse-arrow">▸</span> 🖼️ Изображения</div>
+            <div class="card-title"><span class="collapse-arrow"></span> 🖼️ Изображения</div>
             <div class="card-body" onclick="event.stopPropagation()">
                 <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
                     <input type="file" id="imageUploadInput" accept=".png,.jpg,.jpeg,.gif,.webp" style="display:none" onchange="uploadImage(this)">
@@ -286,7 +286,7 @@
             <div style="display:flex; gap:8px; align-items:center;">
                 <span id="debugSessionInfo" style="font-size:11px; color:var(--gray-500); font-family:var(--font-mono);"></span>
                 <button class="btn btn-sm btn-secondary" onclick="resetDebugSession()">🔄 Новая сессия</button>
-                <button class="btn btn-sm btn-danger" onclick="closeDebugChat()">✕</button>
+                <button class="btn btn-sm btn-danger btn-close" onclick="closeDebugChat()"></button>
             </div>
         </div>
         <div class="modal-body" id="debugMessages"></div>
@@ -304,7 +304,7 @@
     <div class="modal" style="max-width:520px">
         <div class="modal-header">
             <h2>⚙️ Настройки классификации L1</h2>
-            <button class="btn btn-sm btn-danger" onclick="closeClassificationSettings()">✕</button>
+            <button class="btn btn-sm btn-danger btn-close" onclick="closeClassificationSettings()"></button>
         </div>
         <div class="modal-body" style="padding:16px; overflow-y:auto; max-height:70vh;">
             <div class="form-row">
@@ -364,7 +364,7 @@
     <div class="modal" style="max-width:520px">
         <div class="modal-header">
             <h2>⚙️ Глобальная эскалация (L0)</h2>
-            <button class="btn btn-sm btn-danger" onclick="closeGlobalEscalation()">✕</button>
+            <button class="btn btn-sm btn-danger btn-close" onclick="closeGlobalEscalation()"></button>
         </div>
         <div class="modal-body" style="padding:16px; overflow-y:auto; max-height:70vh;">
             <div style="font-size:13px; color:var(--gray-400); margin-bottom:12px;">
@@ -401,7 +401,7 @@
     <div class="modal" style="max-width:600px; height:auto; max-height:80vh;">
         <div class="modal-header">
             <h2>🖼️ Выбор изображения</h2>
-            <button class="btn btn-sm btn-danger" onclick="closeImagePicker()">✕</button>
+            <button class="btn btn-sm btn-danger btn-close" onclick="closeImagePicker()"></button>
         </div>
         <div class="modal-body" style="padding:16px; overflow-y:auto;">
             <div class="img-grid" id="imagePickerGrid"></div>
@@ -499,7 +499,7 @@ function renderImagesGrid() {
             <img src="${img.url}" alt="${img.original_name}" loading="lazy">
             <div class="img-code">Код: ${img.code}</div>
             <div class="img-name">${img.original_name}</div>
-            <button class="img-delete" onclick="event.stopPropagation(); deleteImage('${img.code}')" title="Удалить">×</button>
+            <button class="img-delete" onclick="event.stopPropagation(); deleteImage('${img.code}')" title="Удалить"></button>
         `;
         grid.appendChild(card);
     });
@@ -667,10 +667,10 @@ function renderSidebar() {
             const header = document.createElement('div');
             header.className = 'tree-folder-header';
             header.innerHTML = `
-                <span class="tree-arrow ${isCollapsed ? '' : 'open'}">▸</span>
+                <span class="tree-arrow ${isCollapsed ? '' : 'open'}"></span>
                 <span class="tree-folder-name">${name}</span>
                 <span style="font-size:10px; color:var(--gray-600); margin-left:auto;">${total}</span>
-                <button class="tree-folder-del" title="Удалить папку">×</button>
+                <button class="tree-folder-del" title="Удалить папку"></button>
             `;
             header.querySelector('.tree-arrow').onclick = (e) => {
                 e.stopPropagation();
@@ -723,7 +723,7 @@ function renderSidebar() {
     // Drop zone: move to root (no folder)
     const rootZone = document.createElement('div');
     rootZone.className = 'drag-root-zone';
-    rootZone.textContent = '⬇ В корень';
+    rootZone.innerHTML = '<span class="lucide lucide-arrow-down lucide-sm" style="color:var(--gray-600)"></span> В корень';
     rootZone.ondragover = (e) => handleFolderDragOver(e);
     rootZone.ondragleave = (e) => handleFolderDragLeave(e);
     rootZone.ondrop = (e) => handleFolderDrop(e, '');
@@ -1017,7 +1017,7 @@ function renderL0Keywords() {
     l0Keywords.forEach((kw, idx) => {
         const chip = document.createElement('span');
         chip.className = 'chip esc-keyword';
-        chip.innerHTML = `${kw} <span class="remove" onclick="removeL0Keyword(${idx})">×</span>`;
+        chip.innerHTML = `${kw} <span class="remove" onclick="removeL0Keyword(${idx})"></span>`;
         container.appendChild(chip);
     });
 }
@@ -1136,7 +1136,7 @@ function renderChips(type, items) {
     items.forEach((item, idx) => {
         const chip = document.createElement('span');
         chip.className = `chip ${type}`;
-        chip.innerHTML = `${item} <span class="remove" onclick="removeChip('${type}', ${idx})">×</span>`;
+        chip.innerHTML = `${item} <span class="remove" onclick="removeChip('${type}', ${idx})"></span>`;
         container.appendChild(chip);
     });
 }
@@ -1169,8 +1169,8 @@ function renderSections() {
         item.className = 'accordion-item';
         item.innerHTML = `
             <div class="accordion-header" onclick="toggleAccordion(this)">
-                <span><span class="arrow">▸</span> ${s.title || 'Новый раздел'} (${s.qa_pairs.length} Q&A)</span>
-                <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();removeSection(${si})">×</button>
+                <span><span class="arrow"></span> ${s.title || 'Новый раздел'} (${s.qa_pairs.length} Q&A)</span>
+                <button class="btn btn-sm btn-danger btn-close" onclick="event.stopPropagation();removeSection(${si})"></button>
             </div>
             <div class="accordion-body" id="section-body-${si}">
                 <div class="form-row">
@@ -1196,7 +1196,7 @@ function renderQAPairs(sectionIdx) {
         const div = document.createElement('div');
         div.className = 'qa-pair';
         div.innerHTML = `
-            <div class="qa-actions"><button class="btn btn-sm btn-danger" onclick="removeQA(${sectionIdx},${qi})">×</button></div>
+            <div class="qa-actions"><button class="btn btn-sm btn-danger btn-close" onclick="removeQA(${sectionIdx},${qi})"></button></div>
             <div class="form-label">Вопрос</div>
             <textarea class="form-input" rows="2" onchange="currentReason.thematic_sections[${sectionIdx}].qa_pairs[${qi}].question=this.value">${qa.question}</textarea>
             <div class="form-label" style="margin-top:6px">Ответ</div>
@@ -1242,7 +1242,7 @@ function renderComplaints() {
         const div = document.createElement('div');
         div.className = 'qa-pair';
         div.innerHTML = `
-            <div class="qa-actions"><button class="btn btn-sm btn-danger" onclick="removeComplaint(${ci})">×</button></div>
+            <div class="qa-actions"><button class="btn btn-sm btn-danger btn-close" onclick="removeComplaint(${ci})"></button></div>
             <div class="form-label">Описание жалобы</div>
             <textarea class="form-input" rows="2" onchange="currentReason.typical_complaints[${ci}].description=this.value">${c.description}</textarea>
             <div class="form-label" style="margin-top:6px">Контекст</div>
@@ -1282,7 +1282,7 @@ function renderExamples() {
             questionsHtml += `
                 <div style="display:flex; gap:6px; align-items:start; margin-bottom:4px;">
                     <textarea class="form-input" rows="1" style="flex:1" onchange="currentReason.example_answers[${ei}].user_questions[${qi}]=this.value; syncExampleLegacy(${ei})">${q}</textarea>
-                    ${ex.user_questions.length > 1 ? `<button class="btn btn-sm btn-danger" onclick="removeExampleQuestion(${ei},${qi})" title="Удалить вопрос">×</button>` : ''}
+                    ${ex.user_questions.length > 1 ? `<button class="btn btn-sm btn-danger btn-close" onclick="removeExampleQuestion(${ei},${qi})" title="Удалить вопрос"></button>` : ''}
                 </div>`;
         });
 
@@ -1290,14 +1290,14 @@ function renderExamples() {
         let imgBadgesHtml = '';
         if (ex.image_codes.length > 0) {
             imgBadgesHtml = '<div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;">' +
-                ex.image_codes.map((code, ci) => `<span class="chip" style="font-size:11px; padding:2px 8px;">🖼️ ${code} <span class="remove" onclick="removeExampleImage(${ei},${ci})">×</span></span>`).join('') +
+                ex.image_codes.map((code, ci) => `<span class="chip" style="font-size:11px; padding:2px 8px;">🖼️ ${code} <span class="remove" onclick="removeExampleImage(${ei},${ci})"></span></span>`).join('') +
                 '</div>';
         }
 
         div.innerHTML = `
             <div class="qa-actions">
                 <button class="btn btn-sm btn-secondary" onclick="openImagePicker(${ei})" title="Привязать изображение" style="font-size:11px; padding:3px 6px;">🖼️</button>
-                <button class="btn btn-sm btn-danger" onclick="removeExample(${ei})">×</button>
+                <button class="btn btn-sm btn-danger btn-close" onclick="removeExample(${ei})"></button>
             </div>
             <div class="form-label">Вопросы пользователя</div>
             <div id="exampleQuestions-${ei}">${questionsHtml}</div>
@@ -1539,7 +1539,7 @@ function renderEscalationRules() {
     (rules.metrics.keyword_patterns || []).forEach((kw, idx) => {
         const chip = document.createElement('span');
         chip.className = 'chip esc-keyword';
-        chip.innerHTML = `${kw} <span class="remove" onclick="removeEscKeyword(${idx})">×</span>`;
+        chip.innerHTML = `${kw} <span class="remove" onclick="removeEscKeyword(${idx})"></span>`;
         chipContainer.appendChild(chip);
     });
 
@@ -1550,7 +1550,7 @@ function renderEscalationRules() {
         const div = document.createElement('div');
         div.className = 'qa-pair';
         div.innerHTML = `
-            <div class="qa-actions"><button class="btn btn-sm btn-danger" onclick="removeEscQA(${qi})">×</button></div>
+            <div class="qa-actions"><button class="btn btn-sm btn-danger btn-close" onclick="removeEscQA(${qi})"></button></div>
             <div class="form-label">Вопрос-паттерн</div>
             <textarea class="form-input" rows="1" onchange="currentReason.escalation_rules.qa_pairs[${qi}].question=this.value">${qa.question}</textarea>
             <div class="form-label" style="margin-top:6px">Шаблон ответа при эскалации (опционально)</div>
@@ -1715,11 +1715,11 @@ async function sendDebugMessage() {
             traceHtml += `</div>`;
 
             if (t.llm_prompt) {
-                traceHtml += `<div class="debug-expand" onclick="this.nextElementSibling.classList.toggle('open')">▸ Показать промпт</div>`;
+                traceHtml += `<div class="debug-expand" onclick="this.classList.toggle('open'); this.nextElementSibling.classList.toggle('open')">Показать промпт</div>`;
                 traceHtml += `<div class="debug-expandable"><pre>${escapeHtml(t.llm_prompt)}</pre></div>`;
             }
             if (t.llm_raw_response) {
-                traceHtml += `<div class="debug-expand" onclick="this.nextElementSibling.classList.toggle('open')">▸ Показать сырой ответ LLM</div>`;
+                traceHtml += `<div class="debug-expand" onclick="this.classList.toggle('open'); this.nextElementSibling.classList.toggle('open')">Показать сырой ответ LLM</div>`;
                 traceHtml += `<div class="debug-expandable"><pre>${escapeHtml(t.llm_raw_response)}</pre></div>`;
             }
 
@@ -1732,7 +1732,7 @@ async function sendDebugMessage() {
         botDiv.innerHTML = `
             <div class="bot-answer">${escapeHtml(data.answer)}</div>
             <div class="bot-meta">${metaHtml}</div>
-            ${t ? `<div class="debug-trace-toggle" onclick="document.getElementById('${traceId}').classList.toggle('open'); this.querySelector('.arrow').textContent = document.getElementById('${traceId}').classList.contains('open') ? '▾' : '▸'"><span class="arrow">▸</span> Debug Trace</div>
+            ${t ? `<div class="debug-trace-toggle" onclick="document.getElementById('${traceId}').classList.toggle('open'); var a=this.querySelector('.arrow'); a.classList.toggle('open', document.getElementById('${traceId}').classList.contains('open'))"><span class="arrow"></span> Debug Trace</div>
             <div class="debug-trace-panel" id="${traceId}">${traceHtml}</div>` : ''}
         `;
         container.appendChild(botDiv);
