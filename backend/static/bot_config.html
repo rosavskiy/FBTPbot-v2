@@ -113,7 +113,14 @@
             transition: transform 0.15s var(--ease); flex-shrink: 0;
         }
         .tree-arrow.open { transform: rotate(90deg); }
-        .tree-folder-name { font-size: 13px; color: var(--gray-300); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tree-folder-name { font-size: 13px; color: var(--gray-300); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex:1; }
+        .tree-folder-del {
+            display: none; width: 16px; height: 16px; border: none; background: transparent;
+            color: var(--gray-600); cursor: pointer; font-size: 14px; line-height: 1;
+            padding: 0; flex-shrink: 0; border-radius: 3px; text-align: center;
+        }
+        .tree-folder-del:hover { color: var(--red-400, #f87171); background: rgba(248,113,113,0.1); }
+        .tree-folder-header:hover .tree-folder-del { display: inline-flex; align-items: center; justify-content: center; }
         .tree-children { padding-left: 16px; }
         .tree-leaf {
             display: flex; align-items: center; gap: 6px;
@@ -1227,10 +1234,21 @@ function renderSidebar() {
                 <span class="tree-arrow ${isCollapsed ? '' : 'open'}">▸</span>
                 <span class="tree-folder-name">${name}</span>
                 <span style="font-size:10px; color:var(--gray-600); margin-left:auto;">${total}</span>
+                <button class="tree-folder-del" title="Удалить папку">×</button>
             `;
-            header.onclick = () => {
+            header.querySelector('.tree-arrow').onclick = (e) => {
+                e.stopPropagation();
                 sidebarCollapsed[fullPath] = !sidebarCollapsed[fullPath];
                 renderSidebar();
+            };
+            header.querySelector('.tree-folder-name').onclick = (e) => {
+                e.stopPropagation();
+                sidebarCollapsed[fullPath] = !sidebarCollapsed[fullPath];
+                renderSidebar();
+            };
+            header.querySelector('.tree-folder-del').onclick = (e) => {
+                e.stopPropagation();
+                deleteFolder(fullPath);
             };
             // DnD: folder as drop target
             header.ondragover = (e) => handleFolderDragOver(e);
@@ -1375,6 +1393,55 @@ async function loadFoldersList() {
             dl.appendChild(opt);
         });
     } catch (e) { /* ignore */ }
+}
+
+async function deleteFolder(folderPath) {
+    // Collect all reasons in this folder and subfolders
+    const affected = reasons.filter(r => {
+        const f = r.folder || '';
+        return f === folderPath || f.startsWith(folderPath + '/');
+    });
+
+    // Determine parent folder
+    const lastSlash = folderPath.lastIndexOf('/');
+    const parentFolder = lastSlash >= 0 ? folderPath.substring(0, lastSlash) : '';
+    const parentLabel = parentFolder || 'корень';
+
+    if (affected.length > 0) {
+        if (!confirm(`Удалить папку «${folderPath}»?\n\n${affected.length} причин(а) будут перемещены в «${parentLabel}».`)) return;
+        // Move each reason to parent folder via PATCH
+        for (const r of affected) {
+            const newFolder = r.folder === folderPath
+                ? parentFolder
+                : parentFolder + r.folder.substring(folderPath.length); // preserve sub-structure
+            try {
+                await fetch(`${API}/reasons/${r.id}/folder`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder: newFolder }),
+                });
+                r.folder = newFolder;
+            } catch (e) { /* continue */ }
+        }
+    }
+
+    // Clean up sidebarCollapsed entries for this folder and sub-paths
+    Object.keys(sidebarCollapsed).forEach(k => {
+        if (k === folderPath || k.startsWith(folderPath + '/')) delete sidebarCollapsed[k];
+    });
+
+    // Update editor if current reason was affected
+    if (currentReason && currentReasonId) {
+        const updated = reasons.find(x => x.id === currentReasonId);
+        if (updated) {
+            currentReason.folder = updated.folder;
+            const el = document.getElementById('reasonFolder');
+            if (el) el.value = updated.folder;
+        }
+    }
+
+    renderSidebar();
+    notify(`Папка «${folderPath}» удалена`, 'success');
 }
 
 function promptNewFolder() {
