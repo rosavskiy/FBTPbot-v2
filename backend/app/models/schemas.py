@@ -69,7 +69,7 @@ class SuggestedTopicSchema(BaseModel):
 class DebugTrace(BaseModel):
     """Полный trace pipeline L1→L1.5→L2→L3 для debug-чата."""
 
-    l1_method: str = Field("", description="Метод L1-классификации")
+    l1_method: str | None = Field(None, description="Метод L1-классификации")
     l1_confident: bool = Field(False, description="Уверенность L1")
     l1_reason: str | None = Field(None, description="Определённая причина")
     l1_reason_id: str | None = Field(None, description="ID причины")
