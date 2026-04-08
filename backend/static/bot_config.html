@@ -17,7 +17,8 @@
     </div>
     <div class="actions">
         <button class="btn btn-secondary" onclick="openLlmSettings()">⚙️ Настройка LLM</button>
-        <span id="activeLlmIndicator" style="font-size:12px; color:var(--gray-400); white-space:nowrap;">Активно: неизвестно</span>
+        <button class="btn btn-secondary" onclick="openGlobalEscalation()" title="Глобальные правила эскалации L0 (до классификации)">⚙️ L0</button>
+        <button class="btn btn-secondary" onclick="openClassificationSettings()" title="Настройки классификации L1 (веса маркеров, пороги)">⚙️ L1</button>
         <a href="/api/bot-config/template" class="btn btn-secondary" style="text-decoration:none">📄 Скачать шаблон</a>
         <input type="file" id="importFileInput" accept=".docx" style="display:none" onchange="importDocx(this)">
         <button class="btn btn-success" onclick="document.getElementById('importFileInput').click()">📥 Импорт .docx</button>
@@ -244,7 +245,6 @@
                 <div class="test-result" id="testResult" style="display:none"></div>
             </div>
 
-            <!-- Actions -->
             <!-- Sticky Action Bar -->
             <div class="sticky-action-bar">
                 <div style="display:flex; gap:8px; align-items:center;">
@@ -307,10 +307,9 @@
                     <span id="llmTempValue" style="min-width:30px; font-family:var(--font-mono); font-size:13px;">0.10</span>
                 </div>
             </div>
-            <hr style="border-color:var(--gray-700); margin:8px 0">
-            <div style="display:flex; gap:8px;">
-                <button class="btn btn-secondary" onclick="openGlobalEscalation()" title="Глобальные правила эскалации L0 (до классификации)" style="flex:1">⚙️ L0 — Эскалация</button>
-                <button class="btn btn-secondary" onclick="openClassificationSettings()" title="Настройки классификации L1 (веса маркеров, пороги)" style="flex:1">⚙️ L1 — Классификация</button>
+            <div class="form-row">
+                <div class="form-label">Активная модель</div>
+                <span id="activeLlmIndicator" style="font-size:13px; color:var(--gray-300);">Активно: неизвестно</span>
             </div>
             <div style="margin-top:16px; display:flex; gap:8px;">
                 <button class="btn btn-primary" onclick="saveLlmSettings()">💾 Сохранить</button>
