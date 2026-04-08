@@ -1393,6 +1393,7 @@ function promptNewFolder() {
     createNewReason();
     currentReason.folder = folder;
     document.getElementById('reasonFolder').value = folder;
+    renderSidebar();
     notify(`Папка «${folder}» создана. Заполните причину.`, 'success');
 }
 
