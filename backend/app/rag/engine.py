@@ -1008,7 +1008,11 @@ class RAGEngine:
             result["l2_best_qa_score"] = l2.best_qa_score
             result["l2_best_qa"] = l2.best_qa.question if l2.best_qa else None
             result["l2_best_example_score"] = l2.best_example_score
-            result["l2_best_example"] = (l2.best_example.user_questions[0] if l2.best_example and l2.best_example.user_questions else (l2.best_example.user_question if l2.best_example else None))
+            result["l2_best_example"] = (
+                l2.best_example.user_questions[0]
+                if l2.best_example and l2.best_example.user_questions
+                else (l2.best_example.user_question if l2.best_example else None)
+            )
 
         result["dry_run"] = dry_run
         return result

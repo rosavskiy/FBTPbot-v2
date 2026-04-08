@@ -42,7 +42,7 @@ class ExampleQA(BaseModel):
     image_codes: list[str] = Field(default_factory=list, description="Коды привязанных изображений")
 
     @model_validator(mode="after")
-    def _migrate_user_question(self) -> "ExampleQA":
+    def _migrate_user_question(self) -> ExampleQA:
         """Миграция: если user_questions пуст, берём user_question."""
         if not self.user_questions and self.user_question:
             self.user_questions = [self.user_question]

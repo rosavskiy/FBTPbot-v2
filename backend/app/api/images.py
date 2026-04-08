@@ -8,11 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -127,11 +125,13 @@ async def upload_image(file: UploadFile = File(...), code: str | None = None):
 
     dest.write_bytes(content)
 
-    images.append({
-        "code": code,
-        "original_name": file.filename,
-        "stored_as": stored_as,
-    })
+    images.append(
+        {
+            "code": code,
+            "original_name": file.filename,
+            "stored_as": stored_as,
+        }
+    )
     _save_metadata(images)
 
     logger.info(f"Image uploaded: code={code}, file={file.filename}, stored={stored_as}")
