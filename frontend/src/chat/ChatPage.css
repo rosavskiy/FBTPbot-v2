@@ -251,6 +251,25 @@
   color: var(--accent-dark);
 }
 
+/* ── Images ── */
+.chat-images {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chat-image {
+  max-width: 100%;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.chat-image:hover {
+  opacity: 0.85;
+}
+
 /* ── Feedback ── */
 .chat-feedback {
   display: flex;

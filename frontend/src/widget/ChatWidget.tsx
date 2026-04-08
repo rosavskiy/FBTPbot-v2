@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { api, ChatResponse, SuggestedTopic } from '../api/client'
+import { api, ChatResponse, ImageData, SuggestedTopic } from '../api/client'
 import ReactMarkdown from 'react-markdown'
 import './ChatWidget.css'
 
@@ -7,6 +7,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   youtubeLinks?: string[]
+  images?: ImageData[]
   needsEscalation?: boolean
   suggestedTopics?: SuggestedTopic[]
   responseType?: 'answer' | 'clarification'
@@ -118,6 +119,7 @@ export function ChatWidget() {
         role: 'assistant',
         content: response.answer,
         youtubeLinks: response.youtube_links,
+        images: response.images?.length ? response.images : undefined,
         needsEscalation: response.needs_escalation,
         suggestedTopics: response.suggested_topics || undefined,
         responseType: response.response_type,
@@ -173,6 +175,19 @@ export function ChatWidget() {
                     📹 Видео-инструкция
                   </a>
                 ))}
+                {msg.images && msg.images.length > 0 && (
+                  <div className="widget-images">
+                    {msg.images.map((img, j) => (
+                      <a key={j} href={img.data_uri} target="_blank" rel="noopener noreferrer">
+                        <img
+                          src={img.data_uri}
+                          alt={`Скриншот ${img.code}`}
+                          className="widget-chat-image"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                )}
                 {/* Кнопки выбора темы (уточнение) */}
                 {msg.responseType === 'clarification' && msg.suggestedTopics && msg.suggestedTopics.length > 0 && (
                   <div className="widget-clarification">

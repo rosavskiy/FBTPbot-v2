@@ -6,8 +6,10 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import mimetypes
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -70,6 +72,56 @@ def _next_code(images: list[dict]) -> str:
     while code in existing_codes:
         code += 1
     return str(code)
+
+
+_MIME_MAP = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+
+def resolve_image_codes(codes: list[str]) -> list[dict]:
+    """Resolve image codes to base64 data URIs and file paths.
+
+    Returns list of dicts: {"code", "data_uri", "file_path"}.
+    Skips codes that don't exist or can't be read.
+    """
+    if not codes:
+        return []
+
+    images_meta = _load_metadata()
+    code_to_meta = {img["code"]: img for img in images_meta}
+    result: list[dict] = []
+
+    for code in codes:
+        meta = code_to_meta.get(code)
+        if not meta:
+            logger.warning(f"Image code '{code}' not found in metadata")
+            continue
+
+        stored_as = meta.get("stored_as", "")
+        file_path = IMAGES_DIR / stored_as
+        if not file_path.is_file():
+            logger.warning(f"Image file not found: {file_path}")
+            continue
+
+        try:
+            raw = file_path.read_bytes()
+            ext = file_path.suffix.lower()
+            mime = _MIME_MAP.get(ext) or mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+            b64 = base64.b64encode(raw).decode("ascii")
+            result.append({
+                "code": code,
+                "data_uri": f"data:{mime};base64,{b64}",
+                "file_path": str(file_path.resolve()),
+            })
+        except Exception as exc:
+            logger.warning(f"Failed to read image '{code}': {exc}")
+
+    return result
 
 
 @router.get("", response_model=ImagesListResponse)

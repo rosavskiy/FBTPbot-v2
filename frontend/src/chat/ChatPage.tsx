@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { api, ChatResponse, SuggestedTopic } from '../api/client'
+import { api, ChatResponse, ImageData, SuggestedTopic } from '../api/client'
 import ReactMarkdown from 'react-markdown'
 import './ChatPage.css'
 
@@ -9,6 +9,7 @@ interface Message {
   confidence?: number
   needsEscalation?: boolean
   youtubeLinks?: string[]
+  images?: ImageData[]
   sourceArticles?: string[]
   suggestedTopics?: SuggestedTopic[]
   responseType?: 'answer' | 'clarification'
@@ -67,6 +68,7 @@ export function ChatPage() {
         confidence: response.confidence,
         needsEscalation: response.needs_escalation,
         youtubeLinks: response.youtube_links,
+        images: response.images?.length ? response.images : undefined,
         sourceArticles: response.source_articles,
         suggestedTopics: response.suggested_topics || undefined,
         responseType: response.response_type,
@@ -156,6 +158,7 @@ export function ChatPage() {
         confidence: response.confidence,
         needsEscalation: response.needs_escalation,
         youtubeLinks: response.youtube_links,
+        images: response.images?.length ? response.images : undefined,
         sourceArticles: response.source_articles,
         responseType: response.response_type,
         suggestedTopics: response.suggested_topics || undefined,
@@ -207,6 +210,21 @@ export function ChatPage() {
                   {msg.youtubeLinks.map((link, j) => (
                     <a key={j} href={link} target="_blank" rel="noopener noreferrer">
                       {link}
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              {/* Изображения */}
+              {msg.images && msg.images.length > 0 && (
+                <div className="chat-images">
+                  {msg.images.map((img, j) => (
+                    <a key={j} href={img.data_uri} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={img.data_uri}
+                        alt={`Скриншот ${img.code}`}
+                        className="chat-image"
+                      />
                     </a>
                   ))}
                 </div>

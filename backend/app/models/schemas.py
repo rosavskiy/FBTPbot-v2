@@ -92,6 +92,13 @@ class DebugTrace(BaseModel):
     processing_time_ms: int = Field(0, description="Время обработки в мс")
 
 
+class ImageData(BaseModel):
+    """Изображение в формате base64 data URI."""
+
+    code: str = Field(..., description="Код изображения")
+    data_uri: str = Field(..., description="Base64 data URI (data:image/...;base64,...)")
+
+
 class ChatResponse(BaseModel):
     answer: str = Field(..., description="Ответ бота")
     session_id: str = Field(..., description="ID сессии")
@@ -108,6 +115,7 @@ class ChatResponse(BaseModel):
     source_articles: list[str] = Field(default_factory=list, description="ID статей-источников")
     youtube_links: list[str] = Field(default_factory=list, description="YouTube ссылки")
     has_images: bool = Field(False, description="Есть ли скриншоты в источниках")
+    images: list[ImageData] = Field(default_factory=list, description="Изображения в формате base64 data URI")
     response_type: str = Field("answer", description="Тип ответа: answer | clarification")
     suggested_topics: list[SuggestedTopicSchema] | None = Field(
         None, description="Предложенные темы для уточнения (при response_type=clarification)"

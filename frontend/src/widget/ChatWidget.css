@@ -208,6 +208,25 @@
   color: var(--accent-dark);
 }
 
+/* ── Images ── */
+.widget-images {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.widget-chat-image {
+  max-width: 100%;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.widget-chat-image:hover {
+  opacity: 0.85;
+}
+
 .widget-escalation-btn {
   display: block;
   margin-top: 8px;

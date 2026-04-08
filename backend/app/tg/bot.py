@@ -18,6 +18,7 @@ import html
 import logging
 import os
 import sys
+from pathlib import Path
 
 from telegram import (
     InlineKeyboardButton,
@@ -119,6 +120,23 @@ def _build_reason_keyboard(candidates: list[dict]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
+async def _send_images(message, images: list[dict]):
+    """Send each image from rag_response.images as a separate photo message."""
+    for img in images:
+        file_path = img.get("file_path")
+        if not file_path:
+            continue
+        p = Path(file_path)
+        if not p.is_file():
+            logger.warning(f"[TG] Image file not found: {file_path}")
+            continue
+        try:
+            with open(p, "rb") as f:
+                await message.reply_photo(photo=f)
+        except Exception as exc:
+            logger.warning(f"[TG] Failed to send image {file_path}: {exc}")
+
+
 # ═══════════════════════════════════════════════════
 #  Обработчики команд
 # ═══════════════════════════════════════════════════
@@ -198,6 +216,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _add_to_history(user_id, "assistant", rag_response.answer)
             await update.message.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
+            # Отправка изображений отдельными сообщениями
+            if rag_response.images:
+                await _send_images(update.message, rag_response.images)
+
             # Логируем в Google Sheets
             await get_gsheet_logger().log(
                 question=original_query,
@@ -255,6 +277,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     logger.info(f"[TG] DONE|answer_len={len(rag_response.answer)}|user={username}")
     await update.message.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+    # Отправка изображений отдельными сообщениями
+    if rag_response.images:
+        await _send_images(update.message, rag_response.images)
 
     # Логируем в Google Sheets
     await get_gsheet_logger().log(
@@ -343,6 +369,10 @@ async def handle_reason_callback(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     except Exception:
         await query.message.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+    # Отправка изображений отдельными сообщениями
+    if rag_response.images:
+        await _send_images(query.message, rag_response.images)
 
     # Логируем в Google Sheets
     await get_gsheet_logger().log(

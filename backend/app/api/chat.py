@@ -17,6 +17,7 @@ from app.models.schemas import (
     ChatRequest,
     ChatResponse,
     DebugTrace,
+    ImageData,
     compute_confidence_label,
     compute_confidence_level,
 )
@@ -118,6 +119,7 @@ async def send_message(
         source_articles=rag_response.source_articles,
         youtube_links=rag_response.youtube_links,
         has_images=bool(rag_response.images),
+        images=[ImageData(code=img["code"], data_uri=img["data_uri"]) for img in rag_response.images],
         response_type="answer",
         detected_reason=rag_response.detected_reason_name,
         thematic_section=rag_response.thematic_section,

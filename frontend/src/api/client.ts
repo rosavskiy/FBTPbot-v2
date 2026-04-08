@@ -11,6 +11,11 @@ export interface SuggestedTopic {
   snippet: string
 }
 
+export interface ImageData {
+  code: string
+  data_uri: string
+}
+
 export interface ChatResponse {
   answer: string
   session_id: string
@@ -19,6 +24,7 @@ export interface ChatResponse {
   source_articles: string[]
   youtube_links: string[]
   has_images: boolean
+  images: ImageData[]
   response_type: 'answer' | 'clarification'
   suggested_topics: SuggestedTopic[] | null
   llm_provider?: string | null
