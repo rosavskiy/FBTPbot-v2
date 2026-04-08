@@ -98,6 +98,39 @@
             box-shadow: 0 0 0 3px var(--accent-subtle);
         }
         .sidebar-list { flex: 1; overflow-y: auto; padding: 8px; }
+        /* ── Tree (Confluence-style) ── */
+        .tree-node { margin: 0; padding: 0; }
+        .tree-folder-header {
+            display: flex; align-items: center; gap: 4px;
+            padding: 5px 6px; cursor: pointer; border-radius: var(--radius-sm);
+            border: 1px solid transparent; transition: all 0.15s var(--ease);
+            user-select: none;
+        }
+        .tree-folder-header:hover { background: var(--gray-800); }
+        .tree-arrow {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 16px; height: 16px; font-size: 11px; color: var(--gray-500);
+            transition: transform 0.15s var(--ease); flex-shrink: 0;
+        }
+        .tree-arrow.open { transform: rotate(90deg); }
+        .tree-folder-name { font-size: 13px; color: var(--gray-300); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tree-children { padding-left: 16px; }
+        .tree-leaf {
+            display: flex; align-items: center; gap: 6px;
+            padding: 4px 6px; cursor: pointer; border-radius: var(--radius-sm);
+            border: 1px solid transparent; transition: all 0.15s var(--ease);
+        }
+        .tree-leaf:hover { background: var(--gray-800); }
+        .tree-leaf.active { background: var(--accent-subtle); border-color: rgba(99,102,241,0.2); }
+        .tree-leaf.inactive .tree-leaf-name { color: var(--gray-600); text-decoration: line-through; }
+        .tree-leaf-dot {
+            width: 5px; height: 5px; border-radius: 50%;
+            background: var(--gray-600); flex-shrink: 0; margin: 0 5px;
+        }
+        .tree-leaf.active .tree-leaf-dot { background: var(--accent); }
+        .tree-leaf-name { font-size: 13px; color: var(--gray-200); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tree-leaf.active .tree-leaf-name { color: var(--accent-light); font-weight: 500; }
+        /* keep old sidebar-item for non-tree elements */
         .sidebar-item {
             padding: 10px 12px;
             border-radius: var(--radius-sm);
@@ -134,9 +167,9 @@
             border-top: 1px solid var(--gray-800);
         }
         /* Drag-and-drop */
-        .sidebar-item[draggable="true"] { cursor: grab; }
-        .sidebar-item.dragging { opacity: 0.4; }
-        .sidebar-item.drag-over { border: 1px dashed var(--accent); background: var(--accent-subtle); }
+        .tree-leaf[draggable="true"] { cursor: grab; }
+        .tree-leaf.dragging { opacity: 0.4; }
+        .tree-folder-header.drag-over { border: 1px dashed var(--accent); background: var(--accent-subtle); }
         .drag-root-zone {
             min-height: 24px;
             border: 1px dashed transparent;
@@ -1135,120 +1168,108 @@ function renderSidebar() {
         (r.folder || '').toLowerCase().includes(search)
     );
 
-    // Build tree structure
-    const tree = {};
-    const rootItems = [];
+    // Build nested tree: { _children: { FolderName: { _children: {...}, _reasons: [...] } }, _reasons: [...] }
+    const root = { _children: {}, _reasons: [] };
 
     filtered.forEach(r => {
-        const folder = r.folder || '';
+        const folder = (r.folder || '').trim();
         if (!folder) {
-            rootItems.push(r);
+            root._reasons.push(r);
         } else {
-            if (!tree[folder]) tree[folder] = [];
-            tree[folder].push(r);
+            const parts = folder.split('/');
+            let node = root;
+            parts.forEach(part => {
+                if (!node._children[part]) node._children[part] = { _children: {}, _reasons: [] };
+                node = node._children[part];
+            });
+            node._reasons.push(r);
         }
     });
 
-    // Get all unique folder paths, sorted
-    const folderPaths = Object.keys(tree).sort();
-
-    // Build nested folder structure
-    const folderTree = {};
-    folderPaths.forEach(path => {
+    // Also ensure empty folders from sidebarCollapsed appear (so newly created folders show)
+    Object.keys(sidebarCollapsed).forEach(path => {
+        if (!path) return;
         const parts = path.split('/');
-        let current = folderTree;
+        let node = root;
         parts.forEach(part => {
-            if (!current[part]) current[part] = { _children: {}, _reasons: [] };
-            current = current[part]._children;
+            if (!node._children[part]) node._children[part] = { _children: {}, _reasons: [] };
+            node = node._children[part];
         });
     });
 
-    // Render folder nodes recursively
-    function renderFolderNode(name, fullPath, depth) {
-        const items = tree[fullPath] || [];
-        const folderDiv = document.createElement('div');
-        folderDiv.style.marginLeft = (depth * 12) + 'px';
-
-        const header = document.createElement('div');
-        header.className = 'sidebar-item';
-        header.style.cssText = 'background:transparent; border:none; padding:6px 8px; cursor:pointer; display:flex; align-items:center; gap:6px;';
-        const isCollapsed = sidebarCollapsed[fullPath];
-        header.innerHTML = `
-            <span style="font-size:10px; color:var(--gray-500); transition:transform 0.2s; display:inline-block; ${isCollapsed ? '' : 'transform:rotate(90deg)'}"">▸</span>
-            <span style="font-size:13px; color:var(--gray-400);">📁 ${name}</span>
-            <span style="font-size:10px; color:var(--gray-600); margin-left:auto;">${items.length}</span>
-        `;
-        header.onclick = () => {
-            sidebarCollapsed[fullPath] = !sidebarCollapsed[fullPath];
-            renderSidebar();
-        };
-        // Drop target: drag reason onto folder header
-        header.ondragover = (e) => handleFolderDragOver(e);
-        header.ondragleave = (e) => handleFolderDragLeave(e);
-        header.ondrop = (e) => handleFolderDrop(e, fullPath);
-        folderDiv.appendChild(header);
-
-        if (!isCollapsed) {
-            // Render sub-folders
-            const subPaths = folderPaths.filter(p => {
-                if (!p.startsWith(fullPath + '/')) return false;
-                const rest = p.substring(fullPath.length + 1);
-                return !rest.includes('/');
-            });
-            subPaths.forEach(sp => {
-                const subName = sp.substring(fullPath.length + 1);
-                folderDiv.appendChild(renderFolderNode(subName, sp, depth + 1));
-            });
-
-            // Render reasons in this folder
-            items.forEach(r => {
-                const div = document.createElement('div');
-                div.style.marginLeft = ((depth + 1) * 12) + 'px';
-                div.className = `sidebar-item ${r.id === currentReasonId ? 'active' : ''} ${!r.is_active ? 'inactive' : ''}`;
-                div.innerHTML = `<div class="name">${r.name}</div><div class="meta">${r.markers_count} маркеров · ${r.sections_count} разделов · ${r.qa_count} Q&A</div>`;
-                div.onclick = () => selectReason(r.id);
-                div.draggable = true;
-                div.ondragstart = (e) => handleDragStart(e, r.id);
-                div.ondragend = (e) => handleDragEnd(e);
-                folderDiv.appendChild(div);
-            });
-        }
-
-        return folderDiv;
+    // Count total items in a node (recursive)
+    function countItems(node) {
+        let c = node._reasons.length;
+        Object.values(node._children).forEach(ch => { c += countItems(ch); });
+        return c;
     }
 
-    // Render top-level folders (not sub-folders)
-    const topFolders = folderPaths.filter(p => !p.includes('/'));
-    topFolders.forEach(fp => {
-        list.appendChild(renderFolderNode(fp, fp, 0));
-    });
+    // Render tree recursively
+    function renderNode(node, parentPath) {
+        const container = document.createDocumentFragment();
 
-    // Also render sub-folders that have a parent not in the list (orphaned sub-paths)
-    const renderedPaths = new Set();
-    topFolders.forEach(fp => {
-        renderedPaths.add(fp);
-        folderPaths.filter(p => p.startsWith(fp + '/')).forEach(p => renderedPaths.add(p));
-    });
-    folderPaths.filter(p => !renderedPaths.has(p)).forEach(fp => {
-        list.appendChild(renderFolderNode(fp, fp, 0));
-    });
+        // Sorted folder names
+        const folderNames = Object.keys(node._children).sort();
 
-    // Render root items (no folder)
-    rootItems.forEach(r => {
-        const div = document.createElement('div');
-        div.className = `sidebar-item ${r.id === currentReasonId ? 'active' : ''} ${!r.is_active ? 'inactive' : ''}`;
-        div.innerHTML = `<div class="name">${r.name}</div><div class="meta">${r.markers_count} маркеров · ${r.sections_count} разделов · ${r.qa_count} Q&A</div>`;
-        div.onclick = () => selectReason(r.id);
-        div.draggable = true;
-        div.ondragstart = (e) => handleDragStart(e, r.id);
-        div.ondragend = (e) => handleDragEnd(e);
-        list.appendChild(div);
-    });
+        folderNames.forEach(name => {
+            const fullPath = parentPath ? parentPath + '/' + name : name;
+            const child = node._children[name];
+            const total = countItems(child);
+            const isCollapsed = sidebarCollapsed[fullPath];
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'tree-node';
+
+            // Folder header
+            const header = document.createElement('div');
+            header.className = 'tree-folder-header';
+            header.innerHTML = `
+                <span class="tree-arrow ${isCollapsed ? '' : 'open'}">▸</span>
+                <span class="tree-folder-name">${name}</span>
+                <span style="font-size:10px; color:var(--gray-600); margin-left:auto;">${total}</span>
+            `;
+            header.onclick = () => {
+                sidebarCollapsed[fullPath] = !sidebarCollapsed[fullPath];
+                renderSidebar();
+            };
+            // DnD: folder as drop target
+            header.ondragover = (e) => handleFolderDragOver(e);
+            header.ondragleave = (e) => handleFolderDragLeave(e);
+            header.ondrop = (e) => handleFolderDrop(e, fullPath);
+            wrapper.appendChild(header);
+
+            // Children container
+            if (!isCollapsed) {
+                const childrenDiv = document.createElement('div');
+                childrenDiv.className = 'tree-children';
+                childrenDiv.appendChild(renderNode(child, fullPath));
+                wrapper.appendChild(childrenDiv);
+            }
+
+            container.appendChild(wrapper);
+        });
+
+        // Render reason leaves
+        node._reasons.forEach(r => {
+            const leaf = document.createElement('div');
+            leaf.className = `tree-leaf ${r.id === currentReasonId ? 'active' : ''} ${!r.is_active ? 'inactive' : ''}`;
+            leaf.innerHTML = `<span class="tree-leaf-dot"></span><span class="tree-leaf-name">${r.name}</span>`;
+            leaf.onclick = () => selectReason(r.id);
+            leaf.draggable = true;
+            leaf.ondragstart = (e) => handleDragStart(e, r.id);
+            leaf.ondragend = (e) => handleDragEnd(e);
+            container.appendChild(leaf);
+        });
+
+        return container;
+    }
+
+    list.appendChild(renderNode(root, ''));
 
     // Drop zone: move to root (no folder)
     const rootZone = document.createElement('div');
     rootZone.className = 'drag-root-zone';
-    rootZone.textContent = '⬇ Перетащите сюда — в корень';
+    rootZone.textContent = '⬇ В корень';
     rootZone.ondragover = (e) => handleFolderDragOver(e);
     rootZone.ondragleave = (e) => handleFolderDragLeave(e);
     rootZone.ondrop = (e) => handleFolderDrop(e, '');
