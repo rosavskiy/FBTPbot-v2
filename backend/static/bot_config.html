@@ -1,620 +1,18 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Настройка бота — Фармбазис v2</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        /* ── Design Tokens (unified with frontend) ── */
-        :root {
-            --gray-50: #fafafa; --gray-100: #f4f4f5; --gray-200: #e4e4e7;
-            --gray-300: #d4d4d8; --gray-400: #a1a1aa; --gray-500: #71717a;
-            --gray-600: #52525b; --gray-700: #3f3f46; --gray-800: #27272a;
-            --gray-900: #18181b; --gray-950: #09090b;
-            --accent: #6366f1; --accent-light: #e0e7ff; --accent-dark: #4338ca;
-            --accent-subtle: rgba(99,102,241,0.08);
-            --success: #22c55e; --warning: #f59e0b; --danger: #ef4444;
-            --radius-xs: 6px; --radius-sm: 8px; --radius: 12px; --radius-lg: 16px;
-            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
-            --ease: cubic-bezier(0.4, 0, 0.2, 1);
-        }
+    <link rel="stylesheet" href="/static/bot_config.css">
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: var(--font-sans);
-            background: var(--gray-950);
-            color: var(--gray-200);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            -webkit-font-smoothing: antialiased;
-        }
-
-        /* ── Header ── */
-        .header {
-            background: var(--gray-900);
-            padding: 12px 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid var(--gray-800);
-        }
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .header-icon {
-            width: 32px;
-            height: 32px;
-            border-radius: var(--radius-sm);
-            background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            font-weight: 700;
-            color: white;
-        }
-        .header h1 {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--gray-100);
-            letter-spacing: -0.01em;
-        }
-        .header .actions { display: flex; gap: 8px; }
-
-        /* ── Layout ── */
-        .layout { display: flex; flex: 1; overflow: hidden; }
-
-        /* ── Sidebar ── */
-        .sidebar {
-            width: 280px;
-            background: var(--gray-900);
-            border-right: 1px solid var(--gray-800);
-            display: flex;
-            flex-direction: column;
-        }
-        .sidebar-header {
-            padding: 12px;
-            border-bottom: 1px solid var(--gray-800);
-        }
-        .sidebar-header input {
-            width: 100%;
-            padding: 9px 12px;
-            background: var(--gray-950);
-            border: 1px solid var(--gray-800);
-            border-radius: var(--radius-sm);
-            color: var(--gray-200);
-            font-size: 13px;
-            font-family: var(--font-sans);
-            outline: none;
-            transition: border-color 0.2s var(--ease);
-        }
-        .sidebar-header input:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px var(--accent-subtle);
-        }
-        .sidebar-list { flex: 1; overflow-y: auto; padding: 8px; }
-        /* ── Tree (Confluence-style) ── */
-        .tree-node { margin: 0; padding: 0; }
-        .tree-folder-header {
-            display: flex; align-items: center; gap: 4px;
-            padding: 5px 6px; cursor: pointer; border-radius: var(--radius-sm);
-            border: 1px solid transparent; transition: all 0.15s var(--ease);
-            user-select: none;
-        }
-        .tree-folder-header:hover { background: var(--gray-800); }
-        .tree-arrow {
-            display: inline-flex; align-items: center; justify-content: center;
-            width: 16px; height: 16px; font-size: 11px; color: var(--gray-500);
-            transition: transform 0.15s var(--ease); flex-shrink: 0;
-        }
-        .tree-arrow.open { transform: rotate(90deg); }
-        .tree-folder-name { font-size: 13px; color: var(--gray-300); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex:1; }
-        .tree-folder-del {
-            display: none; width: 16px; height: 16px; border: none; background: transparent;
-            color: var(--gray-600); cursor: pointer; font-size: 14px; line-height: 1;
-            padding: 0; flex-shrink: 0; border-radius: 3px; text-align: center;
-        }
-        .tree-folder-del:hover { color: var(--red-400, #f87171); background: rgba(248,113,113,0.1); }
-        .tree-folder-header:hover .tree-folder-del { display: inline-flex; align-items: center; justify-content: center; }
-        .tree-children { padding-left: 16px; }
-        .tree-leaf {
-            display: flex; align-items: center; gap: 6px;
-            padding: 4px 6px; cursor: pointer; border-radius: var(--radius-sm);
-            border: 1px solid transparent; transition: all 0.15s var(--ease);
-        }
-        .tree-leaf:hover { background: var(--gray-800); }
-        .tree-leaf.active { background: var(--accent-subtle); border-color: rgba(99,102,241,0.2); }
-        .tree-leaf.inactive .tree-leaf-name { color: var(--gray-600); text-decoration: line-through; }
-        .tree-leaf-dot {
-            width: 5px; height: 5px; border-radius: 50%;
-            background: var(--gray-600); flex-shrink: 0; margin: 0 5px;
-        }
-        .tree-leaf.active .tree-leaf-dot { background: var(--accent); }
-        .tree-leaf-name { font-size: 13px; color: var(--gray-200); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .tree-leaf.active .tree-leaf-name { color: var(--accent-light); font-weight: 500; }
-        /* keep old sidebar-item for non-tree elements */
-        .sidebar-item {
-            padding: 10px 12px;
-            border-radius: var(--radius-sm);
-            cursor: pointer;
-            margin-bottom: 2px;
-            transition: all 0.15s var(--ease);
-            border: 1px solid transparent;
-        }
-        .sidebar-item:hover {
-            background: var(--gray-800);
-        }
-        .sidebar-item.active {
-            background: var(--accent-subtle);
-            border-color: rgba(99,102,241,0.2);
-            border-left: 3px solid var(--accent);
-        }
-        .sidebar-item .name {
-            font-size: 14px;
-            font-weight: 500;
-            color: var(--gray-100);
-        }
-        .sidebar-item.active .name { color: var(--accent-light); }
-        .sidebar-item .meta {
-            font-size: 11px;
-            color: var(--gray-500);
-            margin-top: 2px;
-        }
-        .sidebar-item.inactive .name {
-            color: var(--gray-600);
-            text-decoration: line-through;
-        }
-        .sidebar-footer {
-            padding: 12px;
-            border-top: 1px solid var(--gray-800);
-        }
-        /* Drag-and-drop */
-        .tree-leaf[draggable="true"] { cursor: grab; }
-        .tree-leaf.dragging { opacity: 0.4; }
-        .tree-folder-header.drag-over { border: 1px dashed var(--accent); background: var(--accent-subtle); }
-        .drag-root-zone {
-            min-height: 24px;
-            border: 1px dashed transparent;
-            border-radius: var(--radius-sm);
-            margin-top: 4px;
-            padding: 4px 8px;
-            font-size: 11px;
-            color: var(--gray-600);
-            text-align: center;
-            transition: all 0.15s var(--ease);
-        }
-        .drag-root-zone.drag-over { border-color: var(--accent); background: var(--accent-subtle); color: var(--gray-400); }
-
-        /* ── Main content ── */
-        .main {
-            flex: 1;
-            overflow-y: auto;
-            padding: 24px;
-            background: var(--gray-950);
-        }
-        .empty-state {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: var(--gray-600);
-            font-size: 15px;
-        }
-
-        /* ── Cards ── */
-        .card {
-            background: var(--gray-900);
-            border-radius: var(--radius);
-            padding: 20px;
-            margin-bottom: 16px;
-            border: 1px solid var(--gray-800);
-            transition: border-color 0.2s var(--ease);
-        }
-        .card:hover {
-            border-color: var(--gray-700);
-        }
-        .card-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--gray-100);
-            margin-bottom: 14px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            letter-spacing: -0.01em;
-        }
-
-        /* ── Form elements ── */
-        .form-row { margin-bottom: 12px; }
-        .form-label {
-            font-size: 11px;
-            color: var(--gray-500);
-            margin-bottom: 4px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            font-weight: 500;
-        }
-        .form-input {
-            width: 100%;
-            padding: 9px 12px;
-            background: var(--gray-950);
-            border: 1px solid var(--gray-800);
-            border-radius: var(--radius-sm);
-            color: var(--gray-200);
-            font-size: 14px;
-            font-family: var(--font-sans);
-            outline: none;
-            transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
-        }
-        .form-input:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px var(--accent-subtle);
-        }
-        textarea.form-input {
-            min-height: 60px;
-            resize: vertical;
-            font-family: var(--font-sans);
-        }
-
-        /* ── Chips ── */
-        .chips-container { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-        .chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 10px;
-            background: var(--gray-800);
-            border-radius: 9999px;
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--gray-200);
-            border: 1px solid var(--gray-700);
-            transition: all 0.15s var(--ease);
-        }
-        .chip.verb { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.2); color: #86efac; }
-        .chip.noun { background: rgba(168,85,247,0.12); border-color: rgba(168,85,247,0.2); color: #d8b4fe; }
-        .chip.numeric { background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.2); color: #fcd34d; }
-        .chip.phrase { background: rgba(244,63,94,0.12); border-color: rgba(244,63,94,0.2); color: #fda4af; }
-        .chip .remove {
-            cursor: pointer;
-            color: var(--gray-500);
-            font-weight: bold;
-            font-size: 13px;
-            line-height: 1;
-            transition: color 0.15s;
-        }
-        .chip .remove:hover { color: var(--danger); }
-        .chip-input-row { display: flex; gap: 6px; margin-top: 6px; }
-        .chip-input-row input {
-            flex: 1;
-            padding: 7px 10px;
-            background: var(--gray-950);
-            border: 1px solid var(--gray-800);
-            border-radius: var(--radius-sm);
-            color: var(--gray-200);
-            font-size: 13px;
-            font-family: var(--font-sans);
-            outline: none;
-            transition: border-color 0.2s var(--ease);
-        }
-        .chip-input-row input:focus { border-color: var(--accent); }
-        .chip-input-row button { padding: 7px 12px; font-size: 12px; }
-
-        /* ── Buttons ── */
-        .btn {
-            padding: 8px 16px;
-            border-radius: var(--radius-sm);
-            border: none;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            font-family: var(--font-sans);
-            transition: all 0.2s var(--ease);
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .btn-primary {
-            background: var(--accent);
-            color: white;
-            box-shadow: 0 1px 3px rgba(99,102,241,0.2);
-        }
-        .btn-primary:hover {
-            background: var(--accent-dark);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(99,102,241,0.3);
-        }
-        .btn-danger { background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.2); }
-        .btn-danger:hover { background: rgba(239,68,68,0.25); color: #fecaca; }
-        .btn-secondary { background: var(--gray-800); color: var(--gray-300); border: 1px solid var(--gray-700); }
-        .btn-secondary:hover { background: var(--gray-700); color: var(--gray-100); }
-        .btn-success {
-            background: rgba(34,197,94,0.15);
-            color: #86efac;
-            border: 1px solid rgba(34,197,94,0.2);
-        }
-        .btn-success:hover { background: rgba(34,197,94,0.25); }
-        .btn-sm { padding: 5px 10px; font-size: 12px; }
-
-        /* ── Accordion ── */
-        .accordion-item {
-            border: 1px solid var(--gray-800);
-            border-radius: var(--radius-sm);
-            margin-bottom: 8px;
-            overflow: hidden;
-        }
-        .accordion-header {
-            padding: 10px 14px;
-            background: var(--gray-900);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 14px;
-            color: var(--gray-200);
-            transition: background 0.15s var(--ease);
-        }
-        .accordion-header:hover { background: var(--gray-800); }
-        .accordion-body { padding: 14px; display: none; }
-        .accordion-body.open { display: block; }
-        .accordion-header .arrow { transition: transform 0.2s var(--ease); }
-        .accordion-header.open .arrow { transform: rotate(90deg); }
-
-        /* ── QA pair ── */
-        .qa-pair {
-            background: var(--gray-950);
-            border: 1px solid var(--gray-800);
-            border-radius: var(--radius-sm);
-            padding: 12px;
-            margin-bottom: 8px;
-            position: relative;
-            transition: border-color 0.15s var(--ease);
-        }
-        .qa-pair:hover { border-color: var(--gray-700); }
-        .qa-pair .qa-q {
-            font-weight: 500;
-            margin-bottom: 6px;
-            font-size: 13px;
-            color: var(--accent-light);
-        }
-        .qa-pair .qa-a {
-            font-size: 13px;
-            color: var(--gray-400);
-            white-space: pre-wrap;
-            max-height: 100px;
-            overflow-y: auto;
-        }
-        .qa-pair .qa-actions {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            display: flex;
-            gap: 4px;
-            opacity: 0;
-            transition: opacity 0.15s;
-        }
-        .qa-pair:hover .qa-actions { opacity: 1; }
-
-        /* ── Test panel ── */
-        .test-panel {
-            background: var(--gray-950);
-            border: 2px solid var(--gray-800);
-            border-radius: var(--radius);
-            padding: 16px;
-        }
-        .test-input-row { display: flex; gap: 8px; margin-bottom: 12px; }
-        .test-input-row input { flex: 1; }
-        .test-result {
-            font-family: var(--font-mono);
-            font-size: 13px;
-            white-space: pre-wrap;
-            max-height: 300px;
-            overflow-y: auto;
-            background: var(--gray-900);
-            padding: 14px;
-            border-radius: var(--radius-sm);
-            border: 1px solid var(--gray-800);
-            color: var(--gray-300);
-        }
-
-        /* ── Table ── */
-        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .data-table th {
-            text-align: left;
-            padding: 8px;
-            color: var(--gray-500);
-            font-weight: 500;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            border-bottom: 1px solid var(--gray-800);
-        }
-        .data-table td {
-            padding: 8px;
-            border-bottom: 1px solid rgba(39,39,42,0.5);
-            color: var(--gray-300);
-        }
-
-        /* ── Toggle ── */
-        .toggle { position: relative; width: 40px; height: 22px; display: inline-block; }
-        .toggle input { opacity: 0; width: 0; height: 0; }
-        .toggle .slider {
-            position: absolute;
-            cursor: pointer;
-            inset: 0;
-            background: var(--gray-700);
-            border-radius: 22px;
-            transition: 0.3s var(--ease);
-        }
-        .toggle .slider::before {
-            content: '';
-            position: absolute;
-            height: 16px;
-            width: 16px;
-            left: 3px;
-            bottom: 3px;
-            background: white;
-            border-radius: 50%;
-            transition: 0.3s var(--ease);
-        }
-        .toggle input:checked + .slider { background: var(--success); }
-        .toggle input:checked + .slider::before { transform: translateX(18px); }
-
-        /* ── Scrollbar ── */
-        ::-webkit-scrollbar { width: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--gray-700); border-radius: 9999px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--gray-600); }
-
-        /* ── Notification ── */
-        .notification {
-            position: fixed;
-            top: 16px;
-            right: 16px;
-            padding: 12px 20px;
-            border-radius: var(--radius-sm);
-            font-size: 14px;
-            font-weight: 500;
-            z-index: 1000;
-            transform: translateX(120%);
-            transition: transform 0.3s var(--ease);
-            backdrop-filter: blur(8px);
-        }
-        .notification.show { transform: translateX(0); }
-        .notification.success {
-            background: rgba(34,197,94,0.15);
-            color: #86efac;
-            border: 1px solid rgba(34,197,94,0.2);
-        }
-        .notification.error {
-            background: rgba(239,68,68,0.15);
-            color: #fca5a5;
-            border: 1px solid rgba(239,68,68,0.2);
-        }
-
-        /* ── Debug Chat Modal ── */
-        .modal-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-            z-index: 2000; display: none; align-items: center; justify-content: center;
-            backdrop-filter: blur(4px);
-        }
-        .modal-overlay.open { display: flex; }
-        .modal {
-            background: var(--gray-900); border-radius: var(--radius-lg);
-            width: 90vw; max-width: 900px; height: 85vh;
-            display: flex; flex-direction: column;
-            border: 1px solid var(--gray-700);
-            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
-        }
-        .modal-header {
-            padding: 14px 20px; display: flex; align-items: center; justify-content: space-between;
-            border-bottom: 1px solid var(--gray-800);
-        }
-        .modal-header h2 { font-size: 15px; font-weight: 600; color: var(--gray-100); }
-        .modal-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-        .modal-footer {
-            padding: 12px 16px; border-top: 1px solid var(--gray-800);
-            display: flex; gap: 8px;
-        }
-        .modal-footer input { flex: 1; }
-
-        /* Debug chat messages */
-        .debug-msg { max-width: 95%; }
-        .debug-msg.user {
-            align-self: flex-end; background: var(--accent); color: white;
-            padding: 8px 14px; border-radius: 12px 12px 4px 12px; font-size: 14px;
-        }
-        .debug-msg.bot { align-self: flex-start; }
-        .debug-msg .bot-answer {
-            background: var(--gray-800); padding: 10px 14px; border-radius: 4px 12px 12px 12px;
-            font-size: 14px; color: var(--gray-200); white-space: pre-wrap;
-        }
-        .debug-msg .bot-meta {
-            margin-top: 4px; font-size: 11px; color: var(--gray-500);
-            display: flex; gap: 12px; flex-wrap: wrap;
-        }
-        .debug-msg .bot-meta span { white-space: nowrap; }
-        .debug-trace-toggle {
-            margin-top: 6px; font-size: 12px; color: var(--accent);
-            cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 4px;
-        }
-        .debug-trace-toggle:hover { text-decoration: underline; }
-        .debug-trace-panel {
-            display: none; margin-top: 8px; background: var(--gray-950);
-            border: 1px solid var(--gray-800); border-radius: var(--radius-sm);
-            padding: 12px; font-size: 12px; color: var(--gray-300);
-            max-height: 500px; overflow-y: auto;
-        }
-        .debug-trace-panel.open { display: block; }
-        .debug-trace-panel h4 {
-            font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
-            color: var(--gray-500); margin: 10px 0 4px 0; font-weight: 600;
-        }
-        .debug-trace-panel h4:first-child { margin-top: 0; }
-        .debug-trace-panel table { width: 100%; border-collapse: collapse; margin: 4px 0 8px 0; }
-        .debug-trace-panel table th {
-            text-align: left; padding: 4px 6px; font-size: 10px; color: var(--gray-500);
-            border-bottom: 1px solid var(--gray-800); text-transform: uppercase;
-        }
-        .debug-trace-panel table td {
-            padding: 4px 6px; font-size: 12px; border-bottom: 1px solid rgba(39,39,42,0.3);
-            font-family: var(--font-mono);
-        }
-        .debug-trace-panel pre {
-            background: var(--gray-900); padding: 8px; border-radius: 4px;
-            font-size: 11px; max-height: 200px; overflow: auto;
-            white-space: pre-wrap; word-break: break-all;
-            font-family: var(--font-mono); color: var(--gray-300);
-        }
-        .debug-expand {
-            font-size: 11px; color: var(--accent); cursor: pointer; user-select: none;
-        }
-        .debug-expand:hover { text-decoration: underline; }
-        .debug-expandable { display: none; }
-        .debug-expandable.open { display: block; }
-
-        /* Escalation chip */
-        .chip.esc-keyword { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.2); color: #fca5a5; }
-
-        /* Image grid */
-        .img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 10px; }
-        .img-card {
-            background: var(--gray-800); border: 1px solid var(--gray-700); border-radius: var(--radius-sm);
-            padding: 6px; text-align: center; position: relative; cursor: pointer; transition: border-color 0.15s;
-        }
-        .img-card:hover { border-color: var(--accent); }
-        .img-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-subtle); }
-        .img-card img { width: 100%; height: 80px; object-fit: cover; border-radius: 4px; }
-        .img-card .img-code {
-            font-size: 11px; font-weight: 600; color: var(--accent-light);
-            margin-top: 4px; font-family: var(--font-mono);
-        }
-        .img-card .img-name { font-size: 10px; color: var(--gray-500); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .img-card .img-delete {
-            position: absolute; top: 4px; right: 4px; background: rgba(239,68,68,0.8); color: white;
-            border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 11px;
-            cursor: pointer; display: none; align-items: center; justify-content: center; line-height: 1;
-        }
-        .img-card:hover .img-delete { display: flex; }
-
-        /* Collapsible card */
-        .card-collapsible .card-title { cursor: pointer; user-select: none; }
-        .card-collapsible .card-body { display: none; }
-        .card-collapsible.open .card-body { display: block; }
-        .card-collapsible .card-title .collapse-arrow { transition: transform 0.2s var(--ease); display: inline-block; }
-        .card-collapsible.open .card-title .collapse-arrow { transform: rotate(90deg); }
-    </style>
 </head>
 <body>
 
 <div class="header">
     <div class="header-left">
-        <div class="header-icon">Ф</div>
+        <img src="/static/farmbazis-logo.png" alt="Фармбазис" class="header-icon">
         <h1>Настройка бота — Фармбазис v2</h1>
     </div>
     <div class="actions">
@@ -623,18 +21,18 @@
                 <option value="yandex">Yandex</option>
                 <option value="deepseek">DeepSeek</option>
             </select>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#cfcfcf; white-space:nowrap;">
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--gray-300); white-space:nowrap;">
                 <input type="checkbox" id="showLlmInChat">
                 Показывать модель в чате
             </label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#cfcfcf; white-space:nowrap;" title="Температура генерации LLM (0 = детерминированно, 1 = креативно)">
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--gray-300); white-space:nowrap;" title="Температура генерации LLM (0 = детерминированно, 1 = креативно)">
                 🌡️ <input type="range" id="llmTemperature" min="0" max="1" step="0.01" value="0.1" style="width:80px; vertical-align:middle;">
                 <span id="llmTempValue" style="min-width:30px; font-family:var(--font-mono); font-size:12px;">0.10</span>
             </label>
             <button class="btn btn-secondary" onclick="saveLlmSettings()">💾 Сохранить LLM</button>
             <button class="btn btn-secondary" onclick="openGlobalEscalation()" title="Глобальные правила эскалации L0 (до классификации)">⚙️ L0</button>
             <button class="btn btn-secondary" onclick="openClassificationSettings()" title="Настройки классификации L1 (веса маркеров, пороги)">⚙️ L1</button>
-            <span id="activeLlmIndicator" style="font-size:12px; color:#9ca3af; white-space:nowrap;">Активно: неизвестно</span>
+            <span id="activeLlmIndicator" style="font-size:12px; color:var(--gray-400); white-space:nowrap;">Активно: неизвестно</span>
         </div>
         <a href="/api/bot-config/template" class="btn btn-secondary" style="text-decoration:none">📄 Скачать шаблон</a>
         <input type="file" id="importFileInput" accept=".docx" style="display:none" onchange="importDocx(this)">
@@ -642,6 +40,7 @@
         <button class="btn btn-secondary" onclick="exportCurrentReason()">📤 Экспорт .docx</button>
         <button class="btn btn-secondary" onclick="reloadReasons()">🔄 Перезагрузить</button>
         <button class="btn btn-primary" onclick="openDebugChat()">🐛 Debug-чат</button>
+        <button class="theme-toggle" onclick="cycleTheme()" id="themeToggleBtn" title="Переключить тему">🌙</button>
     </div>
 </div>
 
@@ -688,7 +87,7 @@
                             <input type="checkbox" id="reasonActive" checked>
                             <span class="slider"></span>
                         </label>
-                        <span style="font-size:12px; color:#888">Активна</span>
+                        <span style="font-size:12px; color:var(--gray-500)">Активна</span>
                     </div>
                 </div>
                 <div class="form-row">
@@ -751,7 +150,7 @@
                             <input type="checkbox" id="clsRulesEnabled" onchange="ensureClassificationRules(); currentReason.classification_rules.enabled=this.checked">
                             <span class="slider"></span>
                         </label>
-                        <span style="font-size:12px; color:#888">Включено</span>
+                        <span style="font-size:12px; color:var(--gray-500)">Включено</span>
                     </div>
                 </div>
                 <div id="clsRulesBody">
@@ -767,16 +166,16 @@
                     <div class="form-row">
                         <div class="form-label">Обязательные маркеры (если тема определена, но маркер не найден → уточняющий вопрос)</div>
                         <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:4px;">
-                            <label style="display:flex; align-items:center; gap:4px; font-size:13px; color:#cfcfcf; cursor:pointer;">
+                            <label style="display:flex; align-items:center; gap:4px; font-size:13px; color:var(--gray-300); cursor:pointer;">
                                 <input type="checkbox" id="clsReqNumeric" onchange="updateRequiredMarkers()"> Числовой тег
                             </label>
-                            <label style="display:flex; align-items:center; gap:4px; font-size:13px; color:#cfcfcf; cursor:pointer;">
+                            <label style="display:flex; align-items:center; gap:4px; font-size:13px; color:var(--gray-300); cursor:pointer;">
                                 <input type="checkbox" id="clsReqPhrase" onchange="updateRequiredMarkers()"> Фразовая маска
                             </label>
-                            <label style="display:flex; align-items:center; gap:4px; font-size:13px; color:#cfcfcf; cursor:pointer;">
+                            <label style="display:flex; align-items:center; gap:4px; font-size:13px; color:var(--gray-300); cursor:pointer;">
                                 <input type="checkbox" id="clsReqNoun" onchange="updateRequiredMarkers()"> Существительное
                             </label>
-                            <label style="display:flex; align-items:center; gap:4px; font-size:13px; color:#cfcfcf; cursor:pointer;">
+                            <label style="display:flex; align-items:center; gap:4px; font-size:13px; color:var(--gray-300); cursor:pointer;">
                                 <input type="checkbox" id="clsReqVerb" onchange="updateRequiredMarkers()"> Глагол
                             </label>
                         </div>
@@ -805,7 +204,7 @@
                             <input type="checkbox" id="escalationEnabled" onchange="currentReason.escalation_rules.enabled=this.checked">
                             <span class="slider"></span>
                         </label>
-                        <span style="font-size:12px; color:#888">Включено</span>
+                        <span style="font-size:12px; color:var(--gray-500)">Включено</span>
                     </div>
                 </div>
                 <div id="escalationRulesBody">
@@ -918,7 +317,7 @@
                     <span id="clsGlobalMinScoreVal" style="min-width:30px; font-family:var(--font-mono); font-size:13px;">5</span>
                 </div>
             </div>
-            <hr style="border-color:#333; margin:12px 0">
+            <hr style="border-color:var(--gray-700); margin:12px 0">
             <div class="form-label" style="margin-bottom:8px">🏷️ Веса маркеров (определяют, сколько баллов даёт каждый тип совпадения)</div>
             <div class="form-row">
                 <div class="form-label" style="font-size:12px">Фразовая маска (phrase_mask)</div>
@@ -978,7 +377,7 @@
                         <input type="checkbox" id="l0Enabled">
                         <span class="slider"></span>
                     </label>
-                    <span style="font-size:13px; color:#cfcfcf">Включено</span>
+                    <span style="font-size:13px; color:var(--gray-300)">Включено</span>
                 </div>
             </div>
             <div class="form-row">
@@ -1018,6 +417,43 @@
 </div>
 
 <script>
+// ── Theme Management ──
+(function initTheme() {
+    const saved = localStorage.getItem('bot-config-theme');
+    if (saved === 'dark' || saved === 'light') {
+        document.documentElement.setAttribute('data-theme', saved);
+    }
+    // 'auto' or absent → no data-theme attr, CSS @media decides
+})();
+
+function cycleTheme() {
+    const el = document.documentElement;
+    const current = localStorage.getItem('bot-config-theme') || 'auto';
+    const order = ['auto', 'dark', 'light'];
+    const next = order[(order.indexOf(current) + 1) % order.length];
+    localStorage.setItem('bot-config-theme', next);
+
+    if (next === 'auto') {
+        el.removeAttribute('data-theme');
+    } else {
+        el.setAttribute('data-theme', next);
+    }
+    updateThemeButton(next);
+}
+
+function updateThemeButton(mode) {
+    const btn = document.getElementById('themeToggleBtn');
+    if (!btn) return;
+    const icons = { auto: '🌗', dark: '🌙', light: '☀️' };
+    const labels = { auto: 'Авто', dark: 'Тёмная', light: 'Светлая' };
+    btn.textContent = icons[mode] || '🌗';
+    btn.title = `Тема: ${labels[mode] || 'Авто'}`;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    updateThemeButton(localStorage.getItem('bot-config-theme') || 'auto');
+});
+
 const API = '/api/bot-config';
 let reasons = [];
 let currentReasonId = null;
