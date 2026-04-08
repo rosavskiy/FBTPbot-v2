@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Настройка бота — Фармбазис v2</title>
+    <title>AI-ассистент ver. 2.0</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/bot_config.css">
 
@@ -13,27 +13,11 @@
 <div class="header">
     <div class="header-left">
         <img src="/static/farmbazis-logo.png" alt="Фармбазис" class="header-icon">
-        <h1>Настройка бота — Фармбазис v2</h1>
+        <h1>AI-ассистент ver. 2.0</h1>
     </div>
     <div class="actions">
-        <div style="display:flex; align-items:center; gap:10px; margin-right:8px; flex-wrap:wrap;">
-            <select class="form-input" id="llmProvider" style="width:150px; margin:0;" aria-label="Выбор модели">
-                <option value="yandex">Yandex</option>
-                <option value="deepseek">DeepSeek</option>
-            </select>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--gray-300); white-space:nowrap;">
-                <input type="checkbox" id="showLlmInChat">
-                Показывать модель в чате
-            </label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--gray-300); white-space:nowrap;" title="Температура генерации LLM (0 = детерминированно, 1 = креативно)">
-                🌡️ <input type="range" id="llmTemperature" min="0" max="1" step="0.01" value="0.1" style="width:80px; vertical-align:middle;">
-                <span id="llmTempValue" style="min-width:30px; font-family:var(--font-mono); font-size:12px;">0.10</span>
-            </label>
-            <button class="btn btn-secondary" onclick="saveLlmSettings()">💾 Сохранить LLM</button>
-            <button class="btn btn-secondary" onclick="openGlobalEscalation()" title="Глобальные правила эскалации L0 (до классификации)">⚙️ L0</button>
-            <button class="btn btn-secondary" onclick="openClassificationSettings()" title="Настройки классификации L1 (веса маркеров, пороги)">⚙️ L1</button>
-            <span id="activeLlmIndicator" style="font-size:12px; color:var(--gray-400); white-space:nowrap;">Активно: неизвестно</span>
-        </div>
+        <button class="btn btn-secondary" onclick="openLlmSettings()">⚙️ Настройка LLM</button>
+        <span id="activeLlmIndicator" style="font-size:12px; color:var(--gray-400); white-space:nowrap;">Активно: неизвестно</span>
         <a href="/api/bot-config/template" class="btn btn-secondary" style="text-decoration:none">📄 Скачать шаблон</a>
         <input type="file" id="importFileInput" accept=".docx" style="display:none" onchange="importDocx(this)">
         <button class="btn btn-success" onclick="document.getElementById('importFileInput').click()">📥 Импорт .docx</button>
@@ -261,18 +245,14 @@
             </div>
 
             <!-- Actions -->
-            <div style="display:flex; gap:8px; margin-top:16px; justify-content:space-between">
-                <div style="display:flex; gap:8px">
+            <!-- Sticky Action Bar -->
+            <div class="sticky-action-bar">
+                <div style="display:flex; gap:8px; align-items:center;">
                     <button class="btn btn-primary" onclick="saveReason()">💾 Сохранить</button>
+                    <span style="font-size:12px; color:var(--gray-500)">Ctrl+S</span>
                     <button class="btn btn-secondary" onclick="duplicateReason()">📋 Дублировать</button>
                 </div>
                 <button class="btn btn-danger" onclick="deleteReason()">🗑 Удалить</button>
-            </div>
-
-            <!-- Sticky Save Bar -->
-            <div id="stickySaveBar" style="position:sticky; bottom:0; z-index:10; background:var(--gray-900); padding:12px 20px; margin:16px -20px -20px -20px; border-top:1px solid var(--gray-800); display:flex; align-items:center; gap:12px; border-radius:0 0 var(--radius) var(--radius);">
-                <button class="btn btn-primary" onclick="saveReason()">💾 Сохранить</button>
-                <span style="font-size:12px; color:var(--gray-500)">Ctrl+S</span>
             </div>
         </div>
     </div>
@@ -298,6 +278,47 @@
 </div>
 
 <div class="notification" id="notification"></div>
+
+<!-- LLM Settings Modal -->
+<div class="modal-overlay" id="llmSettingsModal">
+    <div class="modal" style="max-width:520px; height:auto; max-height:80vh;">
+        <div class="modal-header">
+            <h2>⚙️ Настройка LLM</h2>
+            <button class="btn btn-sm btn-danger btn-close" onclick="closeLlmSettings()"></button>
+        </div>
+        <div class="modal-body" style="padding:16px; overflow-y:auto;">
+            <div class="form-row">
+                <div class="form-label">Провайдер модели</div>
+                <select class="form-input" id="llmProvider" style="width:100%;" aria-label="Выбор модели">
+                    <option value="yandex">Yandex</option>
+                    <option value="deepseek">DeepSeek</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--gray-300);">
+                    <input type="checkbox" id="showLlmInChat">
+                    Показывать модель в чате
+                </label>
+            </div>
+            <div class="form-row">
+                <div class="form-label" title="Температура генерации LLM (0 = детерминированно, 1 = креативно)">🌡️ Температура</div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="range" id="llmTemperature" min="0" max="1" step="0.01" value="0.1" style="flex:1;">
+                    <span id="llmTempValue" style="min-width:30px; font-family:var(--font-mono); font-size:13px;">0.10</span>
+                </div>
+            </div>
+            <hr style="border-color:var(--gray-700); margin:8px 0">
+            <div style="display:flex; gap:8px;">
+                <button class="btn btn-secondary" onclick="openGlobalEscalation()" title="Глобальные правила эскалации L0 (до классификации)" style="flex:1">⚙️ L0 — Эскалация</button>
+                <button class="btn btn-secondary" onclick="openClassificationSettings()" title="Настройки классификации L1 (веса маркеров, пороги)" style="flex:1">⚙️ L1 — Классификация</button>
+            </div>
+            <div style="margin-top:16px; display:flex; gap:8px;">
+                <button class="btn btn-primary" onclick="saveLlmSettings()">💾 Сохранить</button>
+                <button class="btn btn-secondary" onclick="closeLlmSettings()">Отмена</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Classification Settings Modal -->
 <div class="modal-overlay" id="clsSettingsModal">
@@ -898,6 +919,14 @@ function promptNewFolder() {
     document.getElementById('reasonFolder').value = folder;
     renderSidebar();
     notify(`Папка «${folder}» создана. Заполните причину.`, 'success');
+}
+
+// ── LLM Settings Modal ──
+function openLlmSettings() {
+    document.getElementById('llmSettingsModal').classList.add('open');
+}
+function closeLlmSettings() {
+    document.getElementById('llmSettingsModal').classList.remove('open');
 }
 
 async function loadLlmSettings() {
