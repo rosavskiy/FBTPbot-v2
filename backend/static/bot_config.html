@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI-ассистент ver. 2.0</title>
+    <title>AI-консоль ver. 3.0</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/bot_config.css">
 
@@ -13,7 +13,7 @@
 <div class="header">
     <div class="header-left">
         <img src="/static/farmbazis-logo.png" alt="Фармбазис" class="header-icon">
-        <h1>AI-ассистент ver. 2.0</h1>
+        <h1>AI-консоль ver. 3.0</h1>
     </div>
     <div class="actions">
         <button class="btn btn-secondary" onclick="openLlmSettings()">⚙️ Настройка LLM</button>
@@ -53,7 +53,7 @@
                 <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
                     <input type="file" id="imageUploadInput" accept=".png,.jpg,.jpeg,.gif,.webp" style="display:none" onchange="uploadImage(this)">
                     <button class="btn btn-sm btn-success" onclick="document.getElementById('imageUploadInput').click()">📤 Загрузить</button>
-                    <span style="font-size:12px; color:var(--gray-500)">PNG, JPG, GIF, WEBP (макс. 5 МБ)</span>
+                    <span style="font-size:12px; color:var(--gray-500)">PNG, JPG, GIF, WEBP (макс. 1 МБ)</span>
                 </div>
                 <div class="img-grid" id="imagesGrid"></div>
             </div>
