@@ -113,11 +113,13 @@ def resolve_image_codes(codes: list[str]) -> list[dict]:
             ext = file_path.suffix.lower()
             mime = _MIME_MAP.get(ext) or mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
             b64 = base64.b64encode(raw).decode("ascii")
-            result.append({
-                "code": code,
-                "data_uri": f"data:{mime};base64,{b64}",
-                "file_path": str(file_path.resolve()),
-            })
+            result.append(
+                {
+                    "code": code,
+                    "data_uri": f"data:{mime};base64,{b64}",
+                    "file_path": str(file_path.resolve()),
+                }
+            )
         except Exception as exc:
             logger.warning(f"Failed to read image '{code}': {exc}")
 

@@ -19,10 +19,10 @@ from dataclasses import dataclass, field
 
 import httpx
 
+from app.api.images import resolve_image_codes
 from app.classifier.reason_classifier import ClassificationCandidate, L1Result, classify_reason
 from app.classifier.section_classifier import L2Result, classify_section
 from app.config import settings
-from app.api.images import resolve_image_codes
 from app.llm_settings import get_classification_settings, get_llm_settings_snapshot
 from app.models.reason_schemas import ClassificationRules, ContactReason
 
@@ -848,7 +848,9 @@ class RAGEngine:
             detected_reason_name=reason.name,
             thematic_section=section_title,
             classification_method=f"L1:{l1_method}/L2:{l2.method}",
-            images=resolve_image_codes(l2.best_example.image_codes) if l2.best_example and l2.best_example.image_codes else [],
+            images=resolve_image_codes(l2.best_example.image_codes)
+            if l2.best_example and l2.best_example.image_codes
+            else [],
         )
 
         if debug:
