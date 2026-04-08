@@ -613,6 +613,7 @@
         </div>
         <div class="sidebar-list" id="reasonsList"></div>
         <div class="sidebar-footer">
+            <button class="btn" style="width:100%; margin-bottom:6px; background:var(--gray-800); color:var(--gray-300); border:1px solid var(--gray-700);" onclick="promptNewFolder()">+ Добавить папку</button>
             <button class="btn btn-primary" style="width:100%" onclick="createNewReason()">+ Добавить причину</button>
         </div>
     </div>
@@ -1353,6 +1354,25 @@ async function loadFoldersList() {
             dl.appendChild(opt);
         });
     } catch (e) { /* ignore */ }
+}
+
+function promptNewFolder() {
+    const name = prompt('Введите название папки (используйте "/" для вложенности, напр. "Группа АРМ/Настройка ККМ"):');
+    if (!name || !name.trim()) return;
+    const folder = name.trim();
+    // Check if folder already has reasons
+    const exists = reasons.some(r => (r.folder || '') === folder);
+    if (exists) {
+        notify('Папка уже существует', 'error');
+        return;
+    }
+    // Add folder to collapsed state so it appears in tree
+    if (!(folder in sidebarCollapsed)) sidebarCollapsed[folder] = false;
+    // Create a new reason pre-assigned to this folder
+    createNewReason();
+    currentReason.folder = folder;
+    document.getElementById('reasonFolder').value = folder;
+    notify(`Папка «${folder}» создана. Заполните причину.`, 'success');
 }
 
 async function loadLlmSettings() {
