@@ -19,6 +19,7 @@ from app.api.escalation import router as escalation_router
 from app.api.images import router as images_router
 from app.api.kb_admin import router as kb_admin_router
 from app.api.operator import router as operator_router
+from app.api.admin_auth import router as admin_router, ensure_superadmin
 from app.config import settings
 from app.database.models import init_db
 from app.database.reason_store import load_reasons
@@ -45,6 +46,11 @@ async def lifespan(app: FastAPI):
     # Инициализируем БД
     await init_db()
     logger.info("✅ База данных инициализирована")
+
+    # Создаём суперадмина из env (если его нет)
+    from app.database.models import async_session
+    async with async_session() as db:
+        await ensure_superadmin(db)
 
     # Загружаем причины обращения
     reasons = load_reasons()
@@ -83,8 +89,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
 # Роутеры
@@ -94,6 +100,7 @@ app.include_router(operator_router)
 app.include_router(kb_admin_router)
 app.include_router(bot_config_router)
 app.include_router(images_router)
+app.include_router(admin_router)
 
 # Статические файлы (изображения из инструкций)
 images_dir = Path(settings.chroma_persist_dir).parent / "images"
@@ -144,4 +151,31 @@ async def kb_admin_page():
     html_path = Path(__file__).resolve().parent.parent / "static" / "kb_admin.html"
     if not html_path.exists():
         return {"error": "kb_admin.html не найден"}
+    return FileResponse(html_path, media_type="text/html")
+
+
+@app.get("/admin-login", tags=["admin"])
+async def admin_login_page():
+    """Страница входа в админ-панель."""
+    html_path = Path(__file__).resolve().parent.parent / "static" / "admin_login.html"
+    if not html_path.exists():
+        return {"error": "admin_login.html не найден"}
+    return FileResponse(html_path, media_type="text/html")
+
+
+@app.get("/admin-users", tags=["admin"])
+async def admin_users_page():
+    """Страница управления пользователями."""
+    html_path = Path(__file__).resolve().parent.parent / "static" / "admin_users.html"
+    if not html_path.exists():
+        return {"error": "admin_users.html не найден"}
+    return FileResponse(html_path, media_type="text/html")
+
+
+@app.get("/admin-audit", tags=["admin"])
+async def admin_audit_page():
+    """Страница аудит-лога."""
+    html_path = Path(__file__).resolve().parent.parent / "static" / "admin_audit.html"
+    if not html_path.exists():
+        return {"error": "admin_audit.html не найден"}
     return FileResponse(html_path, media_type="text/html")

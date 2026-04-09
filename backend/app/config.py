@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     operator_password: str = ""  # MUST be set via env OPERATOR_PASSWORD
     operator_display_name: str = "Администратор ТП"
 
+    # Admin panel auth
+    superadmin_username: str = "superadmin"
+    superadmin_password: str = ""  # MUST be set via env SUPERADMIN_PASSWORD
+    admin_jwt_secret: str = ""  # MUST be set via env ADMIN_JWT_SECRET
+    admin_token_expire_hours: int = 12
+
     # RAG
     rag_chunk_size: int = 800
     rag_chunk_overlap: int = 200

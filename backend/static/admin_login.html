@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход — Фармбазис Админ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --accent: #6366f1; --accent-dark: #4338ca;
+            --gray-200: #e4e4e7; --gray-400: #a1a1aa; --gray-500: #71717a;
+            --gray-600: #52525b; --gray-700: #3f3f46; --gray-800: #27272a;
+            --gray-900: #18181b; --gray-950: #09090b;
+            --danger: #ef4444;
+            --radius: 12px; --radius-sm: 8px;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: var(--font-sans);
+            background: var(--gray-950);
+            color: var(--gray-200);
+            display: flex; align-items: center; justify-content: center;
+            min-height: 100vh;
+        }
+        .login-card {
+            background: var(--gray-900);
+            border: 1px solid var(--gray-700);
+            border-radius: var(--radius);
+            padding: 40px 36px;
+            width: 100%; max-width: 400px;
+        }
+        .login-card h1 {
+            font-size: 22px; font-weight: 600;
+            margin-bottom: 6px; color: var(--gray-200);
+        }
+        .login-card p {
+            font-size: 14px; color: var(--gray-500);
+            margin-bottom: 28px;
+        }
+        .field { margin-bottom: 18px; }
+        .field label {
+            display: block; font-size: 13px; font-weight: 500;
+            color: var(--gray-400); margin-bottom: 6px;
+        }
+        .field input {
+            width: 100%; padding: 10px 14px;
+            background: var(--gray-800); border: 1px solid var(--gray-700);
+            border-radius: var(--radius-sm); color: var(--gray-200);
+            font-size: 15px; font-family: var(--font-sans);
+            outline: none; transition: border-color 0.15s;
+        }
+        .field input:focus { border-color: var(--accent); }
+        .error-msg {
+            color: var(--danger); font-size: 13px;
+            margin-bottom: 14px; display: none;
+        }
+        .btn-login {
+            width: 100%; padding: 11px;
+            background: var(--accent); color: #fff;
+            border: none; border-radius: var(--radius-sm);
+            font-size: 15px; font-weight: 600; cursor: pointer;
+            font-family: var(--font-sans);
+            transition: background 0.15s;
+        }
+        .btn-login:hover { background: var(--accent-dark); }
+        .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>Фармбазис</h1>
+        <p>Вход в панель управления ботом</p>
+        <form id="loginForm" autocomplete="on">
+            <div class="field">
+                <label for="username">Логин</label>
+                <input type="text" id="username" name="username" required autocomplete="username" autofocus>
+            </div>
+            <div class="field">
+                <label for="password">Пароль</label>
+                <input type="password" id="password" name="password" required autocomplete="current-password">
+            </div>
+            <div class="error-msg" id="errorMsg"></div>
+            <button type="submit" class="btn-login" id="btnLogin">Войти</button>
+        </form>
+    </div>
+    <script>
+        const form = document.getElementById('loginForm');
+        const errorMsg = document.getElementById('errorMsg');
+        const btnLogin = document.getElementById('btnLogin');
+
+        // Redirect if already logged in
+        if (sessionStorage.getItem('admin_token')) {
+            const next = new URLSearchParams(location.search).get('next') || '/bot-config';
+            location.href = next;
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMsg.style.display = 'none';
+            btnLogin.disabled = true;
+            btnLogin.textContent = 'Вход...';
+
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+
+            try {
+                const resp = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                });
+                if (!resp.ok) {
+                    const data = await resp.json().catch(() => ({}));
+                    throw new Error(data.detail || 'Ошибка авторизации');
+                }
+                const data = await resp.json();
+                sessionStorage.setItem('admin_token', data.token);
+                sessionStorage.setItem('admin_user', JSON.stringify(data.user));
+
+                const next = new URLSearchParams(location.search).get('next') || '/bot-config';
+                location.href = next;
+            } catch (err) {
+                errorMsg.textContent = err.message;
+                errorMsg.style.display = 'block';
+                btnLogin.disabled = false;
+                btnLogin.textContent = 'Войти';
+            }
+        });
+    </script>
+</body>
+</html>

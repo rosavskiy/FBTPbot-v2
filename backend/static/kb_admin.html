@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Фармбазис — Квиз базы знаний</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/admin_common.css">
+    <script src="/static/admin_nav.js"></script>
     <style>
         /* Fallback for hidden class in case Tailwind CDN fails */
         .hidden { display: none !important; }
@@ -351,6 +353,15 @@
     <script>
     // ─── Config ───────────────────────────────────────────────────
     const API = '/api/kb';
+
+    // ── Auth: переопределяем fetch для всех API-запросов ——
+    const _origFetch = window.fetch.bind(window);
+    window.fetch = (url, opts = {}) => {
+        if (typeof url === 'string' && url.startsWith('/api/')) {
+            return AdminNav.authFetch(url, opts);
+        }
+        return _origFetch(url, opts);
+    };
     let currentItem = null;
     let currentItemId = null;
     let categories = {};
@@ -362,6 +373,11 @@
 
     // ─── Init ─────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', async () => {
+        const user = AdminNav.init({ currentPage: 'kb-admin' });
+        if (!user) return;
+        if (AdminNav.isViewer()) {
+            document.querySelectorAll('.editor-only').forEach(el => el.style.display = 'none');
+        }
         await loadCategories();
         await loadStats();
         await refreshReindexStatus(true);

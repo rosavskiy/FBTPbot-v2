@@ -12,11 +12,19 @@ import logging
 import mimetypes
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.admin_auth import log_action, require_role, verify_admin_token
+from app.database.models import AdminUser, get_db as get_admin_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/bot-config/images", tags=["images"])
+
+# Auth dependencies
+_any_admin = Depends(verify_admin_token)
+_editor = Depends(require_role("superadmin", "admin"))
 
 # Configurable paths
 IMAGES_DIR = Path("./data/bot_images")
@@ -127,7 +135,7 @@ def resolve_image_codes(codes: list[str]) -> list[dict]:
 
 
 @router.get("", response_model=ImagesListResponse)
-async def list_images():
+async def list_images(user: AdminUser = _any_admin):
     """Список всех загруженных изображений."""
     images = _load_metadata()
     result = []
@@ -144,7 +152,7 @@ async def list_images():
 
 
 @router.post("", response_model=ImageInfo)
-async def upload_image(file: UploadFile = File(...), code: str | None = None):
+async def upload_image(file: UploadFile = File(...), code: str | None = None, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Загрузить изображение и присвоить код."""
     _ensure_dirs()
 
@@ -190,6 +198,8 @@ async def upload_image(file: UploadFile = File(...), code: str | None = None):
 
     logger.info(f"Image uploaded: code={code}, file={file.filename}, stored={stored_as}")
 
+    await log_action(db, user_id=user.id, username=user.username, action="create", entity_type="image", entity_id=code, entity_name=file.filename)
+
     return ImageInfo(
         code=code,
         original_name=file.filename,
@@ -199,7 +209,7 @@ async def upload_image(file: UploadFile = File(...), code: str | None = None):
 
 
 @router.delete("/{image_code}")
-async def delete_image(image_code: str):
+async def delete_image(image_code: str, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Удалить изображение по коду."""
     images = _load_metadata()
     found = None
@@ -217,5 +227,7 @@ async def delete_image(image_code: str):
 
     _save_metadata(images)
     logger.info(f"Image deleted: code={image_code}")
+
+    await log_action(db, user_id=user.id, username=user.username, action="delete", entity_type="image", entity_id=image_code)
 
     return {"status": "deleted", "code": image_code}

@@ -100,6 +100,42 @@ class Operator(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
+class AdminUser(Base):
+    """Пользователи админ-панели (настройки бота / БЗ)."""
+
+    __tablename__ = "admin_users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(100), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    display_name = Column(String(100), nullable=True)
+    role = Column(String(20), nullable=False, default="viewer")  # superadmin | admin | viewer
+    is_active = Column(Integer, default=1)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    last_login_at = Column(DateTime, nullable=True)
+
+    audit_actions = relationship("AuditLog", back_populates="user")
+
+
+class AuditLog(Base):
+    """Лог действий администраторов."""
+
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
+    user_id = Column(Integer, ForeignKey("admin_users.id"), nullable=True)
+    username = Column(String(100), nullable=False)
+    action = Column(String(50), nullable=False)  # create | update | delete | login | import | reindex | settings_change
+    entity_type = Column(String(50), nullable=False)  # reason | kb_item | image | llm_settings | user | ...
+    entity_id = Column(String(255), nullable=True)
+    entity_name = Column(String(255), nullable=True)
+    details = Column(Text, nullable=True)
+
+    user = relationship("AdminUser", back_populates="audit_actions")
+
+
 # Async engine и session
 engine = create_async_engine(
     settings.database_url,

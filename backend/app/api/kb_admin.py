@@ -23,11 +23,14 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from langchain_chroma import Chroma
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.api.admin_auth import log_action, require_role, verify_admin_token
+from app.database.models import AdminUser, get_db as get_admin_db
 from app.indexer.knowledge_base import (
     SUPPORT_COLLECTION_NAME,
     get_indexer,
@@ -35,6 +38,10 @@ from app.indexer.knowledge_base import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/kb", tags=["kb-admin"])
+
+# Auth dependencies
+_any_admin = Depends(verify_admin_token)
+_editor = Depends(require_role("superadmin", "admin"))
 
 # ─── Путь к JSON-файлу базы знаний ───────────────────────────────────
 # На сервере: /app/data/support_kb.json (persistent volume)
@@ -357,7 +364,7 @@ def _delete_chromadb_document(doc_id: str):
 
 
 @router.get("/stats", response_model=KBStats)
-async def get_kb_stats():
+async def get_kb_stats(user: AdminUser = _any_admin):
     """Статистика базы знаний."""
     data = _load_kb()
     by_category: dict[str, int] = {}
@@ -396,6 +403,7 @@ async def list_kb_items(
     quality_min: int | None = None,
     quality_max: int | None = None,
     search: str | None = None,
+    user: AdminUser = _any_admin,
 ):
     """Список Q&A пар с пагинацией и фильтрацией."""
     data = _load_kb()
@@ -434,7 +442,7 @@ async def list_kb_items(
 
 
 @router.get("/items/{item_id}")
-async def get_kb_item(item_id: str):
+async def get_kb_item(item_id: str, user: AdminUser = _any_admin):
     """Получить одну Q&A пару."""
     data = _load_kb()
     for item in data:
@@ -447,6 +455,7 @@ async def get_kb_item(item_id: str):
 async def get_next_quiz_item(
     category: str | None = None,
     skip_reviewed: bool = True,
+    user: AdminUser = _any_admin,
 ):
     """
     Получить следующую неотревьюенную Q&A пару для квиза.
@@ -491,7 +500,7 @@ async def get_next_quiz_item(
 
 
 @router.put("/items/{item_id}")
-async def update_kb_item(item_id: str, update: KBItemUpdate):
+async def update_kb_item(item_id: str, update: KBItemUpdate, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Обновить Q&A пару (вопрос, ответ, категорию, теги и т.д.)."""
     data = _load_kb()
 
@@ -533,11 +542,12 @@ async def update_kb_item(item_id: str, update: KBItemUpdate):
     # Инкрементально обновляем ChromaDB
     _update_chromadb_document(item)
 
+    await log_action(db, user_id=user.id, username=user.username, action="update", entity_type="kb_item", entity_id=item_id, entity_name=meta.get("question", "")[:80])
     return {"status": "ok", "item": item}
 
 
 @router.post("/items/{item_id}/approve")
-async def approve_kb_item(item_id: str):
+async def approve_kb_item(item_id: str, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Одобрить Q&A пару (пометить как проверенную, quality_score=5)."""
     data = _load_kb()
 
@@ -563,11 +573,12 @@ async def approve_kb_item(item_id: str):
     # Инкрементально обновляем ChromaDB
     _update_chromadb_document(item)
 
+    await log_action(db, user_id=user.id, username=user.username, action="update", entity_type="kb_item", entity_id=item_id, details="Одобрена")
     return {"status": "ok", "item": item}
 
 
 @router.post("/items/{item_id}/save-and-approve")
-async def save_and_approve_kb_item(item_id: str, update: KBItemUpdate):
+async def save_and_approve_kb_item(item_id: str, update: KBItemUpdate, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Обновить и сразу одобрить Q&A пару."""
     data = _load_kb()
 
@@ -612,11 +623,12 @@ async def save_and_approve_kb_item(item_id: str, update: KBItemUpdate):
 
     _update_chromadb_document(item)
 
+    await log_action(db, user_id=user.id, username=user.username, action="update", entity_type="kb_item", entity_id=item_id, details="Обновлена и одобрена")
     return {"status": "ok", "item": item}
 
 
 @router.delete("/items/{item_id}")
-async def delete_kb_item(item_id: str):
+async def delete_kb_item(item_id: str, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Удалить Q&A пару из базы знаний."""
     data = _load_kb()
 
@@ -634,11 +646,12 @@ async def delete_kb_item(item_id: str):
 
     _delete_chromadb_document(item_id)
 
+    await log_action(db, user_id=user.id, username=user.username, action="delete", entity_type="kb_item", entity_id=item_id)
     return {"status": "ok", "deleted_id": item_id, "remaining": len(data)}
 
 
 @router.post("/import", response_model=KBImportResult)
-async def import_kb_data(file: UploadFile = File(...)):
+async def import_kb_data(file: UploadFile = File(...), user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """
     Импорт новых Q&A данных из JSON-файла.
     Дубликаты (по id) пропускаются, новые записи добавляются.
@@ -702,6 +715,7 @@ async def import_kb_data(file: UploadFile = File(...)):
 
     _save_kb(data)
 
+    await log_action(db, user_id=user.id, username=user.username, action="import", entity_type="kb_item", details=f"Импорт: +{added} новых, {duplicates} дубликатов, {errors} ошибок")
     return KBImportResult(
         added=added,
         duplicates_skipped=duplicates,
@@ -711,7 +725,7 @@ async def import_kb_data(file: UploadFile = File(...)):
 
 
 @router.post("/reindex", response_model=KBReindexStatus)
-async def reindex_kb():
+async def reindex_kb(user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """
     Запустить полную переиндексацию support_tickets в фоне.
     Используйте после массовых правок.
@@ -738,17 +752,18 @@ async def reindex_kb():
         error=None,
     )
     _REINDEX_TASK = asyncio.create_task(_run_reindex_job(job_id))
+    await log_action(db, user_id=user.id, username=user.username, action="reindex", entity_type="kb_item", details=f"Переиндексация: {total_documents} документов")
     return KBReindexStatus(**_get_reindex_status())
 
 
 @router.get("/reindex/status", response_model=KBReindexStatus)
-async def get_reindex_status():
+async def get_reindex_status(user: AdminUser = _any_admin):
     """Получить текущий статус фоновой переиндексации."""
     return KBReindexStatus(**_get_reindex_status())
 
 
 @router.get("/categories")
-async def get_categories():
+async def get_categories(user: AdminUser = _any_admin):
     """Получить список всех категорий."""
     data = _load_kb()
     categories = {}

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Аудит — Фармбазис Админ</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/admin_common.css">
+    <script src="/static/admin_nav.js"></script>
+    <style>
+        :root {
+            --accent: #6366f1; --accent-dark: #4338ca;
+            --gray-100: #f4f4f5; --gray-200: #e4e4e7; --gray-300: #d4d4d8;
+            --gray-400: #a1a1aa; --gray-500: #71717a; --gray-600: #52525b;
+            --gray-700: #3f3f46; --gray-800: #27272a; --gray-900: #18181b; --gray-950: #09090b;
+            --success: #22c55e; --danger: #ef4444;
+            --radius: 12px; --radius-sm: 8px;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-sans); background: var(--gray-950); color: var(--gray-200); }
+
+        .page { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+        .page-header { margin-bottom: 20px; }
+        .page-header h1 { font-size: 22px; font-weight: 600; }
+
+        .filters {
+            display: flex; gap: 12px; flex-wrap: wrap; align-items: end;
+            margin-bottom: 20px; padding: 16px;
+            background: var(--gray-900); border: 1px solid var(--gray-800); border-radius: var(--radius);
+        }
+        .filter-group { display: flex; flex-direction: column; gap: 4px; }
+        .filter-group label { font-size: 11px; text-transform: uppercase; color: var(--gray-500); letter-spacing: 0.5px; }
+        .filter-group input, .filter-group select {
+            padding: 7px 10px; background: var(--gray-800); border: 1px solid var(--gray-700);
+            border-radius: var(--radius-sm); color: var(--gray-200);
+            font-size: 13px; font-family: var(--font-sans); outline: none;
+        }
+        .filter-group input:focus, .filter-group select:focus { border-color: var(--accent); }
+
+        .btn {
+            padding: 8px 16px; border: none; border-radius: var(--radius-sm);
+            cursor: pointer; font-family: var(--font-sans); font-size: 13px; font-weight: 600;
+            transition: background 0.15s;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-dark); }
+        .btn-ghost { background: none; border: 1px solid var(--gray-700); color: var(--gray-400); }
+        .btn-ghost:hover { border-color: var(--gray-500); color: var(--gray-200); }
+
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--gray-500); padding: 10px 12px; border-bottom: 1px solid var(--gray-800); letter-spacing: 0.5px; }
+        td { padding: 10px 12px; border-bottom: 1px solid var(--gray-800); font-size: 13px; }
+        tr:hover td { background: rgba(255,255,255,0.02); }
+
+        .ts { color: var(--gray-500); font-size: 12px; white-space: nowrap; }
+        .action-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 4px;
+            font-size: 11px; font-weight: 600; text-transform: lowercase;
+        }
+        .action-badge.create { background: rgba(34,197,94,0.15); color: #86efac; }
+        .action-badge.update { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+        .action-badge.delete { background: rgba(239,68,68,0.15); color: #fca5a5; }
+        .action-badge.login { background: rgba(245,158,11,0.15); color: #fcd34d; }
+        .action-badge.default { background: rgba(161,161,170,0.1); color: #a1a1aa; }
+
+        .details-cell { max-width: 260px; word-break: break-word; color: var(--gray-400); font-size: 12px; }
+
+        .pagination { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 20px; }
+        .pagination .info { color: var(--gray-500); font-size: 13px; }
+
+        .empty { text-align: center; color: var(--gray-500); padding: 40px; }
+    </style>
+</head>
+<body>
+
+<div class="page">
+    <div class="page-header">
+        <h1>Журнал аудита</h1>
+    </div>
+
+    <div class="filters">
+        <div class="filter-group">
+            <label>Пользователь</label>
+            <input type="text" id="fUsername" placeholder="Все" style="width:140px">
+        </div>
+        <div class="filter-group">
+            <label>Действие</label>
+            <select id="fAction" style="width:130px">
+                <option value="">Все</option>
+                <option value="login">login</option>
+                <option value="create">create</option>
+                <option value="update">update</option>
+                <option value="delete">delete</option>
+                <option value="import">import</option>
+                <option value="reindex">reindex</option>
+                <option value="upload">upload</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>Тип</label>
+            <select id="fEntity" style="width:140px">
+                <option value="">Все</option>
+                <option value="article">article</option>
+                <option value="bot_config">bot_config</option>
+                <option value="llm_settings">llm_settings</option>
+                <option value="category">category</option>
+                <option value="image">image</option>
+                <option value="user">user</option>
+                <option value="session">session</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>От</label>
+            <input type="date" id="fDateFrom" style="width:145px">
+        </div>
+        <div class="filter-group">
+            <label>До</label>
+            <input type="date" id="fDateTo" style="width:145px">
+        </div>
+        <button class="btn btn-primary" onclick="applyFilters()">Поиск</button>
+        <button class="btn btn-ghost" onclick="resetFilters()">Сбросить</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Дата/Время</th>
+                <th>Пользователь</th>
+                <th>Действие</th>
+                <th>Тип</th>
+                <th>Объект</th>
+                <th>Подробности</th>
+            </tr>
+        </thead>
+        <tbody id="auditBody"></tbody>
+    </table>
+    <div id="emptyMsg" class="empty" style="display:none">Нет записей</div>
+
+    <div class="pagination" id="pagination" style="display:none">
+        <button class="btn btn-ghost" id="prevBtn" onclick="goPage(-1)">← Назад</button>
+        <span class="info" id="pageInfo"></span>
+        <button class="btn btn-ghost" id="nextBtn" onclick="goPage(1)">Вперёд →</button>
+    </div>
+</div>
+
+<script>
+const API = '/api/admin/audit-log';
+const PER_PAGE = 50;
+let currentPage = 1;
+let totalItems = 0;
+
+const _origFetch = window.fetch.bind(window);
+window.fetch = (url, opts = {}) => {
+    if (typeof url === 'string' && url.startsWith('/api/')) {
+        return AdminNav.authFetch(url, opts);
+    }
+    return _origFetch(url, opts);
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const user = AdminNav.init({ currentPage: 'admin-audit' });
+    if (!user) return;
+    if (user.role !== 'superadmin') {
+        document.querySelector('.page').innerHTML = '<p style="padding:40px;color:var(--gray-500)">Доступ только для суперадмина.</p>';
+        return;
+    }
+    loadAudit();
+});
+
+function buildParams() {
+    const p = new URLSearchParams();
+    p.set('page', currentPage.toString());
+    p.set('page_size', PER_PAGE.toString());
+    const u = document.getElementById('fUsername').value.trim();
+    if (u) p.set('username', u);
+    const a = document.getElementById('fAction').value;
+    if (a) p.set('action', a);
+    const e = document.getElementById('fEntity').value;
+    if (e) p.set('entity_type', e);
+    const df = document.getElementById('fDateFrom').value;
+    if (df) p.set('date_from', df + 'T00:00:00');
+    const dt = document.getElementById('fDateTo').value;
+    if (dt) p.set('date_to', dt + 'T23:59:59');
+    return p;
+}
+
+async function loadAudit() {
+    try {
+        const r = await fetch(`${API}?${buildParams()}`);
+        if (!r.ok) throw new Error('Ошибка загрузки');
+        const data = await r.json();
+        totalItems = data.total;
+        renderTable(data.items);
+        renderPagination();
+    } catch (e) {
+        document.getElementById('auditBody').innerHTML = '';
+        document.getElementById('emptyMsg').style.display = 'block';
+        document.getElementById('emptyMsg').textContent = e.message;
+    }
+}
+
+function renderTable(items) {
+    const tbody = document.getElementById('auditBody');
+    const emptyEl = document.getElementById('emptyMsg');
+    if (!items.length) {
+        tbody.innerHTML = '';
+        emptyEl.style.display = 'block';
+        emptyEl.textContent = 'Нет записей';
+        return;
+    }
+    emptyEl.style.display = 'none';
+    tbody.innerHTML = items.map(it => `
+        <tr>
+            <td class="ts">${new Date(it.timestamp).toLocaleString('ru')}</td>
+            <td>${esc(it.username)}</td>
+            <td><span class="action-badge ${actionClass(it.action)}">${esc(it.action)}</span></td>
+            <td>${esc(it.entity_type || '')}</td>
+            <td>${esc(it.entity_name || it.entity_id || '—')}</td>
+            <td class="details-cell">${esc(it.details || '')}</td>
+        </tr>
+    `).join('');
+}
+
+function actionClass(action) {
+    if (!action) return 'default';
+    const a = action.toLowerCase();
+    if (a.includes('create') || a.includes('import') || a.includes('upload')) return 'create';
+    if (a.includes('update') || a.includes('save') || a.includes('approve') || a.includes('reindex')) return 'update';
+    if (a.includes('delete')) return 'delete';
+    if (a.includes('login')) return 'login';
+    return 'default';
+}
+
+function renderPagination() {
+    const totalPages = Math.ceil(totalItems / PER_PAGE);
+    const pag = document.getElementById('pagination');
+    if (totalPages <= 1) { pag.style.display = 'none'; return; }
+    pag.style.display = 'flex';
+    document.getElementById('pageInfo').textContent = `${currentPage} / ${totalPages}  (${totalItems})`;
+    document.getElementById('prevBtn').disabled = currentPage <= 1;
+    document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+}
+
+function goPage(dir) {
+    currentPage += dir;
+    if (currentPage < 1) currentPage = 1;
+    loadAudit();
+}
+
+function applyFilters() {
+    currentPage = 1;
+    loadAudit();
+}
+
+function resetFilters() {
+    document.getElementById('fUsername').value = '';
+    document.getElementById('fAction').value = '';
+    document.getElementById('fEntity').value = '';
+    document.getElementById('fDateFrom').value = '';
+    document.getElementById('fDateTo').value = '';
+    currentPage = 1;
+    loadAudit();
+}
+
+function esc(text) {
+    const d = document.createElement('div');
+    d.textContent = text || '';
+    return d.innerHTML;
+}
+</script>
+</body>
+</html>

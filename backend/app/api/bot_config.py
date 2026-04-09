@@ -14,9 +14,10 @@ from pathlib import Path
 from urllib.parse import quote
 
 from docx import Document
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database.reason_store import (
@@ -38,8 +39,15 @@ from app.llm_settings import (
 )
 from app.models.reason_schemas import ContactReason
 
+from app.api.admin_auth import log_action, require_role, verify_admin_token
+from app.database.models import AdminUser, get_db as get_admin_db
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/bot-config", tags=["bot-config"])
+
+# Auth dependencies
+_any_admin = Depends(verify_admin_token)
+_editor = Depends(require_role("superadmin", "admin"))
 
 
 # ── Request/Response models ──
@@ -279,7 +287,7 @@ def _get_llm_settings_response() -> LLMSettingsResponse:
 
 
 @router.get("/reasons", response_model=ReasonsListResponse)
-async def list_reasons(active_only: bool = False):
+async def list_reasons(active_only: bool = False, user: AdminUser = _any_admin):
     """Список всех причин обращения."""
     reasons = get_all_reasons(active_only=active_only)
     summaries = []
@@ -304,7 +312,7 @@ async def list_reasons(active_only: bool = False):
 
 
 @router.get("/folders")
-async def list_folders():
+async def list_folders(user: AdminUser = _any_admin):
     """Список всех уникальных папок."""
     reasons = get_all_reasons(active_only=False)
     folders = sorted({r.folder for r in reasons if r.folder})
@@ -312,7 +320,7 @@ async def list_folders():
 
 
 @router.get("/reasons/{reason_id}", response_model=ContactReason)
-async def get_reason_detail(reason_id: str):
+async def get_reason_detail(reason_id: str, user: AdminUser = _any_admin):
     """Получить полные данные причины обращения."""
     reason = get_reason(reason_id)
     if not reason:
@@ -321,18 +329,19 @@ async def get_reason_detail(reason_id: str):
 
 
 @router.post("/reasons", response_model=ContactReason)
-async def create_reason(reason: ContactReason):
+async def create_reason(reason: ContactReason, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Создать новую причину обращения."""
     existing = get_reason(reason.id)
     if existing:
         raise HTTPException(status_code=409, detail=f"Причина с ID '{reason.id}' уже существует")
     upsert_reason(reason)
     logger.info(f"Created reason: {reason.id} ({reason.name})")
+    await log_action(db, user_id=user.id, username=user.username, action="create", entity_type="reason", entity_id=reason.id, entity_name=reason.name)
     return reason
 
 
 @router.put("/reasons/{reason_id}", response_model=ContactReason)
-async def update_reason(reason_id: str, reason: ContactReason):
+async def update_reason(reason_id: str, reason: ContactReason, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Обновить причину обращения."""
     existing = get_reason(reason_id)
     if not existing:
@@ -340,11 +349,12 @@ async def update_reason(reason_id: str, reason: ContactReason):
     reason.id = reason_id  # ID из пути имеет приоритет
     upsert_reason(reason)
     logger.info(f"Updated reason: {reason_id}")
+    await log_action(db, user_id=user.id, username=user.username, action="update", entity_type="reason", entity_id=reason_id, entity_name=reason.name)
     return reason
 
 
 @router.patch("/reasons/{reason_id}/folder")
-async def update_reason_folder(reason_id: str, payload: dict):
+async def update_reason_folder(reason_id: str, payload: dict, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Обновить только папку причины (для drag-and-drop)."""
     reason = get_reason(reason_id)
     if not reason:
@@ -352,20 +362,23 @@ async def update_reason_folder(reason_id: str, payload: dict):
     reason.folder = payload.get("folder", "")
     upsert_reason(reason)
     logger.info(f"Moved reason {reason_id} to folder: {reason.folder!r}")
+    await log_action(db, user_id=user.id, username=user.username, action="update", entity_type="reason", entity_id=reason_id, entity_name=reason.name, details=f"Перемещена в папку: {reason.folder!r}")
     return {"status": "ok", "id": reason_id, "folder": reason.folder}
 
 
 @router.delete("/reasons/{reason_id}")
-async def remove_reason(reason_id: str):
+async def remove_reason(reason_id: str, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Удалить причину обращения."""
+    existing = get_reason(reason_id)
     if not delete_reason(reason_id):
         raise HTTPException(status_code=404, detail="Причина обращения не найдена")
     logger.info(f"Deleted reason: {reason_id}")
+    await log_action(db, user_id=user.id, username=user.username, action="delete", entity_type="reason", entity_id=reason_id, entity_name=existing.name if existing else reason_id)
     return {"status": "deleted", "id": reason_id}
 
 
 @router.post("/reasons/{reason_id}/duplicate", response_model=ContactReason)
-async def duplicate_reason(reason_id: str, new_id: str, new_name: str):
+async def duplicate_reason(reason_id: str, new_id: str, new_name: str, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Дублировать причину обращения."""
     original = get_reason(reason_id)
     if not original:
@@ -378,11 +391,12 @@ async def duplicate_reason(reason_id: str, new_id: str, new_name: str):
     clone.name = new_name
     upsert_reason(clone)
     logger.info(f"Duplicated {reason_id} → {new_id}")
+    await log_action(db, user_id=user.id, username=user.username, action="create", entity_type="reason", entity_id=new_id, entity_name=new_name, details=f"Дубликат {reason_id}")
     return clone
 
 
 @router.post("/test-classify", response_model=TestClassifyResponse)
-async def test_classify(req: TestClassifyRequest):
+async def test_classify(req: TestClassifyRequest, user: AdminUser = _any_admin):
     """Тестирование классификации вопроса (без генерации ответа)."""
     from app.rag.engine import get_rag_engine
 
@@ -392,7 +406,7 @@ async def test_classify(req: TestClassifyRequest):
 
 
 @router.post("/reload")
-async def reload_reasons():
+async def reload_reasons(user: AdminUser = _editor):
     """Сбросить кэш причин (перечитать JSON)."""
     invalidate_cache()
     reasons = get_all_reasons(active_only=False)
@@ -400,13 +414,13 @@ async def reload_reasons():
 
 
 @router.get("/llm-settings", response_model=LLMSettingsResponse)
-async def get_llm_settings():
+async def get_llm_settings(user: AdminUser = _any_admin):
     """Получить текущие настройки LLM-провайдера."""
     return _get_llm_settings_response()
 
 
 @router.put("/llm-settings", response_model=LLMSettingsResponse)
-async def update_llm_settings(payload: LLMSettingsPayload):
+async def update_llm_settings(payload: LLMSettingsPayload, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Сохранить только выбор провайдера и флаг показа модели в чате."""
     _normalize_provider_or_422(payload.llm_provider)
 
@@ -431,21 +445,23 @@ async def update_llm_settings(payload: LLMSettingsPayload):
 
     await close_rag_engine()
     logger.info("LLM settings updated and persisted to %s and %s", env_path, runtime_path)
+    await log_action(db, user_id=user.id, username=user.username, action="settings_change", entity_type="llm_settings", details=f"provider={payload.llm_provider}, temp={payload.llm_temperature}")
     return _get_llm_settings_response()
 
 
 @router.get("/classification-settings", response_model=ClassificationSettingsResponse)
-async def get_cls_settings():
+async def get_cls_settings(user: AdminUser = _any_admin):
     """Получить текущие настройки классификации L1 (веса маркеров + глобальный порог)."""
     data = get_classification_settings()
     return ClassificationSettingsResponse(**data)
 
 
 @router.put("/classification-settings", response_model=ClassificationSettingsResponse)
-async def update_cls_settings(payload: ClassificationSettingsPayload):
+async def update_cls_settings(payload: ClassificationSettingsPayload, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Сохранить настройки классификации L1."""
     save_classification_settings(payload.model_dump())
     logger.info("Classification settings updated: %s", payload.model_dump())
+    await log_action(db, user_id=user.id, username=user.username, action="settings_change", entity_type="classification_settings", details=str(payload.model_dump()))
     return ClassificationSettingsResponse(**get_classification_settings())
 
 
@@ -463,25 +479,26 @@ class GlobalEscalationResponse(BaseModel):
 
 
 @router.get("/global-escalation", response_model=GlobalEscalationResponse)
-async def get_global_escalation_rules():
+async def get_global_escalation_rules(user: AdminUser = _any_admin):
     """Получить глобальные правила эскалации (L0)."""
     rules = get_global_escalation()
     return GlobalEscalationResponse(enabled=rules.enabled, keyword_patterns=rules.keyword_patterns)
 
 
 @router.put("/global-escalation", response_model=GlobalEscalationResponse)
-async def update_global_escalation_rules(payload: GlobalEscalationRequest):
+async def update_global_escalation_rules(payload: GlobalEscalationRequest, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Обновить глобальные правила эскалации (L0)."""
     from app.models.reason_schemas import GlobalEscalationRules
 
     rules = GlobalEscalationRules(enabled=payload.enabled, keyword_patterns=payload.keyword_patterns)
     save_global_escalation(rules)
     logger.info("Global escalation rules updated: enabled=%s, patterns=%d", rules.enabled, len(rules.keyword_patterns))
+    await log_action(db, user_id=user.id, username=user.username, action="settings_change", entity_type="escalation_settings", details=f"enabled={rules.enabled}, patterns={len(rules.keyword_patterns)}")
     return GlobalEscalationResponse(enabled=rules.enabled, keyword_patterns=rules.keyword_patterns)
 
 
 @router.get("/template")
-async def download_template():
+async def download_template(user: AdminUser = _any_admin):
     """Скачать шаблон .docx для импорта причин обращения."""
     candidates = [
         Path(__file__).resolve().parents[3] / "templates" / "Шаблон причины обращения.docx",
@@ -498,7 +515,7 @@ async def download_template():
 
 
 @router.post("/export-docx")
-async def export_docx(reason: ContactReason):
+async def export_docx(reason: ContactReason, user: AdminUser = _any_admin):
     """Экспорт текущей причины обращения в .docx-формат, совместимый с импортом."""
     file_like = _build_reason_docx(reason)
     filename = _make_export_filename(reason)
@@ -518,7 +535,7 @@ class ImportResult(BaseModel):
 
 
 @router.post("/import-docx", response_model=ImportResult)
-async def import_docx(file: UploadFile = File(...)):
+async def import_docx(file: UploadFile = File(...), user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """Импорт причин обращения из .docx файла."""
     if not file.filename or not file.filename.endswith(".docx"):
         raise HTTPException(status_code=400, detail="Допустимы только .docx файлы")
@@ -573,6 +590,8 @@ async def import_docx(file: UploadFile = File(...)):
 
     imported = 1
     invalidate_cache()
+
+    await log_action(db, user_id=user.id, username=user.username, action="import", entity_type="reason", entity_id=reason.id, entity_name=reason.name, details=f"Импорт из docx: {'обновление' if existing else 'создание'}")
 
     m = reason.markers
     markers_count = len(m.verbs) + len(m.nouns) + len(m.numeric_tags) + len(m.phrase_masks)

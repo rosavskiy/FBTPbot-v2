@@ -29,6 +29,7 @@ python-telegram-bot==21.10
 
 # Auth
 bcrypt==4.2.1
+PyJWT==2.9.0
 
 # Google Sheets
 gspread==6.1.4

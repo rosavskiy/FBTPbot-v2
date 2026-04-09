@@ -6,6 +6,8 @@
     <title>AI-консоль ver. 3.0</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/bot_config.css">
+    <link rel="stylesheet" href="/static/admin_common.css">
+    <script src="/static/admin_nav.js"></script>
 
 </head>
 <body>
@@ -16,14 +18,14 @@
         <h1>AI-консоль ver. 3.0</h1>
     </div>
     <div class="actions">
-        <button class="btn btn-secondary" onclick="openLlmSettings()">⚙️ Настройка LLM</button>
-        <button class="btn btn-secondary" onclick="openGlobalEscalation()" title="Глобальные правила эскалации L0 (до классификации)">⚙️ L0</button>
-        <button class="btn btn-secondary" onclick="openClassificationSettings()" title="Настройки классификации L1 (веса маркеров, пороги)">⚙️ L1</button>
+        <button class="btn btn-secondary editor-only" onclick="openLlmSettings()">⚙️ Настройка LLM</button>
+        <button class="btn btn-secondary editor-only" onclick="openGlobalEscalation()" title="Глобальные правила эскалации L0 (до классификации)">⚙️ L0</button>
+        <button class="btn btn-secondary editor-only" onclick="openClassificationSettings()" title="Настройки классификации L1 (веса маркеров, пороги)">⚙️ L1</button>
         <a href="/api/bot-config/template" class="btn btn-secondary" style="text-decoration:none">📄 Скачать шаблон</a>
         <input type="file" id="importFileInput" accept=".docx" style="display:none" onchange="importDocx(this)">
-        <button class="btn btn-success" onclick="document.getElementById('importFileInput').click()">📥 Импорт .docx</button>
+        <button class="btn btn-success editor-only" onclick="document.getElementById('importFileInput').click()">📥 Импорт .docx</button>
         <button class="btn btn-secondary" onclick="exportCurrentReason()">📤 Экспорт .docx</button>
-        <button class="btn btn-secondary" onclick="reloadReasons()">🔄 Перезагрузить</button>
+        <button class="btn btn-secondary editor-only" onclick="reloadReasons()">🔄 Перезагрузить</button>
         <button class="btn btn-primary" onclick="openDebugChat()">🐛 Debug-чат</button>
         <button class="theme-toggle" onclick="cycleTheme()" id="themeToggleBtn" title="Переключить тему">🌙</button>
     </div>
@@ -248,11 +250,11 @@
             <!-- Sticky Action Bar -->
             <div class="sticky-action-bar">
                 <div style="display:flex; gap:8px; align-items:center;">
-                    <button class="btn btn-primary" onclick="saveReason()">💾 Сохранить</button>
-                    <span style="font-size:12px; color:var(--gray-500)">Ctrl+S</span>
-                    <button class="btn btn-secondary" onclick="duplicateReason()">📋 Дублировать</button>
+                    <button class="btn btn-primary editor-only" onclick="saveReason()">💾 Сохранить</button>
+                    <span class="editor-only" style="font-size:12px; color:var(--gray-500)">Ctrl+S</span>
+                    <button class="btn btn-secondary editor-only" onclick="duplicateReason()">📋 Дублировать</button>
                 </div>
-                <button class="btn btn-danger" onclick="deleteReason()">🗑 Удалить</button>
+                <button class="btn btn-danger editor-only" onclick="deleteReason()">🗑 Удалить</button>
             </div>
         </div>
     </div>
@@ -475,6 +477,16 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 const API = '/api/bot-config';
+
+// ── Auth: переопределяем fetch для всех API-запросов ——
+const _origFetch = window.fetch.bind(window);
+window.fetch = (url, opts = {}) => {
+    if (typeof url === 'string' && url.startsWith('/api/')) {
+        return AdminNav.authFetch(url, opts);
+    }
+    return _origFetch(url, opts);
+};
+
 let reasons = [];
 let currentReasonId = null;
 let currentReason = null;
@@ -482,9 +494,17 @@ let isNewReason = false;
 let sidebarCollapsed = {};  // folder path → collapsed state
 
 // ── Init ──
-document.addEventListener('DOMContentLoaded', initPage);
+document.addEventListener('DOMContentLoaded', () => {
+    const user = AdminNav.init({ currentPage: 'bot-config' });
+    if (!user) return; // redirect to login
+    initPage();
+});
 
 async function initPage() {
+    // Скрываем мутирующие кнопки для viewer
+    if (AdminNav.isViewer()) {
+        document.querySelectorAll('.editor-only').forEach(el => el.style.display = 'none');
+    }
     await Promise.all([loadReasons(), loadLlmSettings(), loadClassificationSettings(), loadGlobalEscalation(), loadImages()]);
 }
 

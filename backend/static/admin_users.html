@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Пользователи — Фармбазис Админ</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/admin_common.css">
+    <script src="/static/admin_nav.js"></script>
+    <style>
+        :root {
+            --accent: #6366f1; --accent-dark: #4338ca;
+            --gray-100: #f4f4f5; --gray-200: #e4e4e7; --gray-300: #d4d4d8;
+            --gray-400: #a1a1aa; --gray-500: #71717a; --gray-600: #52525b;
+            --gray-700: #3f3f46; --gray-800: #27272a; --gray-900: #18181b; --gray-950: #09090b;
+            --success: #22c55e; --danger: #ef4444; --warning: #f59e0b;
+            --radius: 12px; --radius-sm: 8px;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-sans); background: var(--gray-950); color: var(--gray-200); }
+
+        .page { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .page-header h1 { font-size: 22px; font-weight: 600; }
+
+        .btn {
+            padding: 8px 16px; border: none; border-radius: var(--radius-sm);
+            cursor: pointer; font-family: var(--font-sans); font-size: 13px; font-weight: 600;
+            transition: background 0.15s;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-dark); }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { opacity: 0.9; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .btn-ghost { background: none; border: 1px solid var(--gray-700); color: var(--gray-400); }
+        .btn-ghost:hover { border-color: var(--gray-500); color: var(--gray-200); }
+
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--gray-500); padding: 10px 12px; border-bottom: 1px solid var(--gray-800); letter-spacing: 0.5px; }
+        td { padding: 12px; border-bottom: 1px solid var(--gray-800); font-size: 14px; }
+        tr:hover td { background: rgba(255,255,255,0.02); }
+
+        .badge {
+            display: inline-block; padding: 2px 8px; border-radius: 4px;
+            font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+        }
+        .badge-superadmin { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+        .badge-admin { background: rgba(34,197,94,0.15); color: #86efac; }
+        .badge-viewer { background: rgba(161,161,170,0.1); color: #a1a1aa; }
+        .badge-active { color: var(--success); }
+        .badge-inactive { color: var(--danger); }
+
+        .actions-cell { display: flex; gap: 6px; }
+
+        /* Modal */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            z-index: 10000; align-items: center; justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: var(--gray-900); border: 1px solid var(--gray-700);
+            border-radius: var(--radius); padding: 28px; width: 100%; max-width: 440px;
+        }
+        .modal h2 { font-size: 18px; font-weight: 600; margin-bottom: 20px; }
+        .modal .field { margin-bottom: 16px; }
+        .modal .field label { display: block; font-size: 13px; font-weight: 500; color: var(--gray-400); margin-bottom: 5px; }
+        .modal .field input, .modal .field select {
+            width: 100%; padding: 9px 12px; background: var(--gray-800);
+            border: 1px solid var(--gray-700); border-radius: var(--radius-sm);
+            color: var(--gray-200); font-size: 14px; font-family: var(--font-sans); outline: none;
+        }
+        .modal .field input:focus, .modal .field select:focus { border-color: var(--accent); }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+        .error-text { color: var(--danger); font-size: 13px; margin-top: 8px; }
+        .toast {
+            position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+            background: var(--gray-800); border: 1px solid var(--gray-700);
+            border-radius: var(--radius-sm); color: var(--gray-200); font-size: 14px;
+            z-index: 20000; opacity: 0; transition: opacity 0.3s;
+        }
+        .toast.show { opacity: 1; }
+        .toast.error { border-color: var(--danger); }
+    </style>
+</head>
+<body>
+
+<div class="page">
+    <div class="page-header">
+        <h1>Управление пользователями</h1>
+        <button class="btn btn-primary" onclick="openCreateModal()">+ Добавить</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Логин</th>
+                <th>Имя</th>
+                <th>Роль</th>
+                <th>Статус</th>
+                <th>Последний вход</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody id="usersBody"></tbody>
+    </table>
+</div>
+
+<!-- Modal: Create / Edit -->
+<div class="modal-overlay" id="userModal">
+    <div class="modal">
+        <h2 id="modalTitle">Новый пользователь</h2>
+        <form id="userForm" onsubmit="return handleSubmit(event)">
+            <input type="hidden" id="editUserId">
+            <div class="field">
+                <label for="f_username">Логин</label>
+                <input type="text" id="f_username" required minlength="1" maxlength="100" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="f_password" id="passwordLabel">Пароль</label>
+                <input type="password" id="f_password" minlength="6" maxlength="255" autocomplete="new-password">
+            </div>
+            <div class="field">
+                <label for="f_display_name">Отображаемое имя</label>
+                <input type="text" id="f_display_name" maxlength="100">
+            </div>
+            <div class="field">
+                <label for="f_role">Роль</label>
+                <select id="f_role">
+                    <option value="viewer">viewer — только просмотр</option>
+                    <option value="admin">admin — редактирование</option>
+                    <option value="superadmin">superadmin — полный доступ</option>
+                </select>
+            </div>
+            <div id="formError" class="error-text" style="display:none"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-ghost" onclick="closeModal()">Отмена</button>
+                <button type="submit" class="btn btn-primary" id="submitBtn">Создать</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api/admin';
+
+// Auth fetch override
+const _origFetch = window.fetch.bind(window);
+window.fetch = (url, opts = {}) => {
+    if (typeof url === 'string' && url.startsWith('/api/')) {
+        return AdminNav.authFetch(url, opts);
+    }
+    return _origFetch(url, opts);
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const user = AdminNav.init({ currentPage: 'admin-users' });
+    if (!user) return;
+    if (user.role !== 'superadmin') {
+        document.querySelector('.page').innerHTML = '<p style="padding:40px;color:var(--gray-500)">Доступ только для суперадмина.</p>';
+        return;
+    }
+    loadUsers();
+});
+
+let allUsers = [];
+
+async function loadUsers() {
+    try {
+        const r = await fetch(`${API}/users`);
+        if (!r.ok) throw new Error('Ошибка загрузки');
+        allUsers = await r.json();
+        renderUsers();
+    } catch (e) {
+        showToast(e.message, true);
+    }
+}
+
+function renderUsers() {
+    const tbody = document.getElementById('usersBody');
+    tbody.innerHTML = '';
+    for (const u of allUsers) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${esc(u.username)}</td>
+            <td>${esc(u.display_name || '—')}</td>
+            <td><span class="badge badge-${u.role}">${u.role}</span></td>
+            <td><span class="${u.is_active ? 'badge-active' : 'badge-inactive'}">${u.is_active ? 'Активен' : 'Неактивен'}</span></td>
+            <td style="color:var(--gray-500);font-size:13px">${u.last_login_at ? new Date(u.last_login_at).toLocaleString('ru') : '—'}</td>
+            <td>
+                <div class="actions-cell">
+                    <button class="btn btn-sm btn-ghost" onclick="openEditModal(${u.id})">✏️</button>
+                    <button class="btn btn-sm btn-ghost" onclick="toggleActive(${u.id}, ${u.is_active})">${u.is_active ? '🔒' : '🔓'}</button>
+                    <button class="btn btn-sm btn-ghost" onclick="deleteUser(${u.id})" style="color:var(--danger)">🗑</button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    }
+}
+
+function esc(text) {
+    const d = document.createElement('div');
+    d.textContent = text || '';
+    return d.innerHTML;
+}
+
+function openCreateModal() {
+    document.getElementById('modalTitle').textContent = 'Новый пользователь';
+    document.getElementById('submitBtn').textContent = 'Создать';
+    document.getElementById('editUserId').value = '';
+    document.getElementById('f_username').value = '';
+    document.getElementById('f_username').disabled = false;
+    document.getElementById('f_password').value = '';
+    document.getElementById('f_password').required = true;
+    document.getElementById('passwordLabel').textContent = 'Пароль';
+    document.getElementById('f_display_name').value = '';
+    document.getElementById('f_role').value = 'viewer';
+    document.getElementById('formError').style.display = 'none';
+    document.getElementById('userModal').classList.add('active');
+}
+
+function openEditModal(userId) {
+    const u = allUsers.find(x => x.id === userId);
+    if (!u) return;
+    document.getElementById('modalTitle').textContent = 'Редактирование';
+    document.getElementById('submitBtn').textContent = 'Сохранить';
+    document.getElementById('editUserId').value = u.id;
+    document.getElementById('f_username').value = u.username;
+    document.getElementById('f_username').disabled = true;
+    document.getElementById('f_password').value = '';
+    document.getElementById('f_password').required = false;
+    document.getElementById('passwordLabel').textContent = 'Новый пароль (оставьте пустым)';
+    document.getElementById('f_display_name').value = u.display_name || '';
+    document.getElementById('f_role').value = u.role;
+    document.getElementById('formError').style.display = 'none';
+    document.getElementById('userModal').classList.add('active');
+}
+
+function closeModal() {
+    document.getElementById('userModal').classList.remove('active');
+}
+
+async function handleSubmit(e) {
+    e.preventDefault();
+    const editId = document.getElementById('editUserId').value;
+    const errEl = document.getElementById('formError');
+    errEl.style.display = 'none';
+
+    try {
+        if (editId) {
+            // Update
+            const body = {
+                display_name: document.getElementById('f_display_name').value || null,
+                role: document.getElementById('f_role').value,
+            };
+            const pw = document.getElementById('f_password').value;
+            if (pw) body.new_password = pw;
+            const r = await fetch(`${API}/users/${editId}`, {
+                method: 'PUT',
+                body: JSON.stringify(body),
+            });
+            if (!r.ok) {
+                const data = await r.json().catch(() => ({}));
+                throw new Error(data.detail || 'Ошибка');
+            }
+            showToast('Пользователь обновлён');
+        } else {
+            // Create
+            const pw = document.getElementById('f_password').value;
+            if (!pw || pw.length < 6) throw new Error('Пароль минимум 6 символов');
+            const body = {
+                username: document.getElementById('f_username').value.trim(),
+                password: pw,
+                display_name: document.getElementById('f_display_name').value || null,
+                role: document.getElementById('f_role').value,
+            };
+            const r = await fetch(`${API}/users`, {
+                method: 'POST',
+                body: JSON.stringify(body),
+            });
+            if (!r.ok) {
+                const data = await r.json().catch(() => ({}));
+                throw new Error(data.detail || 'Ошибка');
+            }
+            showToast('Пользователь создан');
+        }
+        closeModal();
+        await loadUsers();
+    } catch (e) {
+        errEl.textContent = e.message;
+        errEl.style.display = 'block';
+    }
+    return false;
+}
+
+async function toggleActive(userId, currentActive) {
+    try {
+        const r = await fetch(`${API}/users/${userId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ is_active: !currentActive }),
+        });
+        if (!r.ok) {
+            const data = await r.json().catch(() => ({}));
+            throw new Error(data.detail || 'Ошибка');
+        }
+        showToast(currentActive ? 'Деактивирован' : 'Активирован');
+        await loadUsers();
+    } catch (e) {
+        showToast(e.message, true);
+    }
+}
+
+async function deleteUser(userId) {
+    const u = allUsers.find(x => x.id === userId);
+    if (!u) return;
+    if (!confirm(`Удалить пользователя "${u.username}"?`)) return;
+    try {
+        const r = await fetch(`${API}/users/${userId}`, { method: 'DELETE' });
+        if (!r.ok) {
+            const data = await r.json().catch(() => ({}));
+            throw new Error(data.detail || 'Ошибка');
+        }
+        showToast('Пользователь удалён');
+        await loadUsers();
+    } catch (e) {
+        showToast(e.message, true);
+    }
+}
+
+function showToast(msg, isError = false) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast show' + (isError ? ' error' : '');
+    setTimeout(() => el.className = 'toast', 3000);
+}
+</script>
+</body>
+</html>
