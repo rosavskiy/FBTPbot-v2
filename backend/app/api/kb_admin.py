@@ -1,13 +1,13 @@
 """
-API-эндпоинты для управления базой знаний Q&A (квиз-режим + импорт).
+API-СЌРЅРґРїРѕРёРЅС‚С‹ РґР»СЏ СѓРїСЂР°РІР»РµРЅРёСЏ Р±Р°Р·РѕР№ Р·РЅР°РЅРёР№ Q&A (РєРІРёР·-СЂРµР¶РёРј + РёРјРїРѕСЂС‚).
 
-Позволяет:
-- Просматривать Q&A пары из JSON-файла
-- Редактировать вопросы/ответы/метаданные
-- Одобрять пары (approved)
-- Удалять некачественные записи
-- Импортировать новые данные
-- Синхронизировать с ChromaDB (инкрементально + полный реиндекс)
+РџРѕР·РІРѕР»СЏРµС‚:
+- РџСЂРѕСЃРјР°С‚СЂРёРІР°С‚СЊ Q&A РїР°СЂС‹ РёР· JSON-С„Р°Р№Р»Р°
+- Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ РІРѕРїСЂРѕСЃС‹/РѕС‚РІРµС‚С‹/РјРµС‚Р°РґР°РЅРЅС‹Рµ
+- РћРґРѕР±СЂСЏС‚СЊ РїР°СЂС‹ (approved)
+- РЈРґР°Р»СЏС‚СЊ РЅРµРєР°С‡РµСЃС‚РІРµРЅРЅС‹Рµ Р·Р°РїРёСЃРё
+- РРјРїРѕСЂС‚РёСЂРѕРІР°С‚СЊ РЅРѕРІС‹Рµ РґР°РЅРЅС‹Рµ
+- РЎРёРЅС…СЂРѕРЅРёР·РёСЂРѕРІР°С‚СЊ СЃ ChromaDB (РёРЅРєСЂРµРјРµРЅС‚Р°Р»СЊРЅРѕ + РїРѕР»РЅС‹Р№ СЂРµРёРЅРґРµРєСЃ)
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.admin_auth import log_action, require_role, verify_admin_token
-from app.config import settings
+from app.config import SARATOV_TZ, settings
 from app.database.models import AdminUser
 from app.database.models import get_db as get_admin_db
 from app.indexer.knowledge_base import (
@@ -44,9 +44,9 @@ router = APIRouter(prefix="/api/kb", tags=["kb-admin"])
 _any_admin = Depends(verify_admin_token)
 _editor = Depends(require_role("superadmin", "admin"))
 
-# ─── Путь к JSON-файлу базы знаний ───────────────────────────────────
-# На сервере: /app/data/support_kb.json (persistent volume)
-# Локально: real_support/processed/support_qa_documents_merged_final.json
+# в”Ђв”Ђв”Ђ РџСѓС‚СЊ Рє JSON-С„Р°Р№Р»Сѓ Р±Р°Р·С‹ Р·РЅР°РЅРёР№ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+# РќР° СЃРµСЂРІРµСЂРµ: /app/data/support_kb.json (persistent volume)
+# Р›РѕРєР°Р»СЊРЅРѕ: real_support/processed/support_qa_documents_merged_final.json
 _KB_PATHS = [
     Path("/app/data/support_kb.json"),  # Docker production
     Path("/app/real_support/processed/support_qa_documents_merged_final.json"),  # Docker alt
@@ -60,12 +60,12 @@ KB_JSON_PATH = next((p for p in _KB_PATHS if p.exists()), _KB_PATHS[0])
 KB_BACKUP_DIR = KB_JSON_PATH.parent / "backups"
 
 
-# ─── Pydantic-модели ─────────────────────────────────────────────────
+# в”Ђв”Ђв”Ђ Pydantic-РјРѕРґРµР»Рё в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 
 class KBItemMetadata(BaseModel):
     source: str = "real_support_tickets"
-    category: str = "Прочее"
+    category: str = "РџСЂРѕС‡РµРµ"
     category_en: str = "general"
     tags: list[str] = []
     quality_score: int = 3
@@ -123,7 +123,7 @@ class KBReindexStatus(BaseModel):
     started_at: str | None = None
     finished_at: str | None = None
     updated_at: str | None = None
-    message: str = "Ожидание запуска"
+    message: str = "РћР¶РёРґР°РЅРёРµ Р·Р°РїСѓСЃРєР°"
     error: str | None = None
 
 
@@ -160,7 +160,7 @@ def _set_reindex_phase(
     payload: dict[str, Any] = {
         "status": status,
         "message": message,
-        "updated_at": datetime.now().isoformat(),
+        "updated_at": datetime.now(SARATOV_TZ).isoformat(),
     }
     if processed_documents is not None:
         payload["processed_documents"] = processed_documents
@@ -180,7 +180,7 @@ def _set_reindex_phase(
 async def _run_reindex_job(job_id: str):
     global _REINDEX_TASK
 
-    started_at = datetime.now().isoformat()
+    started_at = datetime.now(SARATOV_TZ).isoformat()
     started_ts = time.time()
     total_documents = len(_load_kb())
     _update_reindex_status(
@@ -193,7 +193,7 @@ async def _run_reindex_job(job_id: str):
         started_at=started_at,
         finished_at=None,
         updated_at=started_at,
-        message="Подготовка к переиндексации",
+        message="РџРѕРґРіРѕС‚РѕРІРєР° Рє РїРµСЂРµРёРЅРґРµРєСЃР°С†РёРё",
         error=None,
     )
 
@@ -221,15 +221,15 @@ async def _run_reindex_job(job_id: str):
 
         if _rag_engine is not None and hasattr(_rag_engine, "_support_vector_store"):
             delattr(_rag_engine, "_support_vector_store")
-            logger.info("Кеш support_vector_store в RAG-движке сброшен")
+            logger.info("РљРµС€ support_vector_store РІ RAG-РґРІРёР¶РєРµ СЃР±СЂРѕС€РµРЅ")
 
         indexer.support_vector_store = None
 
-        finished_at = datetime.now().isoformat()
+        finished_at = datetime.now(SARATOV_TZ).isoformat()
         duration = round(time.time() - started_ts, 2)
         _set_reindex_phase(
             status="completed",
-            message=f"Переиндексация завершена: {count} документов за {duration}с",
+            message=f"РџРµСЂРµРёРЅРґРµРєСЃР°С†РёСЏ Р·Р°РІРµСЂС€РµРЅР°: {count} РґРѕРєСѓРјРµРЅС‚РѕРІ Р·Р° {duration}СЃ",
             processed_documents=count,
             total_documents=count,
             progress_percent=100.0,
@@ -238,12 +238,12 @@ async def _run_reindex_job(job_id: str):
             error=None,
         )
     except Exception as e:
-        finished_at = datetime.now().isoformat()
+        finished_at = datetime.now(SARATOV_TZ).isoformat()
         duration = round(time.time() - started_ts, 2)
-        logger.error(f"Ошибка переиндексации: {e}")
+        logger.error(f"РћС€РёР±РєР° РїРµСЂРµРёРЅРґРµРєСЃР°С†РёРё: {e}")
         _set_reindex_phase(
             status="failed",
-            message="Переиндексация завершилась с ошибкой",
+            message="РџРµСЂРµРёРЅРґРµРєСЃР°С†РёСЏ Р·Р°РІРµСЂС€РёР»Р°СЃСЊ СЃ РѕС€РёР±РєРѕР№",
             finished_at=finished_at,
             duration_seconds=duration,
             error=str(e),
@@ -252,41 +252,41 @@ async def _run_reindex_job(job_id: str):
         _REINDEX_TASK = None
 
 
-# ─── Утилиты для работы с JSON-файлом ────────────────────────────────
+# в”Ђв”Ђв”Ђ РЈС‚РёР»РёС‚С‹ РґР»СЏ СЂР°Р±РѕС‚С‹ СЃ JSON-С„Р°Р№Р»РѕРј в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 
 def _load_kb() -> list[dict[str, Any]]:
-    """Загрузить базу знаний из JSON."""
+    """Р—Р°РіСЂСѓР·РёС‚СЊ Р±Р°Р·Сѓ Р·РЅР°РЅРёР№ РёР· JSON."""
     if not KB_JSON_PATH.exists():
-        raise HTTPException(status_code=404, detail=f"Файл БЗ не найден: {KB_JSON_PATH}")
+        raise HTTPException(status_code=404, detail=f"Р¤Р°Р№Р» Р‘Р— РЅРµ РЅР°Р№РґРµРЅ: {KB_JSON_PATH}")
     try:
         with open(KB_JSON_PATH, encoding="utf-8") as f:
             return json.load(f)
     except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка парсинга JSON: {e}")
+        raise HTTPException(status_code=500, detail=f"РћС€РёР±РєР° РїР°СЂСЃРёРЅРіР° JSON: {e}")
 
 
 def _save_kb(data: list[dict[str, Any]], backup: bool = True):
-    """Сохранить базу знаний в JSON с опциональным бэкапом."""
+    """РЎРѕС…СЂР°РЅРёС‚СЊ Р±Р°Р·Сѓ Р·РЅР°РЅРёР№ РІ JSON СЃ РѕРїС†РёРѕРЅР°Р»СЊРЅС‹Рј Р±СЌРєР°РїРѕРј."""
     if backup:
         KB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(SARATOV_TZ).strftime("%Y%m%d_%H%M%S")
         backup_path = KB_BACKUP_DIR / f"kb_backup_{ts}.json"
         if KB_JSON_PATH.exists():
             shutil.copy2(KB_JSON_PATH, backup_path)
-            logger.info(f"Бэкап создан: {backup_path}")
-            # Оставляем только последние 20 бэкапов
+            logger.info(f"Р‘СЌРєР°Рї СЃРѕР·РґР°РЅ: {backup_path}")
+            # РћСЃС‚Р°РІР»СЏРµРј С‚РѕР»СЊРєРѕ РїРѕСЃР»РµРґРЅРёРµ 20 Р±СЌРєР°РїРѕРІ
             backups = sorted(KB_BACKUP_DIR.glob("kb_backup_*.json"))
             for old in backups[:-20]:
                 old.unlink()
 
     with open(KB_JSON_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    logger.info(f"БЗ сохранена: {len(data)} записей -> {KB_JSON_PATH}")
+    logger.info(f"Р‘Р— СЃРѕС…СЂР°РЅРµРЅР°: {len(data)} Р·Р°РїРёСЃРµР№ -> {KB_JSON_PATH}")
 
 
 def _update_chromadb_document(item: dict[str, Any]):
-    """Инкрементально обновить один документ в ChromaDB."""
+    """РРЅРєСЂРµРјРµРЅС‚Р°Р»СЊРЅРѕ РѕР±РЅРѕРІРёС‚СЊ РѕРґРёРЅ РґРѕРєСѓРјРµРЅС‚ РІ ChromaDB."""
     try:
         indexer = get_indexer()
         store = indexer.get_support_vector_store()
@@ -297,22 +297,24 @@ def _update_chromadb_document(item: dict[str, Any]):
                 persist_directory=settings.chroma_persist_dir,
             )
             indexer.support_vector_store = store
-            logger.info("support_vector_store был создан для инкрементальной синхронизации")
+            logger.info(
+                "support_vector_store Р±С‹Р» СЃРѕР·РґР°РЅ РґР»СЏ РёРЅРєСЂРµРјРµРЅС‚Р°Р»СЊРЅРѕР№ СЃРёРЅС…СЂРѕРЅРёР·Р°С†РёРё"
+            )
 
         collection = store._collection
         doc_id = item["id"]
         metadata = item.get("metadata", {})
 
-        # Подготовка метаданных (ChromaDB не поддерживает списки)
+        # РџРѕРґРіРѕС‚РѕРІРєР° РјРµС‚Р°РґР°РЅРЅС‹С… (ChromaDB РЅРµ РїРѕРґРґРµСЂР¶РёРІР°РµС‚ СЃРїРёСЃРєРё)
         clean_meta = {
             "source": metadata.get("source", "real_support_tickets"),
-            "category": metadata.get("category", "Прочее"),
+            "category": metadata.get("category", "РџСЂРѕС‡РµРµ"),
             "category_en": metadata.get("category_en", "general"),
             "quality_score": metadata.get("quality_score", 0),
             "question": metadata.get("question", "")[:500],
             "doc_type": metadata.get("type", "qa_pair"),
             "article_id": f"tp_{doc_id}",
-            "title": metadata.get("question", "Заявка ТП")[:200],
+            "title": metadata.get("question", "Р—Р°СЏРІРєР° РўРџ")[:200],
         }
         if metadata.get("tags"):
             clean_meta["tags"] = ", ".join(metadata["tags"])
@@ -321,7 +323,7 @@ def _update_chromadb_document(item: dict[str, Any]):
 
         text = item["text"]
 
-        # Пробуем обновить, если не существует — добавляем
+        # РџСЂРѕР±СѓРµРј РѕР±РЅРѕРІРёС‚СЊ, РµСЃР»Рё РЅРµ СЃСѓС‰РµСЃС‚РІСѓРµС‚ вЂ” РґРѕР±Р°РІР»СЏРµРј
         existing = collection.get(ids=[doc_id])
         if existing and existing["ids"]:
             collection.update(
@@ -329,21 +331,21 @@ def _update_chromadb_document(item: dict[str, Any]):
                 documents=[text],
                 metadatas=[clean_meta],
             )
-            logger.info(f"ChromaDB: обновлён документ {doc_id}")
+            logger.info(f"ChromaDB: РѕР±РЅРѕРІР»С‘РЅ РґРѕРєСѓРјРµРЅС‚ {doc_id}")
         else:
             collection.add(
                 ids=[doc_id],
                 documents=[text],
                 metadatas=[clean_meta],
             )
-            logger.info(f"ChromaDB: добавлен документ {doc_id}")
+            logger.info(f"ChromaDB: РґРѕР±Р°РІР»РµРЅ РґРѕРєСѓРјРµРЅС‚ {doc_id}")
 
     except Exception as e:
-        logger.error(f"Ошибка обновления ChromaDB для {item.get('id')}: {e}")
+        logger.error(f"РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ ChromaDB РґР»СЏ {item.get('id')}: {e}")
 
 
 def _delete_chromadb_document(doc_id: str):
-    """Удалить документ из ChromaDB."""
+    """РЈРґР°Р»РёС‚СЊ РґРѕРєСѓРјРµРЅС‚ РёР· ChromaDB."""
     try:
         indexer = get_indexer()
         store = indexer.get_support_vector_store()
@@ -356,17 +358,17 @@ def _delete_chromadb_document(doc_id: str):
             indexer.support_vector_store = store
         collection = store._collection
         collection.delete(ids=[doc_id])
-        logger.info(f"ChromaDB: удалён документ {doc_id}")
+        logger.info(f"ChromaDB: СѓРґР°Р»С‘РЅ РґРѕРєСѓРјРµРЅС‚ {doc_id}")
     except Exception as e:
-        logger.error(f"Ошибка удаления из ChromaDB {doc_id}: {e}")
+        logger.error(f"РћС€РёР±РєР° СѓРґР°Р»РµРЅРёСЏ РёР· ChromaDB {doc_id}: {e}")
 
 
-# ─── Эндпоинты ───────────────────────────────────────────────────────
+# в”Ђв”Ђв”Ђ Р­РЅРґРїРѕРёРЅС‚С‹ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 
 @router.get("/stats", response_model=KBStats)
 async def get_kb_stats(user: AdminUser = _any_admin):
-    """Статистика базы знаний."""
+    """РЎС‚Р°С‚РёСЃС‚РёРєР° Р±Р°Р·С‹ Р·РЅР°РЅРёР№."""
     data = _load_kb()
     by_category: dict[str, int] = {}
     by_quality: dict[str, int] = {}
@@ -375,7 +377,7 @@ async def get_kb_stats(user: AdminUser = _any_admin):
 
     for item in data:
         meta = item.get("metadata", {})
-        cat = meta.get("category", "Прочее")
+        cat = meta.get("category", "РџСЂРѕС‡РµРµ")
         by_category[cat] = by_category.get(cat, 0) + 1
 
         qs = str(meta.get("quality_score", 0))
@@ -406,10 +408,10 @@ async def list_kb_items(
     search: str | None = None,
     user: AdminUser = _any_admin,
 ):
-    """Список Q&A пар с пагинацией и фильтрацией."""
+    """РЎРїРёСЃРѕРє Q&A РїР°СЂ СЃ РїР°РіРёРЅР°С†РёРµР№ Рё С„РёР»СЊС‚СЂР°С†РёРµР№."""
     data = _load_kb()
 
-    # Фильтрация
+    # Р¤РёР»СЊС‚СЂР°С†РёСЏ
     if category:
         data = [d for d in data if d.get("metadata", {}).get("category") == category]
     if reviewed is not None:
@@ -444,12 +446,12 @@ async def list_kb_items(
 
 @router.get("/items/{item_id}")
 async def get_kb_item(item_id: str, user: AdminUser = _any_admin):
-    """Получить одну Q&A пару."""
+    """РџРѕР»СѓС‡РёС‚СЊ РѕРґРЅСѓ Q&A РїР°СЂСѓ."""
     data = _load_kb()
     for item in data:
         if item.get("id") == item_id:
             return item
-    raise HTTPException(status_code=404, detail=f"Элемент {item_id} не найден")
+    raise HTTPException(status_code=404, detail=f"Р­Р»РµРјРµРЅС‚ {item_id} РЅРµ РЅР°Р№РґРµРЅ")
 
 
 @router.get("/quiz/next")
@@ -459,8 +461,8 @@ async def get_next_quiz_item(
     user: AdminUser = _any_admin,
 ):
     """
-    Получить следующую неотревьюенную Q&A пару для квиза.
-    Возвращает элемент + общий прогресс.
+    РџРѕР»СѓС‡РёС‚СЊ СЃР»РµРґСѓСЋС‰СѓСЋ РЅРµРѕС‚СЂРµРІСЊСЋРµРЅРЅСѓСЋ Q&A РїР°СЂСѓ РґР»СЏ РєРІРёР·Р°.
+    Р’РѕР·РІСЂР°С‰Р°РµС‚ СЌР»РµРјРµРЅС‚ + РѕР±С‰РёР№ РїСЂРѕРіСЂРµСЃСЃ.
     """
     data = _load_kb()
 
@@ -482,7 +484,7 @@ async def get_next_quiz_item(
                 "remaining": 0,
                 "percent": 100.0 if total > 0 else 0.0,
             },
-            "message": "Все записи проверены! 🎉",
+            "message": "Р’СЃРµ Р·Р°РїРёСЃРё РїСЂРѕРІРµСЂРµРЅС‹! рџЋ‰",
         }
 
     item = candidates[0]
@@ -504,7 +506,7 @@ async def get_next_quiz_item(
 async def update_kb_item(
     item_id: str, update: KBItemUpdate, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)
 ):
-    """Обновить Q&A пару (вопрос, ответ, категорию, теги и т.д.)."""
+    """РћР±РЅРѕРІРёС‚СЊ Q&A РїР°СЂСѓ (РІРѕРїСЂРѕСЃ, РѕС‚РІРµС‚, РєР°С‚РµРіРѕСЂРёСЋ, С‚РµРіРё Рё С‚.Рґ.)."""
     data = _load_kb()
 
     found_idx = None
@@ -514,12 +516,12 @@ async def update_kb_item(
             break
 
     if found_idx is None:
-        raise HTTPException(status_code=404, detail=f"Элемент {item_id} не найден")
+        raise HTTPException(status_code=404, detail=f"Р­Р»РµРјРµРЅС‚ {item_id} РЅРµ РЅР°Р№РґРµРЅ")
 
     item = data[found_idx]
     meta = item.get("metadata", {})
 
-    # Применяем обновления
+    # РџСЂРёРјРµРЅСЏРµРј РѕР±РЅРѕРІР»РµРЅРёСЏ
     if update.question is not None:
         meta["question"] = update.question
     if update.answer is not None:
@@ -533,16 +535,16 @@ async def update_kb_item(
     if update.quality_score is not None:
         meta["quality_score"] = update.quality_score
 
-    # Перестраиваем текст
+    # РџРµСЂРµСЃС‚СЂР°РёРІР°РµРј С‚РµРєСЃС‚
     q = meta.get("question", "")
     a = meta.get("answer", "")
-    item["text"] = f"Вопрос: {q}\n\nОтвет: {a}"
+    item["text"] = f"Р’РѕРїСЂРѕСЃ: {q}\n\nРћС‚РІРµС‚: {a}"
     item["metadata"] = meta
 
     data[found_idx] = item
     _save_kb(data)
 
-    # Инкрементально обновляем ChromaDB
+    # РРЅРєСЂРµРјРµРЅС‚Р°Р»СЊРЅРѕ РѕР±РЅРѕРІР»СЏРµРј ChromaDB
     _update_chromadb_document(item)
 
     await log_action(
@@ -559,7 +561,7 @@ async def update_kb_item(
 
 @router.post("/items/{item_id}/approve")
 async def approve_kb_item(item_id: str, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
-    """Одобрить Q&A пару (пометить как проверенную, quality_score=5)."""
+    """РћРґРѕР±СЂРёС‚СЊ Q&A РїР°СЂСѓ (РїРѕРјРµС‚РёС‚СЊ РєР°Рє РїСЂРѕРІРµСЂРµРЅРЅСѓСЋ, quality_score=5)."""
     data = _load_kb()
 
     found_idx = None
@@ -569,11 +571,11 @@ async def approve_kb_item(item_id: str, user: AdminUser = _editor, db: AsyncSess
             break
 
     if found_idx is None:
-        raise HTTPException(status_code=404, detail=f"Элемент {item_id} не найден")
+        raise HTTPException(status_code=404, detail=f"Р­Р»РµРјРµРЅС‚ {item_id} РЅРµ РЅР°Р№РґРµРЅ")
 
     item = data[found_idx]
     item["reviewed"] = True
-    item["review_date"] = datetime.now().isoformat()
+    item["review_date"] = datetime.now(SARATOV_TZ).isoformat()
     meta = item.get("metadata", {})
     meta["quality_score"] = 5
     item["metadata"] = meta
@@ -581,7 +583,7 @@ async def approve_kb_item(item_id: str, user: AdminUser = _editor, db: AsyncSess
     data[found_idx] = item
     _save_kb(data)
 
-    # Инкрементально обновляем ChromaDB
+    # РРЅРєСЂРµРјРµРЅС‚Р°Р»СЊРЅРѕ РѕР±РЅРѕРІР»СЏРµРј ChromaDB
     _update_chromadb_document(item)
 
     await log_action(
@@ -591,7 +593,7 @@ async def approve_kb_item(item_id: str, user: AdminUser = _editor, db: AsyncSess
         action="update",
         entity_type="kb_item",
         entity_id=item_id,
-        details="Одобрена",
+        details="РћРґРѕР±СЂРµРЅР°",
     )
     return {"status": "ok", "item": item}
 
@@ -600,7 +602,7 @@ async def approve_kb_item(item_id: str, user: AdminUser = _editor, db: AsyncSess
 async def save_and_approve_kb_item(
     item_id: str, update: KBItemUpdate, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)
 ):
-    """Обновить и сразу одобрить Q&A пару."""
+    """РћР±РЅРѕРІРёС‚СЊ Рё СЃСЂР°Р·Сѓ РѕРґРѕР±СЂРёС‚СЊ Q&A РїР°СЂСѓ."""
     data = _load_kb()
 
     found_idx = None
@@ -610,12 +612,12 @@ async def save_and_approve_kb_item(
             break
 
     if found_idx is None:
-        raise HTTPException(status_code=404, detail=f"Элемент {item_id} не найден")
+        raise HTTPException(status_code=404, detail=f"Р­Р»РµРјРµРЅС‚ {item_id} РЅРµ РЅР°Р№РґРµРЅ")
 
     item = data[found_idx]
     meta = item.get("metadata", {})
 
-    # Применяем обновления
+    # РџСЂРёРјРµРЅСЏРµРј РѕР±РЅРѕРІР»РµРЅРёСЏ
     if update.question is not None:
         meta["question"] = update.question
     if update.answer is not None:
@@ -631,13 +633,13 @@ async def save_and_approve_kb_item(
     else:
         meta["quality_score"] = 5
 
-    # Перестраиваем текст
+    # РџРµСЂРµСЃС‚СЂР°РёРІР°РµРј С‚РµРєСЃС‚
     q = meta.get("question", "")
     a = meta.get("answer", "")
-    item["text"] = f"Вопрос: {q}\n\nОтвет: {a}"
+    item["text"] = f"Р’РѕРїСЂРѕСЃ: {q}\n\nРћС‚РІРµС‚: {a}"
     item["metadata"] = meta
     item["reviewed"] = True
-    item["review_date"] = datetime.now().isoformat()
+    item["review_date"] = datetime.now(SARATOV_TZ).isoformat()
 
     data[found_idx] = item
     _save_kb(data)
@@ -651,14 +653,14 @@ async def save_and_approve_kb_item(
         action="update",
         entity_type="kb_item",
         entity_id=item_id,
-        details="Обновлена и одобрена",
+        details="РћР±РЅРѕРІР»РµРЅР° Рё РѕРґРѕР±СЂРµРЅР°",
     )
     return {"status": "ok", "item": item}
 
 
 @router.delete("/items/{item_id}")
 async def delete_kb_item(item_id: str, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
-    """Удалить Q&A пару из базы знаний."""
+    """РЈРґР°Р»РёС‚СЊ Q&A РїР°СЂСѓ РёР· Р±Р°Р·С‹ Р·РЅР°РЅРёР№."""
     data = _load_kb()
 
     found_idx = None
@@ -668,7 +670,7 @@ async def delete_kb_item(item_id: str, user: AdminUser = _editor, db: AsyncSessi
             break
 
     if found_idx is None:
-        raise HTTPException(status_code=404, detail=f"Элемент {item_id} не найден")
+        raise HTTPException(status_code=404, detail=f"Р­Р»РµРјРµРЅС‚ {item_id} РЅРµ РЅР°Р№РґРµРЅ")
 
     data.pop(found_idx)
     _save_kb(data)
@@ -686,17 +688,17 @@ async def import_kb_data(
     file: UploadFile = File(...), user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)
 ):
     """
-    Импорт новых Q&A данных из JSON-файла.
-    Дубликаты (по id) пропускаются, новые записи добавляются.
+    РРјРїРѕСЂС‚ РЅРѕРІС‹С… Q&A РґР°РЅРЅС‹С… РёР· JSON-С„Р°Р№Р»Р°.
+    Р”СѓР±Р»РёРєР°С‚С‹ (РїРѕ id) РїСЂРѕРїСѓСЃРєР°СЋС‚СЃСЏ, РЅРѕРІС‹Рµ Р·Р°РїРёСЃРё РґРѕР±Р°РІР»СЏСЋС‚СЃСЏ.
     """
     try:
         content = await file.read()
         new_items = json.loads(content.decode("utf-8"))
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Ошибка чтения файла: {e}")
+        raise HTTPException(status_code=400, detail=f"РћС€РёР±РєР° С‡С‚РµРЅРёСЏ С„Р°Р№Р»Р°: {e}")
 
     if not isinstance(new_items, list):
-        raise HTTPException(status_code=400, detail="Ожидается JSON-массив")
+        raise HTTPException(status_code=400, detail="РћР¶РёРґР°РµС‚СЃСЏ JSON-РјР°СЃСЃРёРІ")
 
     data = _load_kb()
     existing_ids = {item["id"] for item in data}
@@ -715,17 +717,17 @@ async def import_kb_data(
                 duplicates += 1
                 continue
 
-            # Убеждаемся, что есть все нужные поля
+            # РЈР±РµР¶РґР°РµРјСЃСЏ, С‡С‚Рѕ РµСЃС‚СЊ РІСЃРµ РЅСѓР¶РЅС‹Рµ РїРѕР»СЏ
             if "text" not in new_item:
                 meta = new_item.get("metadata", {})
                 q = meta.get("question", "")
                 a = meta.get("answer", "")
-                new_item["text"] = f"Вопрос: {q}\n\nОтвет: {a}"
+                new_item["text"] = f"Р’РѕРїСЂРѕСЃ: {q}\n\nРћС‚РІРµС‚: {a}"
 
             if "metadata" not in new_item:
                 new_item["metadata"] = {
                     "source": "real_support_tickets",
-                    "category": "Прочее",
+                    "category": "РџСЂРѕС‡РµРµ",
                     "category_en": "general",
                     "tags": [],
                     "quality_score": 3,
@@ -739,11 +741,11 @@ async def import_kb_data(
             existing_ids.add(new_item["id"])
             added += 1
 
-            # Добавляем в ChromaDB
+            # Р”РѕР±Р°РІР»СЏРµРј РІ ChromaDB
             _update_chromadb_document(new_item)
 
         except Exception as e:
-            logger.error(f"Ошибка импорта элемента: {e}")
+            logger.error(f"РћС€РёР±РєР° РёРјРїРѕСЂС‚Р° СЌР»РµРјРµРЅС‚Р°: {e}")
             errors += 1
 
     _save_kb(data)
@@ -754,21 +756,21 @@ async def import_kb_data(
         username=user.username,
         action="import",
         entity_type="kb_item",
-        details=f"Импорт: +{added} новых, {duplicates} дубликатов, {errors} ошибок",
+        details=f"РРјРїРѕСЂС‚: +{added} РЅРѕРІС‹С…, {duplicates} РґСѓР±Р»РёРєР°С‚РѕРІ, {errors} РѕС€РёР±РѕРє",
     )
     return KBImportResult(
         added=added,
         duplicates_skipped=duplicates,
         errors=errors,
-        message=f"Импорт завершён: +{added} новых, {duplicates} дубликатов пропущено, {errors} ошибок",
+        message=f"РРјРїРѕСЂС‚ Р·Р°РІРµСЂС€С‘РЅ: +{added} РЅРѕРІС‹С…, {duplicates} РґСѓР±Р»РёРєР°С‚РѕРІ РїСЂРѕРїСѓС‰РµРЅРѕ, {errors} РѕС€РёР±РѕРє",
     )
 
 
 @router.post("/reindex", response_model=KBReindexStatus)
 async def reindex_kb(user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
     """
-    Запустить полную переиндексацию support_tickets в фоне.
-    Используйте после массовых правок.
+    Р—Р°РїСѓСЃС‚РёС‚СЊ РїРѕР»РЅСѓСЋ РїРµСЂРµРёРЅРґРµРєСЃР°С†РёСЋ support_tickets РІ С„РѕРЅРµ.
+    РСЃРїРѕР»СЊР·СѓР№С‚Рµ РїРѕСЃР»Рµ РјР°СЃСЃРѕРІС‹С… РїСЂР°РІРѕРє.
     """
     global _REINDEX_TASK
 
@@ -776,7 +778,7 @@ async def reindex_kb(user: AdminUser = _editor, db: AsyncSession = Depends(get_a
         return KBReindexStatus(**_get_reindex_status())
 
     job_id = str(uuid4())
-    now = datetime.now().isoformat()
+    now = datetime.now(SARATOV_TZ).isoformat()
     total_documents = len(_load_kb())
     _update_reindex_status(
         job_id=job_id,
@@ -788,7 +790,7 @@ async def reindex_kb(user: AdminUser = _editor, db: AsyncSession = Depends(get_a
         started_at=now,
         finished_at=None,
         updated_at=now,
-        message="Задача переиндексации поставлена в очередь",
+        message="Р—Р°РґР°С‡Р° РїРµСЂРµРёРЅРґРµРєСЃР°С†РёРё РїРѕСЃС‚Р°РІР»РµРЅР° РІ РѕС‡РµСЂРµРґСЊ",
         error=None,
     )
     _REINDEX_TASK = asyncio.create_task(_run_reindex_job(job_id))
@@ -798,24 +800,24 @@ async def reindex_kb(user: AdminUser = _editor, db: AsyncSession = Depends(get_a
         username=user.username,
         action="reindex",
         entity_type="kb_item",
-        details=f"Переиндексация: {total_documents} документов",
+        details=f"РџРµСЂРµРёРЅРґРµРєСЃР°С†РёСЏ: {total_documents} РґРѕРєСѓРјРµРЅС‚РѕРІ",
     )
     return KBReindexStatus(**_get_reindex_status())
 
 
 @router.get("/reindex/status", response_model=KBReindexStatus)
 async def get_reindex_status(user: AdminUser = _any_admin):
-    """Получить текущий статус фоновой переиндексации."""
+    """РџРѕР»СѓС‡РёС‚СЊ С‚РµРєСѓС‰РёР№ СЃС‚Р°С‚СѓСЃ С„РѕРЅРѕРІРѕР№ РїРµСЂРµРёРЅРґРµРєСЃР°С†РёРё."""
     return KBReindexStatus(**_get_reindex_status())
 
 
 @router.get("/categories")
 async def get_categories(user: AdminUser = _any_admin):
-    """Получить список всех категорий."""
+    """РџРѕР»СѓС‡РёС‚СЊ СЃРїРёСЃРѕРє РІСЃРµС… РєР°С‚РµРіРѕСЂРёР№."""
     data = _load_kb()
     categories = {}
     for item in data:
-        cat = item.get("metadata", {}).get("category", "Прочее")
+        cat = item.get("metadata", {}).get("category", "РџСЂРѕС‡РµРµ")
         cat_en = item.get("metadata", {}).get("category_en", "general")
         categories[cat] = cat_en
     return {"categories": categories}

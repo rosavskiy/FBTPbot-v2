@@ -238,7 +238,9 @@ async def admin_login(request: AdminLoginRequest, db: AsyncSession = Depends(get
         raise HTTPException(status_code=403, detail="Учётная запись деактивирована")
 
     # Обновляем время последнего входа
-    user.last_login_at = datetime.now(UTC)
+    from app.config import SARATOV_TZ
+
+    user.last_login_at = datetime.now(SARATOV_TZ)
     await db.commit()
 
     token = _create_jwt(user)

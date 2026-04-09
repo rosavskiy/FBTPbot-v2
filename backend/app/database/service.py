@@ -10,13 +10,14 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import SARATOV_TZ
 from app.database.models import (
     ChatMessageDB,
     ChatSession,
@@ -163,7 +164,7 @@ class DatabaseService:
     ) -> Escalation | None:
         values = {
             "status": status,
-            "updated_at": datetime.now(UTC),
+            "updated_at": datetime.now(SARATOV_TZ),
         }
         if operator_notes is not None:
             values["operator_notes"] = operator_notes

@@ -43,7 +43,7 @@ HEADER_ROW = [
     "is_debug",
 ]
 
-MSK = timezone(timedelta(hours=3))
+SARATOV_TZ = timezone(timedelta(hours=4))
 
 
 class GoogleSheetLogger:
@@ -170,7 +170,7 @@ class GoogleSheetLogger:
 
         row_number = len(self._sheet.get_all_values())  # текущее кол-во строк (вкл. заголовок)
 
-        now = datetime.now(MSK).strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.now(SARATOV_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
         row = [
             row_number,  # №

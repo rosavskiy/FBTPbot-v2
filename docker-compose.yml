@@ -6,6 +6,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    environment:
+      - TZ=Europe/Saratov
     env_file:
       - ./backend/.env
     volumes:
@@ -16,6 +18,8 @@ services:
 
   tg-bot:
     image: fbtpbot-backend:latest
+    environment:
+      - TZ=Europe/Saratov
     env_file:
       - ./backend/.env
     volumes:

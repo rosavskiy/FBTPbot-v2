@@ -11,7 +11,7 @@ SQLite для хранения:
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import (
     Column,
@@ -26,7 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, relationship
 
-from app.config import settings
+from app.config import SARATOV_TZ, settings
 
 
 class Base(DeclarativeBase):
@@ -37,8 +37,8 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    created_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ))
+    updated_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ), onupdate=lambda: datetime.now(SARATOV_TZ))
     user_ip = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
 
@@ -55,7 +55,7 @@ class ChatMessageDB(Base):
     content = Column(Text, nullable=False)
     confidence = Column(Float, nullable=True)
     source_articles = Column(Text, nullable=True)  # JSON
-    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ))
 
     session = relationship("ChatSession", back_populates="messages")
 
@@ -71,8 +71,8 @@ class Escalation(Base):
     operator_notes = Column(Text, nullable=True)
     operator_id = Column(String(100), nullable=True)
     telegram_message_id = Column(String(50), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    created_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ))
+    updated_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ), onupdate=lambda: datetime.now(SARATOV_TZ))
 
     session = relationship("ChatSession", back_populates="escalations")
 
@@ -85,7 +85,7 @@ class Feedback(Base):
     message_index = Column(Integer, default=0)
     rating = Column(Integer, nullable=False)
     comment = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ))
 
 
 class Operator(Base):
@@ -97,7 +97,7 @@ class Operator(Base):
     display_name = Column(String(100), nullable=True)
     telegram_user_id = Column(String(50), nullable=True)
     is_active = Column(Integer, default=1)
-    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    created_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ))
 
 
 class AdminUser(Base):
@@ -111,8 +111,8 @@ class AdminUser(Base):
     display_name = Column(String(100), nullable=True)
     role = Column(String(20), nullable=False, default="viewer")  # superadmin | admin | viewer
     is_active = Column(Integer, default=1)
-    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    created_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ))
+    updated_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ), onupdate=lambda: datetime.now(SARATOV_TZ))
     last_login_at = Column(DateTime, nullable=True)
 
     audit_actions = relationship("AuditLog", back_populates="user")
@@ -124,7 +124,7 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ), index=True)
     user_id = Column(Integer, ForeignKey("admin_users.id"), nullable=True)
     username = Column(String(100), nullable=False)
     action = Column(String(50), nullable=False)  # create | update | delete | login | import | reindex | settings_change

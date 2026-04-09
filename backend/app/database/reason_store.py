@@ -69,7 +69,9 @@ def _make_backup(path: Path) -> None:
     backup_dir = path.parent / "backups"
     backup_dir.mkdir(exist_ok=True)
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    from app.config import SARATOV_TZ
+
+    ts = datetime.now(SARATOV_TZ).strftime("%Y%m%d_%H%M%S")
     backup_path = backup_dir / f"{path.stem}_{ts}{path.suffix}"
     shutil.copy2(path, backup_path)
 
