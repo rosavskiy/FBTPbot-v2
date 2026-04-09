@@ -28,9 +28,10 @@ from langchain_chroma import Chroma
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.api.admin_auth import log_action, require_role, verify_admin_token
-from app.database.models import AdminUser, get_db as get_admin_db
+from app.config import settings
+from app.database.models import AdminUser
+from app.database.models import get_db as get_admin_db
 from app.indexer.knowledge_base import (
     SUPPORT_COLLECTION_NAME,
     get_indexer,
@@ -500,7 +501,9 @@ async def get_next_quiz_item(
 
 
 @router.put("/items/{item_id}")
-async def update_kb_item(item_id: str, update: KBItemUpdate, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
+async def update_kb_item(
+    item_id: str, update: KBItemUpdate, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)
+):
     """Обновить Q&A пару (вопрос, ответ, категорию, теги и т.д.)."""
     data = _load_kb()
 
@@ -542,7 +545,15 @@ async def update_kb_item(item_id: str, update: KBItemUpdate, user: AdminUser = _
     # Инкрементально обновляем ChromaDB
     _update_chromadb_document(item)
 
-    await log_action(db, user_id=user.id, username=user.username, action="update", entity_type="kb_item", entity_id=item_id, entity_name=meta.get("question", "")[:80])
+    await log_action(
+        db,
+        user_id=user.id,
+        username=user.username,
+        action="update",
+        entity_type="kb_item",
+        entity_id=item_id,
+        entity_name=meta.get("question", "")[:80],
+    )
     return {"status": "ok", "item": item}
 
 
@@ -573,12 +584,22 @@ async def approve_kb_item(item_id: str, user: AdminUser = _editor, db: AsyncSess
     # Инкрементально обновляем ChromaDB
     _update_chromadb_document(item)
 
-    await log_action(db, user_id=user.id, username=user.username, action="update", entity_type="kb_item", entity_id=item_id, details="Одобрена")
+    await log_action(
+        db,
+        user_id=user.id,
+        username=user.username,
+        action="update",
+        entity_type="kb_item",
+        entity_id=item_id,
+        details="Одобрена",
+    )
     return {"status": "ok", "item": item}
 
 
 @router.post("/items/{item_id}/save-and-approve")
-async def save_and_approve_kb_item(item_id: str, update: KBItemUpdate, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
+async def save_and_approve_kb_item(
+    item_id: str, update: KBItemUpdate, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)
+):
     """Обновить и сразу одобрить Q&A пару."""
     data = _load_kb()
 
@@ -623,7 +644,15 @@ async def save_and_approve_kb_item(item_id: str, update: KBItemUpdate, user: Adm
 
     _update_chromadb_document(item)
 
-    await log_action(db, user_id=user.id, username=user.username, action="update", entity_type="kb_item", entity_id=item_id, details="Обновлена и одобрена")
+    await log_action(
+        db,
+        user_id=user.id,
+        username=user.username,
+        action="update",
+        entity_type="kb_item",
+        entity_id=item_id,
+        details="Обновлена и одобрена",
+    )
     return {"status": "ok", "item": item}
 
 
@@ -646,12 +675,16 @@ async def delete_kb_item(item_id: str, user: AdminUser = _editor, db: AsyncSessi
 
     _delete_chromadb_document(item_id)
 
-    await log_action(db, user_id=user.id, username=user.username, action="delete", entity_type="kb_item", entity_id=item_id)
+    await log_action(
+        db, user_id=user.id, username=user.username, action="delete", entity_type="kb_item", entity_id=item_id
+    )
     return {"status": "ok", "deleted_id": item_id, "remaining": len(data)}
 
 
 @router.post("/import", response_model=KBImportResult)
-async def import_kb_data(file: UploadFile = File(...), user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
+async def import_kb_data(
+    file: UploadFile = File(...), user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)
+):
     """
     Импорт новых Q&A данных из JSON-файла.
     Дубликаты (по id) пропускаются, новые записи добавляются.
@@ -715,7 +748,14 @@ async def import_kb_data(file: UploadFile = File(...), user: AdminUser = _editor
 
     _save_kb(data)
 
-    await log_action(db, user_id=user.id, username=user.username, action="import", entity_type="kb_item", details=f"Импорт: +{added} новых, {duplicates} дубликатов, {errors} ошибок")
+    await log_action(
+        db,
+        user_id=user.id,
+        username=user.username,
+        action="import",
+        entity_type="kb_item",
+        details=f"Импорт: +{added} новых, {duplicates} дубликатов, {errors} ошибок",
+    )
     return KBImportResult(
         added=added,
         duplicates_skipped=duplicates,
@@ -752,7 +792,14 @@ async def reindex_kb(user: AdminUser = _editor, db: AsyncSession = Depends(get_a
         error=None,
     )
     _REINDEX_TASK = asyncio.create_task(_run_reindex_job(job_id))
-    await log_action(db, user_id=user.id, username=user.username, action="reindex", entity_type="kb_item", details=f"Переиндексация: {total_documents} документов")
+    await log_action(
+        db,
+        user_id=user.id,
+        username=user.username,
+        action="reindex",
+        entity_type="kb_item",
+        details=f"Переиндексация: {total_documents} документов",
+    )
     return KBReindexStatus(**_get_reindex_status())
 
 

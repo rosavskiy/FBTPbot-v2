@@ -13,13 +13,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.admin_auth import ensure_superadmin
+from app.api.admin_auth import router as admin_router
 from app.api.bot_config import router as bot_config_router
 from app.api.chat import router as chat_router
 from app.api.escalation import router as escalation_router
 from app.api.images import router as images_router
 from app.api.kb_admin import router as kb_admin_router
 from app.api.operator import router as operator_router
-from app.api.admin_auth import router as admin_router, ensure_superadmin
 from app.config import settings
 from app.database.models import init_db
 from app.database.reason_store import load_reasons
@@ -49,6 +50,7 @@ async def lifespan(app: FastAPI):
 
     # Создаём суперадмина из env (если его нет)
     from app.database.models import async_session
+
     async with async_session() as db:
         await ensure_superadmin(db)
 
