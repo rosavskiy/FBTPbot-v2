@@ -9,16 +9,16 @@ const AdminNav = (() => {
     let _token = null;
     let _user = null;
 
-    /** Получить токен из sessionStorage */
+    /** Получить токен из localStorage */
     function getToken() {
-        if (!_token) _token = sessionStorage.getItem('admin_token');
+        if (!_token) _token = localStorage.getItem('admin_token');
         return _token;
     }
 
     /** Получить данные пользователя */
     function getUser() {
         if (!_user) {
-            const raw = sessionStorage.getItem('admin_user');
+            const raw = localStorage.getItem('admin_user');
             if (raw) {
                 try { _user = JSON.parse(raw); } catch { _user = null; }
             }
@@ -39,8 +39,8 @@ const AdminNav = (() => {
 
     /** Выйти */
     function logout() {
-        sessionStorage.removeItem('admin_token');
-        sessionStorage.removeItem('admin_user');
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin_user');
         _token = null;
         _user = null;
         window.location.href = '/admin-login';

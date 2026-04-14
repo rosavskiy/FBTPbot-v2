@@ -91,7 +91,7 @@
         const btnLogin = document.getElementById('btnLogin');
 
         // Redirect if already logged in
-        if (sessionStorage.getItem('admin_token')) {
+        if (localStorage.getItem('admin_token')) {
             const next = new URLSearchParams(location.search).get('next') || '/bot-config';
             location.href = next;
         }
@@ -116,8 +116,8 @@
                     throw new Error(data.detail || 'Ошибка авторизации');
                 }
                 const data = await resp.json();
-                sessionStorage.setItem('admin_token', data.token);
-                sessionStorage.setItem('admin_user', JSON.stringify(data.user));
+                localStorage.setItem('admin_token', data.token);
+                localStorage.setItem('admin_user', JSON.stringify(data.user));
 
                 const next = new URLSearchParams(location.search).get('next') || '/bot-config';
                 location.href = next;

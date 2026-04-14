@@ -507,6 +507,15 @@ async function initPage() {
         document.querySelectorAll('.editor-only').forEach(el => el.style.display = 'none');
     }
     await Promise.all([loadReasons(), loadLlmSettings(), loadClassificationSettings(), loadGlobalEscalation(), loadImages()]);
+
+    // Open reason from URL hash (e.g. #reason_some_id)
+    const hash = location.hash;
+    if (hash && hash.startsWith('#reason_')) {
+        const reasonId = decodeURIComponent(hash.substring(8));
+        if (reasons.some(r => r.id === reasonId)) {
+            selectReason(reasonId);
+        }
+    }
 }
 
 // ── Images management ──
