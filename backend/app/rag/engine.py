@@ -819,6 +819,11 @@ class RAGEngine:
         clean_answer = _strip_markdown(clean_answer)
         clean_answer = _truncate_to_bytes(clean_answer, MAX_ANSWER_BYTES)
 
+        # Если контекст из базы знаний пустой — принудительно снижаем confidence
+        if context == "Нет дополнительного контекста.":
+            confidence = min(confidence, 0.2)
+            conf_reason = "Нет контекста в базе знаний — ответ может быть неточным"
+
         needs_escalation = confidence < settings.rag_confidence_threshold
         if not needs_escalation:
             clean_answer = _strip_operator_footer(clean_answer)
