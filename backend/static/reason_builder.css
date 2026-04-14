@@ -168,6 +168,67 @@
     gap: 6px;
 }
 
+/* ── Overlap card actions ── */
+.rb-overlap-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--gray-800);
+    flex-wrap: wrap;
+}
+
+.rb-overlap-recommendation {
+    margin-top: 12px;
+}
+
+.rb-overlap-recommendation .rb-recommendation {
+    margin-top: 0;
+}
+
+/* Reason A/B labels */
+.rb-reason-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    background: var(--accent);
+    color: var(--gray-950);
+    margin-right: 2px;
+}
+
+/* Chip delete buttons for overlap cards */
+.rb-chip-overlap {
+    position: relative;
+}
+.rb-chip-overlap .rb-chip-actions {
+    display: none;
+    gap: 2px;
+    margin-left: 4px;
+}
+.rb-chip-overlap:hover .rb-chip-actions {
+    display: inline-flex;
+}
+.rb-chip-del {
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: rgba(239,68,68,0.15);
+    color: #fca5a5;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.rb-chip-del:hover {
+    background: rgba(239,68,68,0.35);
+    color: #fef2f2;
+}
+
 .rb-recommendation {
     margin-top: 16px;
     padding: 16px;

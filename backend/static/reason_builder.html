@@ -49,9 +49,6 @@
             <button class="rb-btn rb-btn-primary" onclick="runOverlapAnalysis()" id="btnAnalyze">
                 <span class="ico ico-search"></span> Запустить анализ
             </button>
-            <button class="rb-btn rb-btn-secondary" onclick="getRecommendations()" id="btnRecommend" disabled>
-                <span class="ico ico-bot"></span> Получить рекомендации LLM
-            </button>
             <span class="rb-overlap-stats" id="overlapStats"></span>
         </div>
 
@@ -68,13 +65,6 @@
 
         <div id="overlapResults">
             <div class="rb-empty">Нажмите «Запустить анализ» для поиска пересечений маркеров между причинами обращений.</div>
-        </div>
-
-        <div id="recommendationBlock" style="display:none">
-            <h3 style="font-size:15px; font-weight:600; color:var(--gray-200); margin-bottom:12px">
-                <span class="ico ico-bot"></span> Рекомендации LLM
-            </h3>
-            <div class="rb-recommendation" id="recommendationText"></div>
         </div>
     </div>
 
@@ -204,7 +194,6 @@ async function runOverlapAnalysis() {
         document.getElementById('overlapStats').textContent =
             `Причин: ${data.total_reasons} | Пересечений: ${data.total_overlaps}`;
         document.getElementById('overlapFilters').style.display = data.total_overlaps > 0 ? 'flex' : 'none';
-        document.getElementById('btnRecommend').disabled = data.total_overlaps === 0;
 
         renderOverlaps();
     } catch (e) {
@@ -264,46 +253,104 @@ function renderOverlaps() {
     };
 
     let html = '';
-    for (const o of filteredOverlaps) {
+    for (let idx = 0; idx < filteredOverlaps.length; idx++) {
+        const o = filteredOverlaps[idx];
         const chipCls = typeChipClass[o.overlap_type] || '';
         const sevCls = severityClass[o.overlap_type] || 'low';
         const sevLbl = severityLabel[o.overlap_type] || '';
-        const chips = o.shared_markers.map(m => `<span class="rb-chip ${chipCls}">${esc(m)}</span>`).join('');
+
+        const chips = o.shared_markers.map(m => {
+            const mEsc = esc(m);
+            const typeEsc = esc(o.overlap_type);
+            return `<span class="rb-chip ${chipCls} rb-chip-overlap">
+                ${mEsc}
+                <span class="rb-chip-actions">
+                    <span class="rb-chip-del" title="Удалить из «${esc(o.reason_a_name)}»" onclick="removeOverlapMarker('${escAttr(o.reason_a_id)}','${typeEsc}','${escAttr(m)}')">× A</span>
+                    <span class="rb-chip-del" title="Удалить из «${esc(o.reason_b_name)}»" onclick="removeOverlapMarker('${escAttr(o.reason_b_id)}','${typeEsc}','${escAttr(m)}')">× B</span>
+                </span>
+            </span>`;
+        }).join('');
 
         html += `
-        <div class="rb-overlap-card">
+        <div class="rb-overlap-card" id="overlap-card-${idx}">
             <div class="rb-overlap-header">
                 <span class="rb-severity-badge ${sevCls}">${sevLbl}</span>
-                <span class="rb-overlap-reasons">«${esc(o.reason_a_name)}» ↔ «${esc(o.reason_b_name)}»</span>
+                <span class="rb-overlap-reasons">
+                    <span class="rb-reason-label">A</span> «${esc(o.reason_a_name)}»
+                    ↔
+                    <span class="rb-reason-label">B</span> «${esc(o.reason_b_name)}»
+                </span>
             </div>
             <div class="rb-overlap-type">${typeLabels[o.overlap_type] || o.overlap_type} (${o.shared_markers.length} совпадений)</div>
             <div class="rb-overlap-markers">${chips}</div>
+            <div class="rb-overlap-actions">
+                <button class="rb-btn rb-btn-sm rb-btn-secondary" onclick="getOverlapRecommendation(${idx})">
+                    <span class="ico ico-bot"></span> Рекомендация LLM
+                </button>
+                <a class="rb-btn rb-btn-sm rb-btn-secondary" href="/bot-config#reason_${encodeURIComponent(o.reason_a_id)}" target="_blank" title="Редактировать «${esc(o.reason_a_name)}»">
+                    <span class="ico ico-edit"></span> A
+                </a>
+                <a class="rb-btn rb-btn-sm rb-btn-secondary" href="/bot-config#reason_${encodeURIComponent(o.reason_b_id)}" target="_blank" title="Редактировать «${esc(o.reason_b_name)}»">
+                    <span class="ico ico-edit"></span> B
+                </a>
+            </div>
+            <div class="rb-overlap-recommendation" id="overlap-rec-${idx}" style="display:none">
+                <div class="rb-recommendation"></div>
+            </div>
         </div>`;
     }
     container.innerHTML = html;
 }
 
-async function getRecommendations() {
-    const btn = document.getElementById('btnRecommend');
+async function getOverlapRecommendation(idx) {
+    const card = document.getElementById('overlap-card-' + idx);
+    const btn = card.querySelector('.rb-overlap-actions button');
+    const recBlock = document.getElementById('overlap-rec-' + idx);
+
+    // Toggle if already visible
+    if (recBlock.style.display === 'block' && recBlock.querySelector('.rb-recommendation').textContent) {
+        recBlock.style.display = 'none';
+        return;
+    }
+
     btn.disabled = true;
     btn.innerHTML = '<span class="rb-spinner"></span> Генерация...';
-    document.getElementById('recommendationBlock').style.display = 'none';
 
     try {
-        const resp = await authFetch('/api/reason-builder/analyze-overlaps/recommend', {
+        const o = filteredOverlaps[idx];
+        const resp = await authFetch('/api/reason-builder/analyze-overlaps/recommend-single', {
             method: 'POST',
-            body: JSON.stringify({ overlaps: allOverlaps, llm_provider: getProvider() }),
+            body: JSON.stringify({ overlap: o, llm_provider: getProvider() }),
         });
         if (!resp.ok) throw new Error(await resp.text());
         const data = await resp.json();
 
-        document.getElementById('recommendationText').textContent = data.recommendations;
-        document.getElementById('recommendationBlock').style.display = 'block';
+        recBlock.querySelector('.rb-recommendation').textContent = data.recommendations;
+        recBlock.style.display = 'block';
     } catch (e) {
         alert('Ошибка LLM: ' + e.message);
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<span class="ico ico-bot"></span> Получить рекомендации LLM';
+        btn.innerHTML = '<span class="ico ico-bot"></span> Рекомендация LLM';
+    }
+}
+
+async function removeOverlapMarker(reasonId, markerType, marker) {
+    if (!confirm(`Удалить маркер «${marker}» из причины?`)) return;
+
+    try {
+        const resp = await authFetch('/api/reason-builder/remove-marker', {
+            method: 'POST',
+            body: JSON.stringify({ reason_id: reasonId, marker_type: markerType, marker: marker }),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        // Re-run analysis to refresh the data
+        await runOverlapAnalysis();
+    } catch (e) {
+        alert('Ошибка удаления: ' + e.message);
     }
 }
 

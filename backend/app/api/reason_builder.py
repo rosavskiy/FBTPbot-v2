@@ -21,7 +21,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.admin_auth import require_role, verify_admin_token
-from app.database.reason_store import get_all_reasons, upsert_reason
+from app.database.reason_store import get_all_reasons, get_reason, upsert_reason
 from app.llm_settings import get_llm_settings_snapshot
 from app.models.reason_schemas import ContactReason
 
@@ -56,6 +56,17 @@ class OverlapsResponse(BaseModel):
 class RecommendRequest(BaseModel):
     overlaps: list[OverlapItem]
     llm_provider: str = "yandex"
+
+
+class RecommendSingleRequest(BaseModel):
+    overlap: OverlapItem
+    llm_provider: str = "yandex"
+
+
+class RemoveMarkerRequest(BaseModel):
+    reason_id: str
+    marker_type: str  # phrase_masks | numeric_tags | nouns | verbs
+    marker: str
 
 
 class RecommendResponse(BaseModel):
@@ -516,6 +527,66 @@ async def recommend_overlaps(req: RecommendRequest):
         raise HTTPException(status_code=502, detail=f"Ошибка LLM: {e}")
 
     return RecommendResponse(recommendations=result)
+
+
+@router.post("/analyze-overlaps/recommend-single", response_model=RecommendResponse, dependencies=[_editor])
+async def recommend_single_overlap(req: RecommendSingleRequest):
+    """LLM-рекомендация по одному пересечению маркеров."""
+    o = req.overlap
+    type_labels = {
+        "phrase_masks": "Фразовые маски (вес 10.0)",
+        "numeric_tags": "Числовые теги (вес 5.0)",
+        "nouns": "Существительные (вес 2.0)",
+        "verbs": "Глаголы (вес 1.0)",
+    }
+    label = type_labels.get(o.overlap_type, o.overlap_type)
+    joined = ", ".join(o.shared_markers)
+    overlaps_text = f"1. [{label}] «{o.reason_a_name}» ↔ «{o.reason_b_name}»: {joined}"
+
+    provider = _normalize_provider(req.llm_provider)
+    try:
+        result = await _llm_complete(
+            provider,
+            "Ты — эксперт по настройке классификации заявок техподдержки.",
+            _RECOMMEND_OVERLAPS_PROMPT.format(overlaps_text=overlaps_text),
+            temperature=0.2,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"LLM single recommendation error: {e}")
+        raise HTTPException(status_code=502, detail=f"Ошибка LLM: {e}")
+
+    return RecommendResponse(recommendations=result)
+
+
+@router.post("/remove-marker", dependencies=[_editor])
+async def remove_marker(req: RemoveMarkerRequest):
+    """Удалить конкретный маркер из причины обращения."""
+    if req.marker_type not in ("phrase_masks", "numeric_tags", "nouns", "verbs"):
+        raise HTTPException(status_code=422, detail="Недопустимый тип маркера")
+
+    reason = get_reason(req.reason_id)
+    if not reason:
+        raise HTTPException(status_code=404, detail="Причина обращения не найдена")
+
+    markers_list = getattr(reason.markers, req.marker_type, None)
+    if markers_list is None:
+        raise HTTPException(status_code=422, detail="Недопустимый тип маркера")
+
+    # Normalize and remove
+    needle = req.marker.lower().strip()
+    original_len = len(markers_list)
+    new_list = [m for m in markers_list if m.lower().strip() != needle]
+
+    if len(new_list) == original_len:
+        raise HTTPException(status_code=404, detail="Маркер не найден в данной причине")
+
+    setattr(reason.markers, req.marker_type, new_list)
+    upsert_reason(reason)
+    logger.info(f"Removed marker '{req.marker}' ({req.marker_type}) from reason '{req.reason_id}'")
+
+    return {"ok": True, "reason_id": req.reason_id, "marker_type": req.marker_type, "removed": req.marker}
 
 
 @router.post("/upload-table", response_model=UploadResponse, dependencies=[_editor])
