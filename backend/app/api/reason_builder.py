@@ -13,19 +13,17 @@ import io
 import json
 import logging
 import re
-import tempfile
 import uuid
-from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.api.admin_auth import require_role, verify_admin_token
 from app.database.reason_store import get_all_reasons, upsert_reason
 from app.llm_settings import get_llm_settings_snapshot
-from app.models.reason_schemas import ContactReason, Markers
+from app.models.reason_schemas import ContactReason
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/reason-builder", tags=["reason-builder"])
@@ -169,11 +167,39 @@ _RECOMMEND_OVERLAPS_PROMPT = """Ты — эксперт по настройке 
 def _slugify(text: str) -> str:
     """Convert name to ID: lowercase, transliterate, underscores."""
     tr = {
-        "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "yo",
-        "ж": "zh", "з": "z", "и": "i", "й": "j", "к": "k", "л": "l", "м": "m",
-        "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
-        "ф": "f", "х": "kh", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch",
-        "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+        "а": "a",
+        "б": "b",
+        "в": "v",
+        "г": "g",
+        "д": "d",
+        "е": "e",
+        "ё": "yo",
+        "ж": "zh",
+        "з": "z",
+        "и": "i",
+        "й": "j",
+        "к": "k",
+        "л": "l",
+        "м": "m",
+        "н": "n",
+        "о": "o",
+        "п": "p",
+        "р": "r",
+        "с": "s",
+        "т": "t",
+        "у": "u",
+        "ф": "f",
+        "х": "kh",
+        "ц": "ts",
+        "ч": "ch",
+        "ш": "sh",
+        "щ": "sch",
+        "ъ": "",
+        "ы": "y",
+        "ь": "",
+        "э": "e",
+        "ю": "yu",
+        "я": "ya",
     }
     result = []
     for ch in text.lower():
@@ -342,53 +368,68 @@ def _find_overlaps(reasons: list[ContactReason]) -> list[OverlapItem]:
     overlaps: list[OverlapItem] = []
 
     for i, a in enumerate(reasons):
-        for b in reasons[i + 1:]:
+        for b in reasons[i + 1 :]:
             # Phrase masks — exact match
-            shared_phrases = set(p.lower().strip() for p in a.markers.phrase_masks) & \
-                             set(p.lower().strip() for p in b.markers.phrase_masks)
+            shared_phrases = {p.lower().strip() for p in a.markers.phrase_masks} & {
+                p.lower().strip() for p in b.markers.phrase_masks
+            }
             if shared_phrases:
-                overlaps.append(OverlapItem(
-                    reason_a_id=a.id, reason_a_name=a.name,
-                    reason_b_id=b.id, reason_b_name=b.name,
-                    overlap_type="phrase_masks",
-                    shared_markers=sorted(shared_phrases),
-                    severity=_SEVERITY["phrase_masks"],
-                ))
+                overlaps.append(
+                    OverlapItem(
+                        reason_a_id=a.id,
+                        reason_a_name=a.name,
+                        reason_b_id=b.id,
+                        reason_b_name=b.name,
+                        overlap_type="phrase_masks",
+                        shared_markers=sorted(shared_phrases),
+                        severity=_SEVERITY["phrase_masks"],
+                    )
+                )
 
             # Numeric tags
             shared_numeric = set(a.markers.numeric_tags) & set(b.markers.numeric_tags)
             if shared_numeric:
-                overlaps.append(OverlapItem(
-                    reason_a_id=a.id, reason_a_name=a.name,
-                    reason_b_id=b.id, reason_b_name=b.name,
-                    overlap_type="numeric_tags",
-                    shared_markers=sorted(shared_numeric),
-                    severity=_SEVERITY["numeric_tags"],
-                ))
+                overlaps.append(
+                    OverlapItem(
+                        reason_a_id=a.id,
+                        reason_a_name=a.name,
+                        reason_b_id=b.id,
+                        reason_b_name=b.name,
+                        overlap_type="numeric_tags",
+                        shared_markers=sorted(shared_numeric),
+                        severity=_SEVERITY["numeric_tags"],
+                    )
+                )
 
             # Nouns — lemma-based
-            shared_nouns = set(n.lower().strip() for n in a.markers.nouns) & \
-                           set(n.lower().strip() for n in b.markers.nouns)
+            shared_nouns = {n.lower().strip() for n in a.markers.nouns} & {n.lower().strip() for n in b.markers.nouns}
             if shared_nouns:
-                overlaps.append(OverlapItem(
-                    reason_a_id=a.id, reason_a_name=a.name,
-                    reason_b_id=b.id, reason_b_name=b.name,
-                    overlap_type="nouns",
-                    shared_markers=sorted(shared_nouns),
-                    severity=_SEVERITY["nouns"],
-                ))
+                overlaps.append(
+                    OverlapItem(
+                        reason_a_id=a.id,
+                        reason_a_name=a.name,
+                        reason_b_id=b.id,
+                        reason_b_name=b.name,
+                        overlap_type="nouns",
+                        shared_markers=sorted(shared_nouns),
+                        severity=_SEVERITY["nouns"],
+                    )
+                )
 
             # Verbs
-            shared_verbs = set(v.lower().strip() for v in a.markers.verbs) & \
-                           set(v.lower().strip() for v in b.markers.verbs)
+            shared_verbs = {v.lower().strip() for v in a.markers.verbs} & {v.lower().strip() for v in b.markers.verbs}
             if shared_verbs:
-                overlaps.append(OverlapItem(
-                    reason_a_id=a.id, reason_a_name=a.name,
-                    reason_b_id=b.id, reason_b_name=b.name,
-                    overlap_type="verbs",
-                    shared_markers=sorted(shared_verbs),
-                    severity=_SEVERITY["verbs"],
-                ))
+                overlaps.append(
+                    OverlapItem(
+                        reason_a_id=a.id,
+                        reason_a_name=a.name,
+                        reason_b_id=b.id,
+                        reason_b_name=b.name,
+                        overlap_type="verbs",
+                        shared_markers=sorted(shared_verbs),
+                        severity=_SEVERITY["verbs"],
+                    )
+                )
 
     overlaps.sort(key=lambda o: (-o.severity, o.reason_a_name))
     return overlaps
@@ -414,7 +455,7 @@ def _extract_json_from_llm(text: str) -> dict:
             depth -= 1
             if depth == 0:
                 try:
-                    return json.loads(text[brace_start:i + 1])
+                    return json.loads(text[brace_start : i + 1])
                 except json.JSONDecodeError:
                     raise ValueError("Invalid JSON in LLM response")
 
@@ -512,11 +553,13 @@ async def upload_table(file: UploadFile = File(...)):
 
     reasons_list = []
     for name, texts in sorted(groups.items(), key=lambda x: -len(x[1])):
-        reasons_list.append(UploadedReason(
-            name=name,
-            ticket_count=len(texts),
-            sample_texts=texts[:5],
-        ))
+        reasons_list.append(
+            UploadedReason(
+                name=name,
+                ticket_count=len(texts),
+                sample_texts=texts[:5],
+            )
+        )
 
     return UploadResponse(
         session_id=session_id,
@@ -590,19 +633,23 @@ async def generate_batch(req: GenerateBatchRequest):
         prompt = _GENERATE_MARKERS_PROMPT.format(reason_name=name, texts=texts_block)
 
         try:
-            raw = await _llm_complete(provider, "Ты — специалист по анализу заявок техподдержки.", prompt, temperature=0.1)
+            raw = await _llm_complete(
+                provider, "Ты — специалист по анализу заявок техподдержки.", prompt, temperature=0.1
+            )
             markers_data = _extract_json_from_llm(raw)
-            results.append(GeneratedReason(
-                id=_slugify(name),
-                name=name,
-                markers={
-                    "verbs": markers_data.get("verbs", []),
-                    "nouns": markers_data.get("nouns", []),
-                    "numeric_tags": markers_data.get("numeric_tags", []),
-                    "phrase_masks": markers_data.get("phrase_masks", []),
-                },
-                ticket_count=len(texts),
-            ))
+            results.append(
+                GeneratedReason(
+                    id=_slugify(name),
+                    name=name,
+                    markers={
+                        "verbs": markers_data.get("verbs", []),
+                        "nouns": markers_data.get("nouns", []),
+                        "numeric_tags": markers_data.get("numeric_tags", []),
+                        "phrase_masks": markers_data.get("phrase_masks", []),
+                    },
+                    ticket_count=len(texts),
+                )
+            )
         except Exception as e:
             logger.error(f"Batch generate error for '{name}': {e}")
             errors.append({"reason_name": name, "error": str(e)})
