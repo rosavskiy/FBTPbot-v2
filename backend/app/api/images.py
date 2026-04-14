@@ -10,6 +10,7 @@ import base64
 import json
 import logging
 import mimetypes
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -69,18 +70,9 @@ def _save_metadata(images: list[dict]):
     )
 
 
-def _next_code(images: list[dict]) -> str:
-    """Generate next sequential code."""
-    existing_codes = set()
-    for img in images:
-        try:
-            existing_codes.add(int(img["code"]))
-        except (ValueError, KeyError):
-            pass
-    code = 1
-    while code in existing_codes:
-        code += 1
-    return str(code)
+def _next_code() -> str:
+    """Generate a unique GUID code."""
+    return str(uuid.uuid4())
 
 
 _MIME_MAP = {
@@ -155,11 +147,10 @@ async def list_images(user: AdminUser = _any_admin):
 @router.post("", response_model=ImageInfo)
 async def upload_image(
     file: UploadFile = File(...),
-    code: str | None = None,
     user: AdminUser = _editor,
     db: AsyncSession = Depends(get_admin_db),
 ):
-    """Загрузить изображение и присвоить код."""
+    """Загрузить изображение и присвоить уникальный GUID-код."""
     _ensure_dirs()
 
     # Validate file extension
@@ -179,13 +170,8 @@ async def upload_image(
 
     images = _load_metadata()
 
-    # Determine code
-    if code:
-        # Check for duplicate
-        if any(img["code"] == code for img in images):
-            raise HTTPException(status_code=409, detail=f"Изображение с кодом '{code}' уже существует")
-    else:
-        code = _next_code(images)
+    # Always generate a unique GUID code
+    code = _next_code()
 
     # Sanitize filename — use code as filename to avoid path traversal
     stored_as = f"{code}{ext}"

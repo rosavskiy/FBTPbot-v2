@@ -1310,7 +1310,7 @@ function renderExamples() {
         let imgBadgesHtml = '';
         if (ex.image_codes.length > 0) {
             imgBadgesHtml = '<div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;">' +
-                ex.image_codes.map((code, ci) => `<span class="chip" style="font-size:11px; padding:2px 8px;"><span class="ico ico-image"></span> ${code} <span class="remove" onclick="removeExampleImage(${ei},${ci})"></span></span>`).join('') +
+                ex.image_codes.map((code, ci) => `<span class="chip" style="font-size:11px; padding:2px 8px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:middle;" title="${code}"><span class="ico ico-image"></span> ${code} <span class="remove" onclick="removeExampleImage(${ei},${ci})"></span></span>`).join('') +
                 '</div>';
         }
 
