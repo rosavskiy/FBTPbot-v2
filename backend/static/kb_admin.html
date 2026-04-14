@@ -3,120 +3,205 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Фармбазис — Квиз базы знаний</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <title>Фармбазис — База знаний</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/admin_common.css">
     <script src="/static/admin_nav.js"></script>
     <style>
-        /* Fallback for hidden class in case Tailwind CDN fails */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-sans); background: var(--gray-950); color: var(--gray-200); -webkit-font-smoothing: antialiased; }
         .hidden { display: none !important; }
-        
-        :root {
-            --primary: #2563eb;
-            --success: #16a34a;
-            --danger: #dc2626;
-            --warning: #d97706;
-        }
-        body { background: #f1f5f9; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
-        .card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
-        .btn { border-radius: 8px; padding: 10px 20px; font-weight: 600; cursor: pointer; transition: all .15s; border: none; }
-        .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.15); }
-        .btn-primary { background: var(--primary); color: white; }
+
+        .page { max-width: 1024px; margin: 0 auto; padding: 24px 16px; }
+
+        .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+        .page-header h1 { font-size: 22px; font-weight: 700; color: var(--gray-100); }
+        .page-subtitle { color: var(--gray-500); font-size: 13px; margin-top: 4px; }
+        .header-actions { display: flex; gap: 8px; }
+
+        .card { background: var(--gray-900); border: 1px solid var(--gray-800); border-radius: var(--radius); }
+
+        .btn { border-radius: var(--radius-sm); padding: 10px 20px; font-weight: 600; cursor: pointer; transition: all .15s; border: none; font-family: var(--font-sans); font-size: 13px; }
+        .btn:hover { opacity: 0.9; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent-dark); }
         .btn-success { background: var(--success); color: white; }
         .btn-danger { background: var(--danger); color: white; }
         .btn-warning { background: var(--warning); color: white; }
-        .btn-outline { background: white; color: #374151; border: 2px solid #d1d5db; }
-        .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
-        .tag { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 2px 10px; border-radius: 9999px; font-size: 0.8rem; margin: 2px; }
-        .tag-remove { cursor: pointer; margin-left: 4px; color: #6366f1; }
-        .tag-remove:hover { color: var(--danger); }
-        textarea, input[type="text"], select {
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 10px 14px;
-            width: 100%;
-            font-size: 0.95rem;
-            transition: border-color .15s;
-        }
-        textarea:focus, input[type="text"]:focus, select:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(37,99,235,.1);
-        }
-        .progress-bar { height: 8px; border-radius: 4px; background: #e2e8f0; overflow: hidden; }
-        .progress-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #3b82f6, #16a34a); transition: width .5s ease; }
+        .btn-outline { background: transparent; color: var(--gray-300); border: 1px solid var(--gray-700); }
+        .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); margin-bottom: 24px; }
+        @media (max-width: 768px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+        .stat-card { text-align: center; padding: 20px; border-right: 1px solid var(--gray-800); }
+        .stat-card:last-child { border-right: none; }
+        .stat-number { font-size: 2rem; font-weight: 800; }
+        .stat-label { font-size: 13px; color: var(--gray-500); margin-top: 4px; }
+        .stat-accent { color: var(--accent); }
+        .stat-success { color: var(--success); }
+        .stat-warning { color: var(--warning); }
+        .stat-purple { color: #a78bfa; }
+        .stat-teal { color: #2dd4bf; }
+
+        .progress-bar { height: 8px; border-radius: 4px; background: var(--gray-800); overflow: hidden; margin-bottom: 24px; }
+        .progress-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--success)); transition: width .5s ease; }
+
+        .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--gray-800); margin-bottom: 24px; }
+        .tab { padding: 10px 24px; cursor: pointer; border-bottom: 3px solid transparent; font-weight: 600; color: var(--gray-500); transition: all .15s; font-family: var(--font-sans); font-size: 14px; background: none; border-top: none; border-left: none; border-right: none; }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab:hover { color: var(--accent); }
+
+        .tag { display: inline-block; background: var(--accent-subtle); color: var(--accent-light); padding: 2px 10px; border-radius: 9999px; font-size: 12px; margin: 2px; }
+        .tag-remove { cursor: pointer; margin-left: 4px; opacity: 0.7; }
+        .tag-remove:hover { color: var(--danger); opacity: 1; }
+
         .quality-badge {
             display: inline-flex; align-items: center; justify-content: center;
-            width: 32px; height: 32px; border-radius: 50%; font-weight: 700; font-size: 0.9rem;
+            width: 32px; height: 32px; border-radius: 50%; font-weight: 700; font-size: 14px;
         }
-        .q1 { background: #fecaca; color: #991b1b; }
-        .q2 { background: #fed7aa; color: #9a3412; }
-        .q3 { background: #fef08a; color: #854d0e; }
-        .q4 { background: #bbf7d0; color: #166534; }
-        .q5 { background: #86efac; color: #14532d; }
-        .tab { padding: 10px 24px; cursor: pointer; border-bottom: 3px solid transparent; font-weight: 600; color: #64748b; transition: all .15s; }
-        .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
-        .tab:hover { color: var(--primary); }
-        .stat-card { text-align: center; padding: 20px; }
-        .stat-number { font-size: 2rem; font-weight: 800; }
-        .stat-label { font-size: 0.85rem; color: #64748b; margin-top: 4px; }
+        .q1 { background: rgba(239,68,68,0.2); color: #fca5a5; }
+        .q2 { background: rgba(245,158,11,0.2); color: #fcd34d; }
+        .q3 { background: rgba(234,179,8,0.2); color: #fef08a; }
+        .q4 { background: rgba(34,197,94,0.2); color: #86efac; }
+        .q5 { background: rgba(34,197,94,0.3); color: #4ade80; }
+
+        textarea, input[type="text"], input[type="number"], select {
+            border: 1px solid var(--gray-700);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            width: 100%;
+            font-size: 14px;
+            transition: border-color .15s;
+            background: var(--gray-800);
+            color: var(--gray-200);
+            font-family: var(--font-sans);
+            outline: none;
+        }
+        textarea:focus, input[type="text"]:focus, input[type="number"]:focus, select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(99,102,241,0.15);
+        }
+        input[type="file"] { color: var(--gray-300); font-family: var(--font-sans); font-size: 13px; }
+        input[type="date"] {
+            padding: 7px 10px; background: var(--gray-800); border: 1px solid var(--gray-700);
+            border-radius: var(--radius-sm); color: var(--gray-200); font-size: 13px; font-family: var(--font-sans); outline: none;
+        }
+        kbd { background: var(--gray-800); border: 1px solid var(--gray-700); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--gray-300); }
+
+        .reindex-panel { padding: 20px; }
+        .reindex-badge {
+            display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 9999px;
+            font-size: 11px; font-weight: 600;
+        }
+
+        .label { font-size: 11px; font-weight: 700; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.05em; }
+
+        .quiz-card { padding: 24px; }
+        .quiz-actions { display: flex; gap: 12px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--gray-800); }
+        .quiz-actions .btn { flex: 1; padding: 12px; font-size: 16px; }
+
+        .list-row { border-bottom: 1px solid var(--gray-800); padding: 12px 16px; cursor: pointer; transition: background .1s; }
+        .list-row:hover { background: rgba(255,255,255,0.02); }
+        .list-row.reviewed { border-left: 4px solid var(--success); }
+        .list-row.unreviewed { border-left: 4px solid var(--gray-700); }
+        .list-row-header { display: flex; align-items: center; justify-content: space-between; }
+        .list-row-q { margin-top: 4px; font-size: 14px; font-weight: 500; color: var(--gray-200); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .list-row-a { margin-top: 2px; font-size: 12px; color: var(--gray-500); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .import-zone {
+            border: 2px dashed var(--gray-700); border-radius: var(--radius); padding: 32px;
+            cursor: pointer; transition: border-color .15s; text-align: center;
+        }
+        .import-zone:hover, .import-zone.dragging { border-color: var(--accent); background: var(--accent-subtle); }
+
         .modal-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,.5);
+            position: fixed; inset: 0; background: rgba(0,0,0,.6);
             display: flex; align-items: center; justify-content: center; z-index: 100;
         }
-        .modal { background: white; border-radius: 16px; padding: 32px; max-width: 500px; width: 90%; }
+        .modal { background: var(--gray-900); border: 1px solid var(--gray-800); border-radius: var(--radius-lg); padding: 32px; max-width: 500px; width: 90%; }
+        .modal h3 { font-size: 18px; font-weight: 700; color: var(--gray-100); margin-bottom: 16px; }
+
         .toast {
             position: fixed; bottom: 24px; right: 24px;
             padding: 14px 24px; border-radius: 10px; color: white; font-weight: 600;
-            z-index: 200; animation: slideIn .3s ease;
+            z-index: 200; animation: slideIn .3s ease; font-family: var(--font-sans);
         }
         @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        .spinner { border: 3px solid #e2e8f0; border-top-color: var(--primary); border-radius: 50%; width: 24px; height: 24px; animation: spin .6s linear infinite; display: inline-block; }
+
+        .spinner { border: 3px solid var(--gray-700); border-top-color: var(--accent); border-radius: 50%; width: 24px; height: 24px; animation: spin .6s linear infinite; display: inline-block; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .fade-in { animation: fadeIn .3s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        /* List mode */
-        .list-row { border-bottom: 1px solid #f1f5f9; padding: 12px 16px; cursor: pointer; transition: background .1s; }
-        .list-row:hover { background: #f8fafc; }
-        .list-row.reviewed { border-left: 4px solid var(--success); }
-        .list-row.unreviewed { border-left: 4px solid #d1d5db; }
+
+        .pagination { display: flex; justify-content: space-between; align-items: center; padding: 16px; border-top: 1px solid var(--gray-800); }
+
+        .filters-bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+
+        .result-box { border-radius: var(--radius-sm); padding: 12px 16px; font-size: 13px; }
+        .result-success { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); color: var(--success); }
+        .result-error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--danger); }
+
+        .cat-badge { display: inline-block; background: var(--accent-subtle); color: var(--accent-light); padding: 2px 12px; border-radius: 9999px; font-size: 12px; font-weight: 500; }
+        .reviewed-badge { font-size: 12px; color: var(--success); font-weight: 500; }
+
+        /* flex utilities */
+        .d-flex { display: flex; }
+        .ai-center { align-items: center; }
+        .ai-start { align-items: flex-start; }
+        .jc-between { justify-content: space-between; }
+        .jc-center { justify-content: center; }
+        .gap-1 { gap: 4px; }
+        .gap-2 { gap: 8px; }
+        .gap-3 { gap: 12px; }
+        .gap-4 { gap: 16px; }
+        .flex-1 { flex: 1; }
+        .flex-wrap { flex-wrap: wrap; }
+        .text-center { text-align: center; }
+        .mb-2 { margin-bottom: 8px; }
+        .mb-4 { margin-bottom: 16px; }
+        .mb-6 { margin-bottom: 24px; }
+        .mt-1 { margin-top: 4px; }
+        .mt-2 { margin-top: 8px; }
+        .mt-3 { margin-top: 12px; }
+        .mt-4 { margin-top: 16px; }
     </style>
 </head>
 <body>
-    <div id="app" class="max-w-5xl mx-auto px-4 py-6">
+    <div id="app" class="page">
 
         <!-- Header -->
-        <div class="flex items-center justify-between mb-6">
+        <div class="page-header">
             <div>
-                <h1 class="text-2xl font-bold text-gray-900"><span class="ico ico-pill"></span> Фармбазис — База знаний</h1>
-                <p class="text-gray-500 text-sm mt-1">Квиз-проверка и управление Q&A</p>
+                <h1><span class="ico ico-pill"></span> Фармбазис — База знаний</h1>
+                <p class="page-subtitle">Квиз-проверка и управление Q&A</p>
             </div>
-            <div class="flex gap-2">
-                <button class="btn btn-outline text-sm" onclick="loadStats()"><span class="ico ico-bar-chart"></span> Обновить</button>
-                <button class="btn btn-primary text-sm" onclick="showImportModal()"><span class="ico ico-download"></span> Импорт данных</button>
+            <div class="header-actions">
+                <button class="btn btn-outline btn-sm" onclick="loadStats()"><span class="ico ico-bar-chart"></span> Обновить</button>
+                <button class="btn btn-primary btn-sm" onclick="showImportModal()"><span class="ico ico-download"></span> Импорт данных</button>
             </div>
         </div>
 
         <!-- Stats -->
-        <div id="stats-panel" class="card mb-6 grid grid-cols-2 md:grid-cols-5 gap-0 divide-x divide-gray-100">
+        <div id="stats-panel" class="card stats-grid mb-6">
             <div class="stat-card">
-                <div class="stat-number text-blue-600" id="stat-total">—</div>
+                <div class="stat-number stat-accent" id="stat-total">—</div>
                 <div class="stat-label">Всего записей</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number text-green-600" id="stat-reviewed">—</div>
+                <div class="stat-number stat-success" id="stat-reviewed">—</div>
                 <div class="stat-label">Проверено</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number text-orange-500" id="stat-remaining">—</div>
+                <div class="stat-number stat-warning" id="stat-remaining">—</div>
                 <div class="stat-label">Осталось</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number text-purple-600" id="stat-quality">—</div>
+                <div class="stat-number stat-purple" id="stat-quality">—</div>
                 <div class="stat-label">Ср. качество</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number text-green-500" id="stat-percent">—</div>
+                <div class="stat-number stat-teal" id="stat-percent">—</div>
                 <div class="stat-label">Прогресс</div>
             </div>
         </div>
@@ -127,88 +212,88 @@
         </div>
 
         <div id="reindex-status-panel" class="card mb-6 hidden fade-in">
-            <div class="p-5">
-                <div class="flex items-start justify-between gap-4">
+            <div class="reindex-panel">
+                <div class="d-flex ai-start jc-between gap-4">
                     <div>
-                        <div class="text-sm font-semibold text-gray-900">Статус переиндексации ChromaDB</div>
-                        <div id="reindex-status-message" class="text-sm text-gray-500 mt-1">Ожидание запуска</div>
+                        <div style="font-size:14px;font-weight:600;color:var(--gray-100)">Статус переиндексации ChromaDB</div>
+                        <div id="reindex-status-message" style="font-size:13px;color:var(--gray-500);margin-top:4px">Ожидание запуска</div>
                     </div>
-                    <div class="text-right">
-                        <div id="reindex-status-badge" class="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-gray-100 text-gray-600">idle</div>
-                        <div id="reindex-status-counts" class="text-xs text-gray-400 mt-2">0 / 0</div>
+                    <div style="text-align:right">
+                        <div id="reindex-status-badge" class="reindex-badge" style="background:var(--gray-800);color:var(--gray-400)">idle</div>
+                        <div id="reindex-status-counts" style="font-size:12px;color:var(--gray-500);margin-top:8px">0 / 0</div>
                     </div>
                 </div>
                 <div class="progress-bar mt-4">
                     <div class="progress-fill" id="reindex-status-fill" style="width: 0%"></div>
                 </div>
-                <div id="reindex-status-meta" class="text-xs text-gray-400 mt-3"></div>
+                <div id="reindex-status-meta" style="font-size:12px;color:var(--gray-500);margin-top:12px"></div>
             </div>
         </div>
 
         <!-- Tabs -->
-        <div class="flex gap-0 border-b border-gray-200 mb-6">
-            <div class="tab active" data-tab="quiz" onclick="switchTab('quiz')"><span class="ico ico-target"></span> Квиз</div>
-            <div class="tab" data-tab="list" onclick="switchTab('list')"><span class="ico ico-clipboard"></span> Список</div>
-            <div class="tab" data-tab="import" onclick="switchTab('import')"><span class="ico ico-download"></span> Импорт</div>
+        <div class="tabs">
+            <button class="tab active" data-tab="quiz" onclick="switchTab('quiz')"><span class="ico ico-target"></span> Квиз</button>
+            <button class="tab" data-tab="list" onclick="switchTab('list')"><span class="ico ico-clipboard"></span> Список</button>
+            <button class="tab" data-tab="import" onclick="switchTab('import')"><span class="ico ico-download"></span> Импорт</button>
         </div>
 
         <!-- ==================== QUIZ TAB ==================== -->
         <div id="tab-quiz">
             <!-- Category filter -->
-            <div class="flex gap-3 mb-4 items-center">
-                <label class="text-sm font-semibold text-gray-600">Фильтр по категории:</label>
-                <select id="quiz-category" class="w-64" onchange="loadNextQuiz()">
+            <div class="d-flex gap-3 mb-4 ai-center">
+                <label class="label">Фильтр по категории:</label>
+                <select id="quiz-category" style="width:260px" onchange="loadNextQuiz()">
                     <option value="">Все категории</option>
                 </select>
             </div>
 
             <!-- Quiz card -->
-            <div id="quiz-card" class="card p-6 fade-in">
-                <div id="quiz-loading" class="text-center py-12">
-                    <div class="spinner mx-auto mb-4"></div>
-                    <p class="text-gray-500">Загрузка...</p>
+            <div id="quiz-card" class="card quiz-card fade-in">
+                <div id="quiz-loading" class="text-center" style="padding:48px 0">
+                    <div class="spinner" style="margin:0 auto 16px"></div>
+                    <p style="color:var(--gray-500)">Загрузка...</p>
                 </div>
                 <div id="quiz-content" class="hidden">
                     <!-- Item header -->
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center gap-3">
+                    <div class="d-flex ai-center jc-between mb-4">
+                        <div class="d-flex ai-center gap-3">
                             <span class="quality-badge" id="quiz-quality">3</span>
-                            <span class="text-sm font-medium text-gray-500" id="quiz-id">—</span>
-                            <span class="text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-medium" id="quiz-category-badge">—</span>
+                            <span style="font-size:13px;font-weight:500;color:var(--gray-500)" id="quiz-id">—</span>
+                            <span class="cat-badge" id="quiz-category-badge">—</span>
                         </div>
-                        <button class="text-red-400 hover:text-red-600 text-sm font-medium" onclick="deleteCurrentItem()"><span class="ico ico-trash"></span> Удалить</button>
+                        <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteCurrentItem()"><span class="ico ico-trash"></span> Удалить</button>
                     </div>
 
                     <!-- Tags -->
                     <div class="mb-4" id="quiz-tags-container">
-                        <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Теги</label>
-                        <div id="quiz-tags" class="mt-1 flex flex-wrap gap-1"></div>
-                        <div class="mt-2 flex gap-2">
-                            <input type="text" id="new-tag-input" placeholder="Новый тег..." class="w-48 text-sm py-1 px-3" onkeydown="if(event.key==='Enter'){addTag()}">
-                            <button class="btn btn-outline text-sm py-1 px-3" onclick="addTag()">+</button>
+                        <label class="label">Теги</label>
+                        <div id="quiz-tags" class="mt-1 d-flex flex-wrap gap-1"></div>
+                        <div class="mt-2 d-flex gap-2">
+                            <input type="text" id="new-tag-input" placeholder="Новый тег..." style="width:200px;font-size:13px;padding:5px 12px" onkeydown="if(event.key==='Enter'){addTag()}">
+                            <button class="btn btn-outline btn-sm" onclick="addTag()">+</button>
                         </div>
                     </div>
 
                     <!-- Question -->
                     <div class="mb-4">
-                        <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Вопрос</label>
+                        <label class="label">Вопрос</label>
                         <textarea id="quiz-question" rows="3" class="mt-1"></textarea>
                     </div>
 
                     <!-- Answer -->
                     <div class="mb-4">
-                        <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Ответ</label>
+                        <label class="label">Ответ</label>
                         <textarea id="quiz-answer" rows="6" class="mt-1"></textarea>
                     </div>
 
                     <!-- Category edit -->
-                    <div class="mb-4 flex gap-4">
+                    <div class="mb-4 d-flex gap-4">
                         <div class="flex-1">
-                            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Категория</label>
+                            <label class="label">Категория</label>
                             <select id="quiz-cat-edit" class="mt-1"></select>
                         </div>
-                        <div class="w-32">
-                            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">Качество (1-5)</label>
+                        <div style="width:140px">
+                            <label class="label">Качество (1-5)</label>
                             <select id="quiz-quality-edit" class="mt-1">
                                 <option value="1">1 — Плохое</option>
                                 <option value="2">2 — Слабое</option>
@@ -220,31 +305,31 @@
                     </div>
 
                     <!-- Action buttons -->
-                    <div class="flex gap-3 mt-6 pt-4 border-t border-gray-100">
-                        <button class="btn btn-success flex-1 text-lg py-3" onclick="approveItem()">
+                    <div class="quiz-actions">
+                        <button class="btn btn-success" onclick="approveItem()">
                             <span class="ico ico-check-circle"></span> Одобрить
                         </button>
-                        <button class="btn btn-primary flex-1 text-lg py-3" onclick="saveAndApprove()">
+                        <button class="btn btn-primary" onclick="saveAndApprove()">
                             <span class="ico ico-save"></span> Сохранить и одобрить
                         </button>
-                        <button class="btn btn-outline flex-1 text-lg py-3" onclick="skipItem()">
+                        <button class="btn btn-outline" onclick="skipItem()">
                             <span class="ico ico-skip-fwd"></span> Пропустить
                         </button>
                     </div>
 
                     <!-- Keyboard hints -->
-                    <div class="mt-3 text-center text-xs text-gray-400">
-                        Горячие клавиши: <kbd class="bg-gray-100 px-2 py-0.5 rounded">Enter</kbd> Одобрить &nbsp;
-                        <kbd class="bg-gray-100 px-2 py-0.5 rounded">Ctrl+S</kbd> Сохранить и одобрить &nbsp;
-                        <kbd class="bg-gray-100 px-2 py-0.5 rounded">→</kbd> Пропустить
+                    <div class="mt-3 text-center" style="font-size:12px;color:var(--gray-500)">
+                        Горячие клавиши: <kbd>Enter</kbd> Одобрить &nbsp;
+                        <kbd>Ctrl+S</kbd> Сохранить и одобрить &nbsp;
+                        <kbd>→</kbd> Пропустить
                     </div>
                 </div>
 
                 <!-- All done -->
-                <div id="quiz-done" class="hidden text-center py-12">
-                    <div class="text-5xl mb-4"><span class="ico ico-sparkles" style="font-size:48px"></span></div>
-                    <h2 class="text-2xl font-bold text-gray-900 mb-2">Все записи проверены!</h2>
-                    <p class="text-gray-500">Выберите другую категорию или загрузите новые данные.</p>
+                <div id="quiz-done" class="hidden text-center" style="padding:48px 0">
+                    <div style="margin-bottom:16px"><span class="ico ico-sparkles" style="font-size:48px"></span></div>
+                    <h2 style="font-size:22px;font-weight:700;color:var(--gray-100);margin-bottom:8px">Все записи проверены!</h2>
+                    <p style="color:var(--gray-500)">Выберите другую категорию или загрузите новые данные.</p>
                 </div>
             </div>
         </div>
@@ -252,57 +337,57 @@
         <!-- ==================== LIST TAB ==================== -->
         <div id="tab-list" class="hidden">
             <!-- Search & Filters -->
-            <div class="card p-4 mb-4">
-                <div class="flex gap-3 flex-wrap">
-                    <input type="text" id="list-search" placeholder="Поиск по ID или тексту: tp_general_00002, tp_marking_2215..." class="flex-1 min-w-64" oninput="debounceSearch()">
-                    <select id="list-category" class="w-48" onchange="loadList()">
+            <div class="card mb-4" style="padding:16px">
+                <div class="filters-bar">
+                    <input type="text" id="list-search" placeholder="Поиск по ID или тексту: tp_general_00002, tp_marking_2215..." class="flex-1" style="min-width:260px" oninput="debounceSearch()">
+                    <select id="list-category" style="width:200px" onchange="loadList()">
                         <option value="">Все категории</option>
                     </select>
-                    <select id="list-reviewed" class="w-40" onchange="loadList()">
+                    <select id="list-reviewed" style="width:170px" onchange="loadList()">
                         <option value="">Все статусы</option>
                         <option value="false">Непроверенные</option>
                         <option value="true">Проверенные</option>
                     </select>
-                    <button class="btn btn-warning text-sm" onclick="showReindexModal()"><span class="ico ico-refresh"></span> Реиндексация</button>
+                    <button class="btn btn-warning btn-sm" onclick="showReindexModal()"><span class="ico ico-refresh"></span> Реиндексация</button>
                 </div>
             </div>
 
             <!-- List -->
-            <div class="card overflow-hidden" id="list-container">
+            <div class="card" style="overflow:hidden" id="list-container">
                 <div id="list-items"></div>
-                <div id="list-pagination" class="p-4 border-t border-gray-100 flex items-center justify-between"></div>
+                <div id="list-pagination" class="pagination"></div>
             </div>
         </div>
 
         <!-- ==================== IMPORT TAB ==================== -->
         <div id="tab-import" class="hidden">
-            <div class="card p-8 text-center">
-                <div class="text-5xl mb-4"><span class="ico ico-download" style="font-size:48px"></span></div>
-                <h2 class="text-xl font-bold mb-2">Импорт новых Q&A данных</h2>
-                <p class="text-gray-500 mb-6">
+            <div class="card text-center" style="padding:32px">
+                <div style="margin-bottom:16px"><span class="ico ico-download" style="font-size:48px"></span></div>
+                <h2 style="font-size:18px;font-weight:700;color:var(--gray-100);margin-bottom:8px">Импорт новых Q&A данных</h2>
+                <p style="color:var(--gray-500);margin-bottom:24px">
                     Загрузите JSON-файл с новыми вопросами и ответами.<br>
                     Дубликаты (по ID) будут пропущены, новые записи добавятся в базу.
                 </p>
-                <div class="max-w-md mx-auto">
-                    <div id="drop-zone" class="border-2 border-dashed border-gray-300 rounded-xl p-8 mb-4 hover:border-blue-400 transition-colors cursor-pointer"
+                <div style="max-width:420px;margin:0 auto">
+                    <div id="drop-zone" class="import-zone mb-4"
                          onclick="document.getElementById('import-file').click()"
-                         ondragover="event.preventDefault(); this.classList.add('border-blue-400','bg-blue-50')"
-                         ondragleave="this.classList.remove('border-blue-400','bg-blue-50')"
+                         ondragover="event.preventDefault(); this.classList.add('dragging')"
+                         ondragleave="this.classList.remove('dragging')"
                          ondrop="handleDrop(event)">
-                        <div class="text-3xl mb-2"><span class="ico ico-file-text" style="font-size:32px"></span></div>
-                        <p class="font-medium text-gray-700">Перетащите JSON-файл сюда</p>
-                        <p class="text-sm text-gray-400 mt-1">или нажмите для выбора</p>
+                        <div style="margin-bottom:8px"><span class="ico ico-file-text" style="font-size:32px"></span></div>
+                        <p style="font-weight:500;color:var(--gray-300)">Перетащите JSON-файл сюда</p>
+                        <p style="font-size:13px;color:var(--gray-500);margin-top:4px">или нажмите для выбора</p>
                         <input type="file" id="import-file" accept=".json" class="hidden" onchange="handleFileSelect(event)">
                     </div>
-                    <div id="import-file-info" class="hidden mb-4 text-left bg-gray-50 rounded-lg p-4">
-                        <p class="font-medium" id="import-filename">—</p>
-                        <p class="text-sm text-gray-500" id="import-filesize">—</p>
+                    <div id="import-file-info" class="hidden mb-4 card" style="text-align:left;padding:16px">
+                        <p style="font-weight:500;color:var(--gray-200)" id="import-filename">—</p>
+                        <p style="font-size:13px;color:var(--gray-500)" id="import-filesize">—</p>
                     </div>
-                    <button id="import-btn" class="btn btn-primary w-full text-lg py-3 disabled:opacity-50"
+                    <button id="import-btn" class="btn btn-primary" style="width:100%;font-size:16px;padding:12px;opacity:0.5"
                             onclick="doImport()" disabled>
                         <span class="ico ico-rocket"></span> Загрузить в базу знаний
                     </button>
-                    <div id="import-result" class="hidden mt-4 text-left bg-green-50 border border-green-200 rounded-lg p-4"></div>
+                    <div id="import-result" class="hidden mt-4 result-box result-success" style="text-align:left"></div>
                 </div>
             </div>
         </div>
@@ -311,10 +396,10 @@
     <!-- Import Modal -->
     <div id="import-modal" class="modal-overlay hidden" onclick="if(event.target===this)hideImportModal()">
         <div class="modal">
-            <h3 class="text-lg font-bold mb-4"><span class="ico ico-download"></span> Быстрый импорт данных</h3>
-            <p class="text-gray-500 mb-4 text-sm">Выберите JSON-файл с новыми Q&A данными для загрузки.</p>
+            <h3><span class="ico ico-download"></span> Быстрый импорт данных</h3>
+            <p style="color:var(--gray-500);margin-bottom:16px;font-size:13px">Выберите JSON-файл с новыми Q&A данными для загрузки.</p>
             <input type="file" id="quick-import-file" accept=".json" class="mb-4">
-            <div class="flex gap-3">
+            <div class="d-flex gap-3">
                 <button class="btn btn-primary flex-1" onclick="doQuickImport()">Загрузить</button>
                 <button class="btn btn-outline flex-1" onclick="hideImportModal()">Отмена</button>
             </div>
@@ -324,23 +409,23 @@
     <!-- Reindex Modal -->
     <div id="reindex-modal" class="modal-overlay hidden" onclick="if(event.target===this)hideReindexModal()">
         <div class="modal">
-            <h3 class="text-lg font-bold mb-4"><span class="ico ico-refresh"></span> Полная переиндексация</h3>
-            <p class="text-gray-500 mb-4 text-sm">
-                Это пересоздаст коллекцию <code>support_tickets</code> в ChromaDB из актуального JSON-файла.
+            <h3><span class="ico ico-refresh"></span> Полная переиндексация</h3>
+            <p style="color:var(--gray-500);margin-bottom:16px;font-size:13px">
+                Это пересоздаст коллекцию <code style="background:var(--gray-800);padding:2px 6px;border-radius:4px">support_tickets</code> в ChromaDB из актуального JSON-файла.
                 Используйте после массовых правок. Бот продолжит работать — коллекция обновится на лету.
             </p>
             <div id="reindex-progress" class="hidden mb-4">
-                <div class="flex items-center gap-3 mb-3">
+                <div class="d-flex ai-center gap-3 mb-2">
                     <div class="spinner"></div>
-                    <span class="text-gray-600" id="reindex-progress-label">Переиндексация...</span>
+                    <span style="color:var(--gray-300)" id="reindex-progress-label">Переиндексация...</span>
                 </div>
                 <div class="progress-bar">
                     <div class="progress-fill" id="reindex-progress-fill" style="width: 0%"></div>
                 </div>
-                <div id="reindex-progress-stats" class="text-xs text-gray-400 mt-2">0 / 0</div>
+                <div id="reindex-progress-stats" style="font-size:12px;color:var(--gray-500);margin-top:8px">0 / 0</div>
             </div>
-            <div id="reindex-result" class="hidden mb-4 bg-green-50 border border-green-200 rounded-lg p-3 text-sm"></div>
-            <div class="flex gap-3">
+            <div id="reindex-result" class="hidden mb-4 result-box result-success"></div>
+            <div class="d-flex gap-3">
                 <button id="reindex-btn" class="btn btn-warning flex-1" onclick="doReindex()">Запустить</button>
                 <button class="btn btn-outline flex-1" onclick="hideReindexModal()">Закрыть</button>
             </div>
@@ -645,7 +730,7 @@
     function renderList(data) {
         const container = document.getElementById('list-items');
         if (!data.items || data.items.length === 0) {
-            container.innerHTML = '<div class="p-8 text-center text-gray-400">Ничего не найдено</div>';
+            container.innerHTML = '<div class="text-center" style="padding:32px;color:var(--gray-500)">Ничего не найдено</div>';
             document.getElementById('list-pagination').innerHTML = '';
             return;
         }
@@ -654,20 +739,20 @@
             const meta = item.metadata || {};
             const reviewed = item.reviewed ? 'reviewed' : 'unreviewed';
             const qs = meta.quality_score || 0;
-            const tags = (meta.tags || []).map(t => `<span class="tag text-xs">${t}</span>`).join('');
+            const tags = (meta.tags || []).map(t => `<span class="tag">${t}</span>`).join('');
             return `
                 <div class="list-row ${reviewed}" onclick="openItemInQuiz('${item.id}')">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-3">
-                            <span class="quality-badge text-xs q${Math.max(1,Math.min(5,qs))}" style="width:24px;height:24px;font-size:0.75rem">${qs}</span>
-                            <span class="text-xs text-gray-400 w-36 truncate" title="${item.id}">${item.id}</span>
-                            <span class="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">${meta.category || ''}</span>
-                            ${item.reviewed ? '<span class="text-xs text-green-600 font-medium">✓ Проверено</span>' : ''}
+                    <div class="list-row-header">
+                        <div class="d-flex ai-center gap-3">
+                            <span class="quality-badge q${Math.max(1,Math.min(5,qs))}" style="width:24px;height:24px;font-size:11px">${qs}</span>
+                            <span style="font-size:12px;color:var(--gray-500);width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.id}">${item.id}</span>
+                            <span class="cat-badge">${meta.category || ''}</span>
+                            ${item.reviewed ? '<span class="reviewed-badge">✓ Проверено</span>' : ''}
                         </div>
-                        <div class="flex gap-1">${tags}</div>
+                        <div class="d-flex gap-1">${tags}</div>
                     </div>
-                    <div class="mt-1 text-sm font-medium text-gray-800 truncate">${meta.question || '(нет вопроса)'}</div>
-                    <div class="mt-0.5 text-xs text-gray-500 truncate">${(meta.answer || '').substring(0, 150)}...</div>
+                    <div class="list-row-q">${meta.question || '(нет вопроса)'}</div>
+                    <div class="list-row-a">${(meta.answer || '').substring(0, 150)}...</div>
                 </div>
             `;
         }).join('');
@@ -676,19 +761,19 @@
         const pag = document.getElementById('list-pagination');
         const totalPages = data.total_pages;
         pag.innerHTML = `
-            <span class="text-sm text-gray-500">Стр. ${data.page} из ${totalPages} (всего ${data.total})</span>
-            <div class="flex items-center gap-2">
-                <button class="btn btn-outline text-sm py-1 px-2" onclick="goToPage(1)" ${data.page <= 1 ? 'disabled' : ''} title="Первая страница"><span class="ico ico-skip-fwd" style="transform:rotate(180deg)"></span></button>
-                <button class="btn btn-outline text-sm py-1 px-3" onclick="goToPage(listPage-1)" ${data.page <= 1 ? 'disabled' : ''}>← Назад</button>
-                <div class="flex items-center gap-1">
-                    <input type="number" id="page-input" class="text-center text-sm py-1 px-2" style="width: 60px; border: 2px solid #e2e8f0; border-radius: 6px;" 
+            <span style="font-size:13px;color:var(--gray-500)">Стр. ${data.page} из ${totalPages} (всего ${data.total})</span>
+            <div class="d-flex ai-center gap-2">
+                <button class="btn btn-outline btn-sm" onclick="goToPage(1)" ${data.page <= 1 ? 'disabled' : ''} title="Первая страница"><span class="ico ico-skip-fwd" style="transform:rotate(180deg)"></span></button>
+                <button class="btn btn-outline btn-sm" onclick="goToPage(listPage-1)" ${data.page <= 1 ? 'disabled' : ''}>← Назад</button>
+                <div class="d-flex ai-center gap-1">
+                    <input type="number" id="page-input" style="width:60px;text-align:center;font-size:13px;padding:5px 8px" 
                            value="${data.page}" min="1" max="${totalPages}" 
                            onkeydown="if(event.key==='Enter'){goToPage(parseInt(this.value))}"
                            onblur="goToPage(parseInt(this.value))">
-                    <span class="text-sm text-gray-400">/ ${totalPages}</span>
+                    <span style="font-size:13px;color:var(--gray-500)">/ ${totalPages}</span>
                 </div>
-                <button class="btn btn-outline text-sm py-1 px-3" onclick="goToPage(listPage+1)" ${data.page >= totalPages ? 'disabled' : ''}>Вперёд →</button>
-                <button class="btn btn-outline text-sm py-1 px-2" onclick="goToPage(${totalPages})" ${data.page >= totalPages ? 'disabled' : ''} title="Последняя страница"><span class="ico ico-skip-fwd"></span></button>
+                <button class="btn btn-outline btn-sm" onclick="goToPage(listPage+1)" ${data.page >= totalPages ? 'disabled' : ''}>Вперёд →</button>
+                <button class="btn btn-outline btn-sm" onclick="goToPage(${totalPages})" ${data.page >= totalPages ? 'disabled' : ''} title="Последняя страница"><span class="ico ico-skip-fwd"></span></button>
             </div>
         `;
     }
@@ -718,7 +803,7 @@
     // ─── Import ───────────────────────────────────────────────────
     function handleDrop(e) {
         e.preventDefault();
-        e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50');
+        e.currentTarget.classList.remove('dragging');
         if (e.dataTransfer.files.length > 0) {
             setImportFile(e.dataTransfer.files[0]);
         }
@@ -755,12 +840,14 @@
             });
             const el = document.getElementById('import-result');
             el.classList.remove('hidden');
+            el.className = 'mt-4 result-box result-success';
+            el.style.textAlign = 'left';
             el.innerHTML = `
-                <p class="font-medium text-green-800"><span class="ico ico-check-circle"></span> ${result.message}</p>
-                <div class="mt-2 text-sm text-green-700">
+                <p style="font-weight:500;color:var(--success)"><span class="ico ico-check-circle"></span> ${result.message}</p>
+                <div style="margin-top:8px;font-size:13px;color:var(--success)">
                     <div>Добавлено: <b>${result.added}</b></div>
                     <div>Дубликатов пропущено: <b>${result.duplicates_skipped}</b></div>
-                    ${result.errors > 0 ? `<div class="text-red-600">Ошибок: <b>${result.errors}</b></div>` : ''}
+                    ${result.errors > 0 ? `<div style="color:var(--danger)">Ошибок: <b>${result.errors}</b></div>` : ''}
                 </div>
             `;
             showToast(`Импортировано: +${result.added}`, 'success');
@@ -841,34 +928,34 @@
         if (status.job_id) metaParts.push(`Job: ${status.job_id.slice(0, 8)}`);
         meta.textContent = metaParts.join(' • ');
 
-        badge.className = 'inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold';
+        badge.className = 'reindex-badge';
         if (isRunning) {
-            badge.classList.add('bg-yellow-100', 'text-yellow-800');
+            badge.style.background = 'rgba(245,158,11,0.2)'; badge.style.color = '#fcd34d';
             badge.textContent = 'running';
             progress.classList.remove('hidden');
             result.classList.add('hidden');
             btn.disabled = true;
             btn.textContent = 'Идёт переиндексация...';
         } else if (isCompleted) {
-            badge.classList.add('bg-green-100', 'text-green-700');
+            badge.style.background = 'rgba(34,197,94,0.2)'; badge.style.color = '#86efac';
             badge.textContent = 'completed';
             progress.classList.add('hidden');
             result.classList.remove('hidden');
-            result.className = 'mb-4 bg-green-50 border border-green-200 rounded-lg p-3 text-sm';
+            result.className = 'mb-4 result-box result-success';
             result.innerHTML = `<span class="ico ico-check-circle"></span> ${status.message}`;
             btn.disabled = false;
             btn.textContent = 'Запустить заново';
         } else if (isFailed) {
-            badge.classList.add('bg-red-100', 'text-red-700');
+            badge.style.background = 'rgba(239,68,68,0.2)'; badge.style.color = '#fca5a5';
             badge.textContent = 'failed';
             progress.classList.add('hidden');
             result.classList.remove('hidden');
-            result.className = 'mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700';
+            result.className = 'mb-4 result-box result-error';
             result.innerHTML = `<span class="ico ico-x-circle"></span> ${status.error || status.message}`;
             btn.disabled = false;
             btn.textContent = 'Запустить снова';
         } else {
-            badge.classList.add('bg-gray-100', 'text-gray-600');
+            badge.style.background = 'var(--gray-800)'; badge.style.color = 'var(--gray-400)';
             badge.textContent = status.status || 'idle';
             progress.classList.add('hidden');
             result.classList.add('hidden');

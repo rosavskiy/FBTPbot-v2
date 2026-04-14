@@ -28,7 +28,6 @@
         <button class="btn btn-secondary editor-only" onclick="reloadReasons()"><span class="ico ico-refresh"></span> Перезагрузить</button>
         <a href="/reason-builder" class="btn btn-secondary" style="text-decoration:none"><span class="ico ico-bot"></span> Сформировать причину</a>
         <button class="btn btn-primary" onclick="openDebugChat()"><span class="ico ico-bug"></span> Debug-чат</button>
-        <button class="theme-toggle" onclick="cycleTheme()" id="themeToggleBtn" title="Переключить тему"><span class="ico ico-moon"></span></button>
     </div>
 </div>
 
@@ -440,43 +439,6 @@
 </div>
 
 <script>
-// ── Theme Management ──
-(function initTheme() {
-    const saved = localStorage.getItem('bot-config-theme');
-    if (saved === 'dark' || saved === 'light') {
-        document.documentElement.setAttribute('data-theme', saved);
-    }
-    // 'auto' or absent → no data-theme attr, CSS @media decides
-})();
-
-function cycleTheme() {
-    const el = document.documentElement;
-    const current = localStorage.getItem('bot-config-theme') || 'auto';
-    const order = ['auto', 'dark', 'light'];
-    const next = order[(order.indexOf(current) + 1) % order.length];
-    localStorage.setItem('bot-config-theme', next);
-
-    if (next === 'auto') {
-        el.removeAttribute('data-theme');
-    } else {
-        el.setAttribute('data-theme', next);
-    }
-    updateThemeButton(next);
-}
-
-function updateThemeButton(mode) {
-    const btn = document.getElementById('themeToggleBtn');
-    if (!btn) return;
-    const icons = { auto: 'ico-sun-moon', dark: 'ico-moon', light: 'ico-sun' };
-    const labels = { auto: 'Авто', dark: 'Тёмная', light: 'Светлая' };
-    btn.innerHTML = `<span class="ico ${icons[mode] || 'ico-sun-moon'}"></span>`;
-    btn.title = `Тема: ${labels[mode] || 'Авто'}`;
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    updateThemeButton(localStorage.getItem('bot-config-theme') || 'auto');
-});
-
 const API = '/api/bot-config';
 
 // ── Auth: переопределяем fetch для всех API-запросов ——

@@ -1,9 +1,37 @@
 /**
- * admin_nav.js — Общая навигация и auth-обёртка для админских страниц.
+ * admin_nav.js — Общая навигация, auth-обёртка и тема для админских страниц.
  *
  * Использование: подключить <script src="/static/admin_nav.js"></script>
  * Вызвать AdminNav.init({ currentPage: 'bot-config' }) после загрузки DOM.
  */
+
+/* ── Theme: apply immediately to prevent FOUC ── */
+(function() {
+    var saved = localStorage.getItem('bot-config-theme');
+    if (saved === 'dark' || saved === 'light') {
+        document.documentElement.setAttribute('data-theme', saved);
+    }
+})();
+
+function cycleTheme() {
+    var el = document.documentElement;
+    var current = localStorage.getItem('bot-config-theme') || 'auto';
+    var order = ['auto', 'dark', 'light'];
+    var next = order[(order.indexOf(current) + 1) % order.length];
+    localStorage.setItem('bot-config-theme', next);
+    if (next === 'auto') { el.removeAttribute('data-theme'); } else { el.setAttribute('data-theme', next); }
+    _updateNavThemeBtn(next);
+}
+
+function _updateNavThemeBtn(mode) {
+    var btn = document.getElementById('adminThemeToggle');
+    if (!btn) return;
+    var icons = { auto: 'ico-sun-moon', dark: 'ico-moon', light: 'ico-sun' };
+    var labels = { auto: 'Авто', dark: 'Тёмная', light: 'Светлая' };
+    btn.innerHTML = '<span class="ico ' + (icons[mode] || 'ico-sun-moon') + '"></span>';
+    btn.title = 'Тема: ' + (labels[mode] || 'Авто');
+}
+
 const AdminNav = (() => {
     const _nativeFetch = window.fetch.bind(window); // capture before any override
     let _token = null;
@@ -84,16 +112,18 @@ const AdminNav = (() => {
                 <a href="/reason-builder" class="admin-nav__link ${currentPage === 'reason-builder' ? 'active' : ''}">Помощник причин</a>
                 ${role === 'superadmin' ? `
                 <a href="/admin-users" class="admin-nav__link ${currentPage === 'admin-users' ? 'active' : ''}">Пользователи</a>
-                <a href="/admin-audit" class="admin-nav__link ${currentPage === 'admin-audit' ? 'active' : ''}">Аудит</a>
+                <a href="/admin-audit" class="admin-nav__link ${currentPage === 'admin-audit' ? 'active' : ''}">Лог</a>
                 ` : ''}
             </div>
             <div class="admin-nav__user">
                 <span class="admin-nav__name">${_escapeHtml(displayName)}</span>
                 <span class="admin-nav__role">${_escapeHtml(role)}</span>
+                <button class="admin-nav__theme-btn" id="adminThemeToggle" onclick="cycleTheme()" title="Тема"><span class="ico ico-moon"></span></button>
                 <button class="admin-nav__logout" onclick="AdminNav.logout()" title="Выйти">Выйти</button>
             </div>
         `;
         document.body.prepend(nav);
+        _updateNavThemeBtn(localStorage.getItem('bot-config-theme') || 'auto');
     }
 
     function _escapeHtml(text) {

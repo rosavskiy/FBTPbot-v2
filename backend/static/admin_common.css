@@ -191,3 +191,102 @@
     color: #ef4444;
     border-color: #ef4444;
 }
+
+.admin-nav__theme-btn {
+    background: none;
+    border: 1px solid #3f3f46;
+    color: #a1a1aa;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: color 0.15s, border-color 0.15s;
+    padding: 0;
+    font-family: inherit;
+}
+
+.admin-nav__theme-btn:hover {
+    color: #e4e4e7;
+    border-color: #52525b;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Theme Design Tokens (Dark / Light / Auto)
+   ═══════════════════════════════════════════════════════ */
+:root {
+    --radius-xs: 6px;
+    --radius-sm: 8px;
+    --radius: 12px;
+    --radius-lg: 16px;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+    --accent: #6366f1;
+    --accent-dark: #4338ca;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+
+    /* Dark (default) */
+    --gray-50: #fafafa;
+    --gray-100: #f4f4f5;
+    --gray-200: #e4e4e7;
+    --gray-300: #d4d4d8;
+    --gray-400: #a1a1aa;
+    --gray-500: #71717a;
+    --gray-600: #52525b;
+    --gray-700: #3f3f46;
+    --gray-800: #27272a;
+    --gray-900: #18181b;
+    --gray-950: #09090b;
+    --accent-light: #e0e7ff;
+    --accent-subtle: rgba(99,102,241,0.08);
+}
+
+[data-theme="light"] {
+    --gray-50: #1A3353;
+    --gray-100: #1A3353;
+    --gray-200: #3f3f46;
+    --gray-300: #52525b;
+    --gray-400: #89898B;
+    --gray-500: #64748b;
+    --gray-600: #89898B;
+    --gray-700: #E8EAF0;
+    --gray-800: #E8EAF0;
+    --gray-900: #ffffff;
+    --gray-950: #F8F9FB;
+    --accent: #3E79F7;
+    --accent-dark: #2F5DBF;
+    --accent-light: #2F5DBF;
+    --accent-subtle: rgba(62,121,247,0.08);
+    --success: #17B530;
+    --danger: #F73B3B;
+    --warning: #FFBE18;
+}
+
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme]) {
+        --gray-50: #1A3353;
+        --gray-100: #1A3353;
+        --gray-200: #3f3f46;
+        --gray-300: #52525b;
+        --gray-400: #89898B;
+        --gray-500: #64748b;
+        --gray-600: #89898B;
+        --gray-700: #E8EAF0;
+        --gray-800: #E8EAF0;
+        --gray-900: #ffffff;
+        --gray-950: #F8F9FB;
+        --accent: #3E79F7;
+        --accent-dark: #2F5DBF;
+        --accent-light: #2F5DBF;
+        --accent-subtle: rgba(62,121,247,0.08);
+        --success: #17B530;
+        --danger: #F73B3B;
+        --warning: #FFBE18;
+    }
+}
