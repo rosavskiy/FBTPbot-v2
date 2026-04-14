@@ -769,6 +769,49 @@ class RAGEngine:
         context = self._build_reason_context(reason, l2, question)
         section_title = l2.section.title if l2.section else "Общий"
 
+        # Если контекст из базы знаний пустой — сразу эскалация без вызова LLM
+        if context == "Нет дополнительного контекста.":
+            _total = _time.time() - _start
+            logger.info(
+                f"[ENGINE] L3=skip_llm (no KB context) | reason={reason.name} | time={_total:.1f}s"
+            )
+            resp = RAGResponse(
+                answer=(
+                    "По данному вопросу недостаточно информации в базе знаний. "
+                    "Передаю ваше обращение оператору."
+                ),
+                confidence=0.0,
+                confidence_reason="Нет контекста в базе знаний — LLM не вызывался",
+                needs_escalation=True,
+                detected_reason=reason.id,
+                detected_reason_name=reason.name,
+                thematic_section=section_title,
+                classification_method=f"L1:{l1_method}/L2:{l2.method}/L3:no_context",
+            )
+            if debug:
+                resp.debug_trace = {
+                    "l1_method": l1_method,
+                    "l1_confident": l1_confident,
+                    "l1_reason": reason.name,
+                    "l1_reason_id": reason.id,
+                    "l1_candidates": l1_candidates_data,
+                    "escalation_check": escalation_check,
+                    "l2_method": l2.method,
+                    "l2_section": l2.section.title if l2.section else None,
+                    "l2_best_qa_score": l2.best_qa_score,
+                    "l2_best_example_score": l2.best_example_score,
+                    "l2_best_complaint_score": l2.best_complaint_score,
+                    "llm_prompt": None,
+                    "llm_raw_response": None,
+                    "llm_provider": None,
+                    "llm_temperature": None,
+                    "confidence_parsed": 0.0,
+                    "confidence_reason": "Нет контекста в базе знаний — LLM не вызывался",
+                    "llm_involvement": "classification_only" if llm_used_for_classify else "none",
+                    "processing_time_ms": int(_total * 1000),
+                }
+            return resp
+
         messages = [
             {"role": "system", "text": SYSTEM_PROMPT},
         ]
@@ -818,11 +861,6 @@ class RAGEngine:
         clean_answer, confidence, conf_reason = self._parse_confidence(raw_answer)
         clean_answer = _strip_markdown(clean_answer)
         clean_answer = _truncate_to_bytes(clean_answer, MAX_ANSWER_BYTES)
-
-        # Если контекст из базы знаний пустой — принудительно снижаем confidence
-        if context == "Нет дополнительного контекста.":
-            confidence = min(confidence, 0.2)
-            conf_reason = "Нет контекста в базе знаний — ответ может быть неточным"
 
         needs_escalation = confidence < settings.rag_confidence_threshold
         if not needs_escalation:
