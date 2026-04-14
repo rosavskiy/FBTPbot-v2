@@ -18,16 +18,17 @@
         <h1>AI-консоль ver. 3.0</h1>
     </div>
     <div class="actions">
-        <button class="btn btn-secondary editor-only" onclick="openLlmSettings()">⚙️ Настройка LLM</button>
-        <button class="btn btn-secondary editor-only" onclick="openGlobalEscalation()" title="Глобальные правила эскалации L0 (до классификации)">⚙️ L0</button>
-        <button class="btn btn-secondary editor-only" onclick="openClassificationSettings()" title="Настройки классификации L1 (веса маркеров, пороги)">⚙️ L1</button>
-        <a href="/api/bot-config/template" class="btn btn-secondary" style="text-decoration:none">📄 Скачать шаблон</a>
+        <button class="btn btn-secondary editor-only" onclick="openLlmSettings()"><span class="ico ico-settings"></span> Настройка LLM</button>
+        <button class="btn btn-secondary editor-only" onclick="openGlobalEscalation()" title="Глобальные правила эскалации L0 (до классификации)"><span class="ico ico-settings"></span> L0</button>
+        <button class="btn btn-secondary editor-only" onclick="openClassificationSettings()" title="Настройки классификации L1 (веса маркеров, пороги)"><span class="ico ico-settings"></span> L1</button>
+        <a href="/api/bot-config/template" class="btn btn-secondary" style="text-decoration:none"><span class="ico ico-file-text"></span> Скачать шаблон</a>
         <input type="file" id="importFileInput" accept=".docx" style="display:none" onchange="importDocx(this)">
-        <button class="btn btn-success editor-only" onclick="document.getElementById('importFileInput').click()">📥 Импорт .docx</button>
-        <button class="btn btn-secondary" onclick="exportCurrentReason()">📤 Экспорт .docx</button>
-        <button class="btn btn-secondary editor-only" onclick="reloadReasons()">🔄 Перезагрузить</button>
-        <button class="btn btn-primary" onclick="openDebugChat()">🐛 Debug-чат</button>
-        <button class="theme-toggle" onclick="cycleTheme()" id="themeToggleBtn" title="Переключить тему">🌙</button>
+        <button class="btn btn-success editor-only" onclick="document.getElementById('importFileInput').click()"><span class="ico ico-download"></span> Импорт .docx</button>
+        <button class="btn btn-secondary" onclick="exportCurrentReason()"><span class="ico ico-upload"></span> Экспорт .docx</button>
+        <button class="btn btn-secondary editor-only" onclick="reloadReasons()"><span class="ico ico-refresh"></span> Перезагрузить</button>
+        <a href="/reason-builder" class="btn btn-secondary" style="text-decoration:none"><span class="ico ico-bot"></span> Сформировать причину</a>
+        <button class="btn btn-primary" onclick="openDebugChat()"><span class="ico ico-bug"></span> Debug-чат</button>
+        <button class="theme-toggle" onclick="cycleTheme()" id="themeToggleBtn" title="Переключить тему"><span class="ico ico-moon"></span></button>
     </div>
 </div>
 
@@ -50,11 +51,11 @@
 
         <!-- Images Section (global, always visible) -->
         <div class="card card-collapsible" id="imagesCard" onclick="toggleImagesCard(event)">
-            <div class="card-title"><span class="collapse-arrow"></span> 🖼️ Изображения</div>
+            <div class="card-title"><span class="collapse-arrow"></span> <span class="ico ico-image"></span> Изображения</div>
             <div class="card-body" onclick="event.stopPropagation()">
                 <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
                     <input type="file" id="imageUploadInput" accept=".png,.jpg,.jpeg,.gif,.webp" style="display:none" onchange="uploadImage(this)">
-                    <button class="btn btn-sm btn-success" onclick="document.getElementById('imageUploadInput').click()">📤 Загрузить</button>
+                    <button class="btn btn-sm btn-success" onclick="document.getElementById('imageUploadInput').click()"><span class="ico ico-upload"></span> Загрузить</button>
                     <span style="font-size:12px; color:var(--gray-500)">PNG, JPG, GIF, WEBP (макс. 1 МБ)</span>
                 </div>
                 <div class="img-grid" id="imagesGrid"></div>
@@ -82,7 +83,7 @@
                     <input type="text" class="form-input" id="reasonId" placeholder="akt_na_spisanie" style="max-width:300px">
                 </div>
                 <div class="form-row">
-                    <div class="form-label">📁 Папка (для группировки, напр. "Группа АРМ/Настройка ККМ")</div>
+                    <div class="form-label"><span class="ico ico-folder"></span> Папка (для группировки, напр. "Группа АРМ/Настройка ККМ")</div>
                     <input type="text" class="form-input" id="reasonFolder" placeholder="Оставьте пустым для корня" list="foldersList" style="max-width:400px">
                     <datalist id="foldersList"></datalist>
                 </div>
@@ -90,7 +91,7 @@
 
             <!-- Markers -->
             <div class="card">
-                <div class="card-title">🏷️ Маркеры для классификации (L1)</div>
+                <div class="card-title"><span class="ico ico-tag"></span> Маркеры для классификации (L1)</div>
 
                 <div class="form-row">
                     <div class="form-label">Глаголы-маркеры</div>
@@ -131,7 +132,7 @@
 
             <!-- Classification Rules (L1.1) -->
             <div class="card">
-                <div class="card-title">📋 Правила классификации (L1.1)
+                <div class="card-title"><span class="ico ico-clipboard"></span> Правила классификации (L1.1)
                     <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
                         <label class="toggle">
                             <input type="checkbox" id="clsRulesEnabled" onchange="ensureClassificationRules(); currentReason.classification_rules.enabled=this.checked">
@@ -177,7 +178,7 @@
 
             <!-- Thematic Sections (L2) -->
             <div class="card">
-                <div class="card-title">📚 Тематические разделы (L2)
+                <div class="card-title"><span class="ico ico-book-open"></span> Тематические разделы (L2)
                     <button class="btn btn-sm btn-secondary" onclick="addSection()" style="margin-left:auto">+ Раздел</button>
                 </div>
                 <div id="sectionsAccordion"></div>
@@ -185,7 +186,7 @@
 
             <!-- Escalation Rules (L1.5) -->
             <div class="card">
-                <div class="card-title">🚨 Правила 100%-эскалации (L1.5)
+                <div class="card-title"><span class="ico ico-siren"></span> Правила 100%-эскалации (L1.5)
                     <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
                         <label class="toggle">
                             <input type="checkbox" id="escalationEnabled" onchange="currentReason.escalation_rules.enabled=this.checked">
@@ -225,21 +226,21 @@
 
             <!-- Typical Complaints -->
             <div class="card">
-                <div class="card-title">⚠️ Типовые жалобы</div>
+                <div class="card-title"><span class="ico ico-alert-tri"></span> Типовые жалобы</div>
                 <div id="complaintsContainer"></div>
                 <button class="btn btn-sm btn-secondary" onclick="addComplaint()" style="margin-top:10px">+ Жалоба</button>
             </div>
 
             <!-- Example Answers -->
             <div class="card">
-                <div class="card-title">💡 Примеры ответов</div>
+                <div class="card-title"><span class="ico ico-lightbulb"></span> Примеры ответов</div>
                 <div id="examplesContainer"></div>
                 <button class="btn btn-sm btn-secondary" onclick="addExample()" style="margin-top:10px">+ Пример</button>
             </div>
 
             <!-- Test Classification -->
             <div class="card test-panel">
-                <div class="card-title">🧪 Тест классификации</div>
+                <div class="card-title"><span class="ico ico-flask"></span> Тест классификации</div>
                 <div class="test-input-row">
                     <input type="text" class="form-input" id="testQuery" placeholder="Введите тестовый вопрос..." onkeydown="if(event.key==='Enter')runTest()">
                     <button class="btn btn-success" onclick="runTest()">Тест</button>
@@ -250,11 +251,11 @@
             <!-- Sticky Action Bar -->
             <div class="sticky-action-bar">
                 <div style="display:flex; gap:8px; align-items:center;">
-                    <button class="btn btn-primary editor-only" onclick="saveReason()">💾 Сохранить</button>
+                    <button class="btn btn-primary editor-only" onclick="saveReason()"><span class="ico ico-save"></span> Сохранить</button>
                     <span class="editor-only" style="font-size:12px; color:var(--gray-500)">Ctrl+S</span>
-                    <button class="btn btn-secondary editor-only" onclick="duplicateReason()">📋 Дублировать</button>
+                    <button class="btn btn-secondary editor-only" onclick="duplicateReason()"><span class="ico ico-clipboard"></span> Дублировать</button>
                 </div>
-                <button class="btn btn-danger editor-only" onclick="deleteReason()">🗑 Удалить</button>
+                <button class="btn btn-danger editor-only" onclick="deleteReason()"><span class="ico ico-trash"></span> Удалить</button>
             </div>
         </div>
     </div>
@@ -264,10 +265,10 @@
 <div class="modal-overlay" id="debugModal">
     <div class="modal">
         <div class="modal-header">
-            <h2>🐛 Debug-чат (трейсинг pipeline)</h2>
+            <h2><span class="ico ico-bug"></span> Debug-чат (трейсинг pipeline)</h2>
             <div style="display:flex; gap:8px; align-items:center;">
                 <span id="debugSessionInfo" style="font-size:11px; color:var(--gray-500); font-family:var(--font-mono);"></span>
-                <button class="btn btn-sm btn-secondary" onclick="resetDebugSession()">🔄 Новая сессия</button>
+                <button class="btn btn-sm btn-secondary" onclick="resetDebugSession()"><span class="ico ico-refresh"></span> Новая сессия</button>
                 <button class="btn btn-sm btn-danger btn-close" onclick="closeDebugChat()"></button>
             </div>
         </div>
@@ -285,7 +286,7 @@
 <div class="modal-overlay" id="llmSettingsModal">
     <div class="modal" style="max-width:520px; height:auto; max-height:80vh;">
         <div class="modal-header">
-            <h2>⚙️ Настройка LLM</h2>
+            <h2><span class="ico ico-settings"></span> Настройка LLM</h2>
             <button class="btn btn-sm btn-danger btn-close" onclick="closeLlmSettings()"></button>
         </div>
         <div class="modal-body" style="padding:16px; overflow-y:auto;">
@@ -303,7 +304,7 @@
                 </label>
             </div>
             <div class="form-row">
-                <div class="form-label" title="Температура генерации LLM (0 = детерминированно, 1 = креативно)">🌡️ Температура</div>
+                <div class="form-label" title="Температура генерации LLM (0 = детерминированно, 1 = креативно)"><span class="ico ico-thermometer"></span> Температура</div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <input type="range" id="llmTemperature" min="0" max="1" step="0.01" value="0.1" style="flex:1;">
                     <span id="llmTempValue" style="min-width:30px; font-family:var(--font-mono); font-size:13px;">0.10</span>
@@ -314,7 +315,7 @@
                 <span id="activeLlmIndicator" style="font-size:13px; color:var(--gray-300);">Активно: неизвестно</span>
             </div>
             <div style="margin-top:16px; display:flex; gap:8px;">
-                <button class="btn btn-primary" onclick="saveLlmSettings()">💾 Сохранить</button>
+                <button class="btn btn-primary" onclick="saveLlmSettings()"><span class="ico ico-save"></span> Сохранить</button>
                 <button class="btn btn-secondary" onclick="closeLlmSettings()">Отмена</button>
             </div>
         </div>
@@ -325,13 +326,13 @@
 <div class="modal-overlay" id="clsSettingsModal">
     <div class="modal" style="max-width:520px">
         <div class="modal-header">
-            <h2>⚙️ Настройки классификации L1</h2>
+            <h2><span class="ico ico-settings"></span> Настройки классификации L1</h2>
             <button class="btn btn-sm btn-danger btn-close" onclick="closeClassificationSettings()"></button>
         </div>
         <div class="modal-body" style="padding:16px; overflow-y:auto; max-height:70vh;">
             <div class="form-row">
                 <div class="form-label" title="Если L1-score ниже этого значения — 100% эскалация на оператора">
-                    🚫 Глобальный минимальный порог L1 (ниже → эскалация)
+                    <span class="ico ico-ban"></span> Глобальный минимальный порог L1 (ниже → эскалация)
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <input type="range" id="clsGlobalMinScore" min="0" max="50" step="1" value="5" style="flex:1;"
@@ -340,7 +341,7 @@
                 </div>
             </div>
             <hr style="border-color:var(--gray-700); margin:12px 0">
-            <div class="form-label" style="margin-bottom:8px">🏷️ Веса маркеров (определяют, сколько баллов даёт каждый тип совпадения)</div>
+            <div class="form-label" style="margin-bottom:8px"><span class="ico ico-tag"></span> Веса маркеров (определяют, сколько баллов даёт каждый тип совпадения)</div>
             <div class="form-row">
                 <div class="form-label" style="font-size:12px">Фразовая маска (phrase_mask)</div>
                 <div style="display:flex; align-items:center; gap:8px;">
@@ -374,7 +375,7 @@
                 </div>
             </div>
             <div style="margin-top:16px; display:flex; gap:8px;">
-                <button class="btn btn-primary" onclick="saveClassificationSettings()">💾 Сохранить</button>
+                <button class="btn btn-primary" onclick="saveClassificationSettings()"><span class="ico ico-save"></span> Сохранить</button>
                 <button class="btn btn-secondary" onclick="closeClassificationSettings()">Отмена</button>
             </div>
         </div>
@@ -385,7 +386,7 @@
 <div class="modal-overlay" id="l0Modal">
     <div class="modal" style="max-width:520px">
         <div class="modal-header">
-            <h2>⚙️ Глобальная эскалация (L0)</h2>
+            <h2><span class="ico ico-settings"></span> Глобальная эскалация (L0)</h2>
             <button class="btn btn-sm btn-danger btn-close" onclick="closeGlobalEscalation()"></button>
         </div>
         <div class="modal-body" style="padding:16px; overflow-y:auto; max-height:70vh;">
@@ -411,7 +412,7 @@
                 </div>
             </div>
             <div style="margin-top:16px; display:flex; gap:8px;">
-                <button class="btn btn-primary" onclick="saveGlobalEscalation()">💾 Сохранить</button>
+                <button class="btn btn-primary" onclick="saveGlobalEscalation()"><span class="ico ico-save"></span> Сохранить</button>
                 <button class="btn btn-secondary" onclick="closeGlobalEscalation()">Отмена</button>
             </div>
         </div>
@@ -422,16 +423,16 @@
 <div class="modal-overlay" id="imagePickerModal">
     <div class="modal" style="max-width:600px; height:auto; max-height:80vh;">
         <div class="modal-header">
-            <h2>🖼️ Выбор изображения</h2>
+            <h2><span class="ico ico-image"></span> Выбор изображения</h2>
             <button class="btn btn-sm btn-danger btn-close" onclick="closeImagePicker()"></button>
         </div>
         <div class="modal-body" style="padding:16px; overflow-y:auto;">
             <div class="img-grid" id="imagePickerGrid"></div>
             <div id="imagePickerEmpty" style="text-align:center; color:var(--gray-500); padding:20px; display:none;">
-                Нет загруженных изображений. Загрузите в разделе 🖼️ Изображения.
+                Нет загруженных изображений. Загрузите в разделе <span class="ico ico-image"></span> Изображения.
             </div>
             <div style="margin-top:16px; display:flex; gap:8px;">
-                <button class="btn btn-primary" onclick="confirmImagePicker()">✅ Привязать выбранные</button>
+                <button class="btn btn-primary" onclick="confirmImagePicker()"><span class="ico ico-check-circle"></span> Привязать выбранные</button>
                 <button class="btn btn-secondary" onclick="closeImagePicker()">Отмена</button>
             </div>
         </div>
@@ -466,9 +467,9 @@ function cycleTheme() {
 function updateThemeButton(mode) {
     const btn = document.getElementById('themeToggleBtn');
     if (!btn) return;
-    const icons = { auto: '🌗', dark: '🌙', light: '☀️' };
+    const icons = { auto: 'ico-sun-moon', dark: 'ico-moon', light: 'ico-sun' };
     const labels = { auto: 'Авто', dark: 'Тёмная', light: 'Светлая' };
-    btn.textContent = icons[mode] || '🌗';
+    btn.innerHTML = `<span class="ico ${icons[mode] || 'ico-sun-moon'}"></span>`;
     btn.title = `Тема: ${labels[mode] || 'Авто'}`;
 }
 
@@ -1338,13 +1339,13 @@ function renderExamples() {
         let imgBadgesHtml = '';
         if (ex.image_codes.length > 0) {
             imgBadgesHtml = '<div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;">' +
-                ex.image_codes.map((code, ci) => `<span class="chip" style="font-size:11px; padding:2px 8px;">🖼️ ${code} <span class="remove" onclick="removeExampleImage(${ei},${ci})"></span></span>`).join('') +
+                ex.image_codes.map((code, ci) => `<span class="chip" style="font-size:11px; padding:2px 8px;"><span class="ico ico-image"></span> ${code} <span class="remove" onclick="removeExampleImage(${ei},${ci})"></span></span>`).join('') +
                 '</div>';
         }
 
         div.innerHTML = `
             <div class="qa-actions">
-                <button class="btn btn-sm btn-secondary" onclick="openImagePicker(${ei})" title="Привязать изображение" style="font-size:11px; padding:3px 6px;">🖼️</button>
+                <button class="btn btn-sm btn-secondary" onclick="openImagePicker(${ei})" title="Привязать изображение" style="font-size:11px; padding:3px 6px;"><span class="ico ico-image"></span></button>
                 <button class="btn btn-sm btn-danger btn-close" onclick="removeExample(${ei})"></button>
             </div>
             <div class="form-label">Вопросы пользователя</div>
@@ -1539,8 +1540,8 @@ async function runTest() {
         // Build readable output with dry-run verdict
         let lines = [];
         const dr = data.dry_run || {};
-        const verdictEmoji = dr.verdict === 'pass' ? '✅' : dr.verdict === 'escalation' ? '🚫' : '❓';
-        lines.push(`${verdictEmoji} ВЕРДИКТ: ${dr.verdict || '?'}${dr.reason ? ' — ' + dr.reason : ''}`);
+        const verdictIco = dr.verdict === 'pass' ? '<span class="ico ico-check-circle"></span>' : dr.verdict === 'escalation' ? '<span class="ico ico-ban"></span>' : '<span class="ico ico-search"></span>';
+        lines.push(`${verdictIco} ВЕРДИКТ: ${dr.verdict || '?'}${dr.reason ? ' — ' + dr.reason : ''}`);
         lines.push(`L1: ${data.l1_method} | confident: ${data.l1_confident} | reason: ${data.l1_reason || 'нет'}`);
         if (data.global_min_score != null) lines.push(`Глобальный порог: ${data.global_min_score} | Per-reason: ${data.per_reason_min_score ?? 'нет'}`);
         if (data.marker_weights) lines.push(`Веса: phrase=${data.marker_weights.phrase_mask} num=${data.marker_weights.numeric_tag} noun=${data.marker_weights.noun} verb=${data.marker_weights.verb}`);
@@ -1677,7 +1678,7 @@ async function sendDebugMessage() {
     // Loading indicator
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'debug-msg bot';
-    loadingDiv.innerHTML = '<div class="bot-answer" style="color:var(--gray-500);">⏳ Обработка...</div>';
+    loadingDiv.innerHTML = '<div class="bot-answer" style="color:var(--gray-500);"><span class="ico ico-refresh"></span> Обработка...</div>';
     container.appendChild(loadingDiv);
     container.scrollTop = container.scrollHeight;
 
@@ -1709,22 +1710,22 @@ async function sendDebugMessage() {
         const expandableRawId = 'raw_' + debugMsgCounter;
 
         let metaHtml = `
-            <span>🎯 Confidence: <b>${(data.confidence * 100).toFixed(0)}%</b> (${data.confidence_level})</span>
-            <span>📋 ${data.confidence_label}</span>
+            <span><span class="ico ico-target"></span> Confidence: <b>${(data.confidence * 100).toFixed(0)}%</b> (${data.confidence_level})</span>
+            <span><span class="ico ico-clipboard"></span> ${data.confidence_label}</span>
         `;
-        if (data.detected_reason) metaHtml += `<span>📌 ${data.detected_reason}</span>`;
-        if (data.thematic_section) metaHtml += `<span>📂 ${data.thematic_section}</span>`;
-        if (data.needs_escalation) metaHtml += `<span style="color:#fca5a5">⚠️ Эскалация</span>`;
+        if (data.detected_reason) metaHtml += `<span><span class="ico ico-pin"></span> ${data.detected_reason}</span>`;
+        if (data.thematic_section) metaHtml += `<span><span class="ico ico-folder-open"></span> ${data.thematic_section}</span>`;
+        if (data.needs_escalation) metaHtml += `<span style="color:#fca5a5"><span class="ico ico-alert-tri"></span> Эскалация</span>`;
 
         let traceHtml = '';
         const t = data.debug_trace;
         if (t) {
             // LLM involvement badge
             const involvementLabels = {
-                'none': '🔇 Без LLM',
-                'classification_only': '🏷️ Только классификация',
-                'generation': '✍️ Генерация ответа',
-                'classification+generation': '🏷️+✍️ Классификация + Генерация',
+                'none': '<span class="ico ico-volume-x"></span> Без LLM',
+                'classification_only': '<span class="ico ico-tag"></span> Только классификация',
+                'generation': '<span class="ico ico-pen"></span> Генерация ответа',
+                'classification+generation': '<span class="ico ico-tag"></span>+<span class="ico ico-pen"></span> Классификация + Генерация',
             };
             const invLabel = involvementLabels[t.llm_involvement] || t.llm_involvement;
 
@@ -1745,7 +1746,7 @@ async function sendDebugMessage() {
             if (t.escalation_check) {
                 traceHtml += `<h4>L1.5 — Проверка 100%-эскалации</h4>`;
                 if (t.escalation_check.matched) {
-                    traceHtml += `<div style="color:#fca5a5">✅ Сработало! Триггер: <b>${t.escalation_check.trigger}</b>`;
+                    traceHtml += `<div style="color:#fca5a5"><span class="ico ico-check-circle"></span> Сработало! Триггер: <b>${t.escalation_check.trigger}</b>`;
                     if (t.escalation_check.pattern) traceHtml += ` | Паттерн: "${t.escalation_check.pattern}"`;
                     if (t.escalation_check.question) traceHtml += ` | Q&A: "${t.escalation_check.question}" (score: ${t.escalation_check.score?.toFixed(2)})`;
                     traceHtml += `</div>`;
@@ -1778,7 +1779,7 @@ async function sendDebugMessage() {
             traceHtml += `<h4>Confidence</h4>`;
             traceHtml += `<div>Значение: <b>${t.confidence_parsed?.toFixed(2) ?? '—'}</b> | Причина: ${t.confidence_reason || '—'}</div>`;
 
-            traceHtml += `<div style="margin-top:8px; color:var(--gray-500)">⏱ Время обработки: ${t.processing_time_ms} мс</div>`;
+            traceHtml += `<div style="margin-top:8px; color:var(--gray-500)"><span class="ico ico-timer"></span> Время обработки: ${t.processing_time_ms} мс</div>`;
         }
 
         botDiv.innerHTML = `
@@ -1792,7 +1793,7 @@ async function sendDebugMessage() {
         container.removeChild(loadingDiv);
         const errDiv = document.createElement('div');
         errDiv.className = 'debug-msg bot';
-        errDiv.innerHTML = `<div class="bot-answer" style="color:#fca5a5">❌ ${e.message}</div>`;
+        errDiv.innerHTML = `<div class="bot-answer" style="color:#fca5a5"><span class="ico ico-x-circle"></span> ${e.message}</div>`;
         container.appendChild(errDiv);
     }
 

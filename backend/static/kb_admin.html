@@ -88,12 +88,12 @@
         <!-- Header -->
         <div class="flex items-center justify-between mb-6">
             <div>
-                <h1 class="text-2xl font-bold text-gray-900">💊 Фармбазис — База знаний</h1>
+                <h1 class="text-2xl font-bold text-gray-900"><span class="ico ico-pill"></span> Фармбазис — База знаний</h1>
                 <p class="text-gray-500 text-sm mt-1">Квиз-проверка и управление Q&A</p>
             </div>
             <div class="flex gap-2">
-                <button class="btn btn-outline text-sm" onclick="loadStats()">📊 Обновить</button>
-                <button class="btn btn-primary text-sm" onclick="showImportModal()">📥 Импорт данных</button>
+                <button class="btn btn-outline text-sm" onclick="loadStats()"><span class="ico ico-bar-chart"></span> Обновить</button>
+                <button class="btn btn-primary text-sm" onclick="showImportModal()"><span class="ico ico-download"></span> Импорт данных</button>
             </div>
         </div>
 
@@ -147,9 +147,9 @@
 
         <!-- Tabs -->
         <div class="flex gap-0 border-b border-gray-200 mb-6">
-            <div class="tab active" data-tab="quiz" onclick="switchTab('quiz')">🎯 Квиз</div>
-            <div class="tab" data-tab="list" onclick="switchTab('list')">📋 Список</div>
-            <div class="tab" data-tab="import" onclick="switchTab('import')">📥 Импорт</div>
+            <div class="tab active" data-tab="quiz" onclick="switchTab('quiz')"><span class="ico ico-target"></span> Квиз</div>
+            <div class="tab" data-tab="list" onclick="switchTab('list')"><span class="ico ico-clipboard"></span> Список</div>
+            <div class="tab" data-tab="import" onclick="switchTab('import')"><span class="ico ico-download"></span> Импорт</div>
         </div>
 
         <!-- ==================== QUIZ TAB ==================== -->
@@ -176,7 +176,7 @@
                             <span class="text-sm font-medium text-gray-500" id="quiz-id">—</span>
                             <span class="text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-medium" id="quiz-category-badge">—</span>
                         </div>
-                        <button class="text-red-400 hover:text-red-600 text-sm font-medium" onclick="deleteCurrentItem()">🗑 Удалить</button>
+                        <button class="text-red-400 hover:text-red-600 text-sm font-medium" onclick="deleteCurrentItem()"><span class="ico ico-trash"></span> Удалить</button>
                     </div>
 
                     <!-- Tags -->
@@ -222,13 +222,13 @@
                     <!-- Action buttons -->
                     <div class="flex gap-3 mt-6 pt-4 border-t border-gray-100">
                         <button class="btn btn-success flex-1 text-lg py-3" onclick="approveItem()">
-                            ✅ Одобрить
+                            <span class="ico ico-check-circle"></span> Одобрить
                         </button>
                         <button class="btn btn-primary flex-1 text-lg py-3" onclick="saveAndApprove()">
-                            💾 Сохранить и одобрить
+                            <span class="ico ico-save"></span> Сохранить и одобрить
                         </button>
                         <button class="btn btn-outline flex-1 text-lg py-3" onclick="skipItem()">
-                            ⏭ Пропустить
+                            <span class="ico ico-skip-fwd"></span> Пропустить
                         </button>
                     </div>
 
@@ -242,7 +242,7 @@
 
                 <!-- All done -->
                 <div id="quiz-done" class="hidden text-center py-12">
-                    <div class="text-5xl mb-4">🎉</div>
+                    <div class="text-5xl mb-4"><span class="ico ico-sparkles" style="font-size:48px"></span></div>
                     <h2 class="text-2xl font-bold text-gray-900 mb-2">Все записи проверены!</h2>
                     <p class="text-gray-500">Выберите другую категорию или загрузите новые данные.</p>
                 </div>
@@ -263,7 +263,7 @@
                         <option value="false">Непроверенные</option>
                         <option value="true">Проверенные</option>
                     </select>
-                    <button class="btn btn-warning text-sm" onclick="showReindexModal()">🔄 Реиндексация</button>
+                    <button class="btn btn-warning text-sm" onclick="showReindexModal()"><span class="ico ico-refresh"></span> Реиндексация</button>
                 </div>
             </div>
 
@@ -277,7 +277,7 @@
         <!-- ==================== IMPORT TAB ==================== -->
         <div id="tab-import" class="hidden">
             <div class="card p-8 text-center">
-                <div class="text-5xl mb-4">📥</div>
+                <div class="text-5xl mb-4"><span class="ico ico-download" style="font-size:48px"></span></div>
                 <h2 class="text-xl font-bold mb-2">Импорт новых Q&A данных</h2>
                 <p class="text-gray-500 mb-6">
                     Загрузите JSON-файл с новыми вопросами и ответами.<br>
@@ -289,7 +289,7 @@
                          ondragover="event.preventDefault(); this.classList.add('border-blue-400','bg-blue-50')"
                          ondragleave="this.classList.remove('border-blue-400','bg-blue-50')"
                          ondrop="handleDrop(event)">
-                        <div class="text-3xl mb-2">📄</div>
+                        <div class="text-3xl mb-2"><span class="ico ico-file-text" style="font-size:32px"></span></div>
                         <p class="font-medium text-gray-700">Перетащите JSON-файл сюда</p>
                         <p class="text-sm text-gray-400 mt-1">или нажмите для выбора</p>
                         <input type="file" id="import-file" accept=".json" class="hidden" onchange="handleFileSelect(event)">
@@ -300,7 +300,7 @@
                     </div>
                     <button id="import-btn" class="btn btn-primary w-full text-lg py-3 disabled:opacity-50"
                             onclick="doImport()" disabled>
-                        🚀 Загрузить в базу знаний
+                        <span class="ico ico-rocket"></span> Загрузить в базу знаний
                     </button>
                     <div id="import-result" class="hidden mt-4 text-left bg-green-50 border border-green-200 rounded-lg p-4"></div>
                 </div>
@@ -311,7 +311,7 @@
     <!-- Import Modal -->
     <div id="import-modal" class="modal-overlay hidden" onclick="if(event.target===this)hideImportModal()">
         <div class="modal">
-            <h3 class="text-lg font-bold mb-4">📥 Быстрый импорт данных</h3>
+            <h3 class="text-lg font-bold mb-4"><span class="ico ico-download"></span> Быстрый импорт данных</h3>
             <p class="text-gray-500 mb-4 text-sm">Выберите JSON-файл с новыми Q&A данными для загрузки.</p>
             <input type="file" id="quick-import-file" accept=".json" class="mb-4">
             <div class="flex gap-3">
@@ -324,7 +324,7 @@
     <!-- Reindex Modal -->
     <div id="reindex-modal" class="modal-overlay hidden" onclick="if(event.target===this)hideReindexModal()">
         <div class="modal">
-            <h3 class="text-lg font-bold mb-4">🔄 Полная переиндексация</h3>
+            <h3 class="text-lg font-bold mb-4"><span class="ico ico-refresh"></span> Полная переиндексация</h3>
             <p class="text-gray-500 mb-4 text-sm">
                 Это пересоздаст коллекцию <code>support_tickets</code> в ChromaDB из актуального JSON-файла.
                 Используйте после массовых правок. Бот продолжит работать — коллекция обновится на лету.
@@ -529,7 +529,7 @@
         if (!currentItemId) return;
         try {
             await api(`/items/${currentItemId}/approve`, { method: 'POST' });
-            showToast('✅ Одобрено!', 'success');
+            showToast('Одобрено!', 'success');
             await loadNextQuiz();
             await loadStats();
         } catch (e) { /* error shown by api() */ }
@@ -554,14 +554,14 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
-            showToast('💾 Сохранено и одобрено!', 'success');
+            showToast('Сохранено и одобрено!', 'success');
             await loadNextQuiz();
             await loadStats();
         } catch (e) { /* error shown */ }
     }
 
     async function skipItem() {
-        showToast('⏭ Пропущено', 'info');
+        showToast('Пропущено', 'info');
         // Move to next by loading with skip
         if (!currentItemId) return;
         // Mark item with a temporary "skip" so it goes to the end
@@ -611,7 +611,7 @@
         if (!confirm(`Удалить запись ${currentItemId}? Это действие необратимо.`)) return;
         try {
             await api(`/items/${currentItemId}`, { method: 'DELETE' });
-            showToast('🗑 Удалено', 'warning');
+            showToast('Удалено', 'warning');
             await loadNextQuiz();
             await loadStats();
         } catch (e) { /* error shown */ }
@@ -678,7 +678,7 @@
         pag.innerHTML = `
             <span class="text-sm text-gray-500">Стр. ${data.page} из ${totalPages} (всего ${data.total})</span>
             <div class="flex items-center gap-2">
-                <button class="btn btn-outline text-sm py-1 px-2" onclick="goToPage(1)" ${data.page <= 1 ? 'disabled' : ''} title="Первая страница">⏮</button>
+                <button class="btn btn-outline text-sm py-1 px-2" onclick="goToPage(1)" ${data.page <= 1 ? 'disabled' : ''} title="Первая страница"><span class="ico ico-skip-fwd" style="transform:rotate(180deg)"></span></button>
                 <button class="btn btn-outline text-sm py-1 px-3" onclick="goToPage(listPage-1)" ${data.page <= 1 ? 'disabled' : ''}>← Назад</button>
                 <div class="flex items-center gap-1">
                     <input type="number" id="page-input" class="text-center text-sm py-1 px-2" style="width: 60px; border: 2px solid #e2e8f0; border-radius: 6px;" 
@@ -688,7 +688,7 @@
                     <span class="text-sm text-gray-400">/ ${totalPages}</span>
                 </div>
                 <button class="btn btn-outline text-sm py-1 px-3" onclick="goToPage(listPage+1)" ${data.page >= totalPages ? 'disabled' : ''}>Вперёд →</button>
-                <button class="btn btn-outline text-sm py-1 px-2" onclick="goToPage(${totalPages})" ${data.page >= totalPages ? 'disabled' : ''} title="Последняя страница">⏭</button>
+                <button class="btn btn-outline text-sm py-1 px-2" onclick="goToPage(${totalPages})" ${data.page >= totalPages ? 'disabled' : ''} title="Последняя страница"><span class="ico ico-skip-fwd"></span></button>
             </div>
         `;
     }
@@ -756,20 +756,20 @@
             const el = document.getElementById('import-result');
             el.classList.remove('hidden');
             el.innerHTML = `
-                <p class="font-medium text-green-800">✅ ${result.message}</p>
+                <p class="font-medium text-green-800"><span class="ico ico-check-circle"></span> ${result.message}</p>
                 <div class="mt-2 text-sm text-green-700">
                     <div>Добавлено: <b>${result.added}</b></div>
                     <div>Дубликатов пропущено: <b>${result.duplicates_skipped}</b></div>
                     ${result.errors > 0 ? `<div class="text-red-600">Ошибок: <b>${result.errors}</b></div>` : ''}
                 </div>
             `;
-            showToast(`📥 Импортировано: +${result.added}`, 'success');
+            showToast(`Импортировано: +${result.added}`, 'success');
             await loadStats();
             await loadCategories();
         } catch (e) { /* error shown */ }
 
         btn.disabled = false;
-        btn.innerHTML = '🚀 Загрузить в базу знаний';
+        btn.innerHTML = '<span class="ico ico-rocket"></span> Загрузить в базу знаний';
     }
 
     function showImportModal() { document.getElementById('import-modal').classList.remove('hidden'); }
@@ -784,7 +784,7 @@
 
         try {
             const result = await api('/import', { method: 'POST', body: formData });
-            showToast(`📥 +${result.added} записей`, 'success');
+            showToast(`+${result.added} записей`, 'success');
             hideImportModal();
             await loadStats();
             await loadCategories();
@@ -855,7 +855,7 @@
             progress.classList.add('hidden');
             result.classList.remove('hidden');
             result.className = 'mb-4 bg-green-50 border border-green-200 rounded-lg p-3 text-sm';
-            result.innerHTML = `✅ ${status.message}`;
+            result.innerHTML = `<span class="ico ico-check-circle"></span> ${status.message}`;
             btn.disabled = false;
             btn.textContent = 'Запустить заново';
         } else if (isFailed) {
@@ -864,7 +864,7 @@
             progress.classList.add('hidden');
             result.classList.remove('hidden');
             result.className = 'mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700';
-            result.innerHTML = `❌ ${status.error || status.message}`;
+            result.innerHTML = `<span class="ico ico-x-circle"></span> ${status.error || status.message}`;
             btn.disabled = false;
             btn.textContent = 'Запустить снова';
         } else {
@@ -914,9 +914,9 @@
             updateReindexStatusUI(status);
             if (status.status === 'running') {
                 startReindexPolling();
-                showToast('🔄 Реиндексация запущена', 'info');
+                showToast('Реиндексация запущена', 'info');
             } else {
-                showToast('ℹ️ Переиндексация уже выполняется', 'info');
+                showToast('Переиндексация уже выполняется', 'info');
             }
         } catch (e) { /* error shown */ }
     }

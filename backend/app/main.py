@@ -21,6 +21,7 @@ from app.api.escalation import router as escalation_router
 from app.api.images import router as images_router
 from app.api.kb_admin import router as kb_admin_router
 from app.api.operator import router as operator_router
+from app.api.reason_builder import router as reason_builder_router
 from app.config import settings
 from app.database.models import init_db
 from app.database.reason_store import load_reasons
@@ -103,6 +104,7 @@ app.include_router(kb_admin_router)
 app.include_router(bot_config_router)
 app.include_router(images_router)
 app.include_router(admin_router)
+app.include_router(reason_builder_router)
 
 # Статические файлы (изображения из инструкций)
 images_dir = Path(settings.chroma_persist_dir).parent / "images"
@@ -180,4 +182,13 @@ async def admin_audit_page():
     html_path = Path(__file__).resolve().parent.parent / "static" / "admin_audit.html"
     if not html_path.exists():
         return {"error": "admin_audit.html не найден"}
+    return FileResponse(html_path, media_type="text/html")
+
+
+@app.get("/reason-builder", tags=["reason-builder"])
+async def reason_builder_page():
+    """Помощник формирования причин обращений."""
+    html_path = Path(__file__).resolve().parent.parent / "static" / "reason_builder.html"
+    if not html_path.exists():
+        return {"error": "reason_builder.html не найден"}
     return FileResponse(html_path, media_type="text/html")

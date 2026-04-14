@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Помощник причин — AI-консоль</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/bot_config.css">
+    <link rel="stylesheet" href="/static/reason_builder.css">
+    <link rel="stylesheet" href="/static/admin_common.css">
+    <script src="/static/admin_nav.js"></script>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-left">
+        <img src="/static/farmbazis-logo.png" alt="Фармбазис" class="header-icon">
+        <h1>Помощник формирования причин</h1>
+    </div>
+    <div class="actions">
+        <a href="/bot-config" class="btn btn-secondary" style="text-decoration:none"><span class="ico ico-arrow-left"></span> Настройки бота</a>
+        <button class="theme-toggle" onclick="cycleTheme()" id="themeToggleBtn" title="Переключить тему"><span class="ico ico-moon"></span></button>
+    </div>
+</div>
+
+<!-- Sub-header with tabs + LLM provider selector -->
+<div class="rb-subheader">
+    <div class="rb-subheader-left">
+        <button class="rb-tab active" data-tab="overlaps" onclick="switchTab('overlaps')"><span class="ico ico-search"></span> Анализ пересечений</button>
+        <button class="rb-tab" data-tab="generator" onclick="switchTab('generator')"><span class="ico ico-clipboard"></span> Генератор причин</button>
+    </div>
+    <div class="rb-subheader-right">
+        <label for="llmProvider">LLM-провайдер:</label>
+        <select id="llmProvider">
+            <option value="yandex">Yandex GPT</option>
+            <option value="deepseek">DeepSeek</option>
+        </select>
+    </div>
+</div>
+
+<!-- Content area -->
+<div class="rb-content">
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- TAB 1: Анализ пересечений                  -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="rb-panel active" id="panel-overlaps">
+        <div class="rb-overlap-controls">
+            <button class="rb-btn rb-btn-primary" onclick="runOverlapAnalysis()" id="btnAnalyze">
+                <span class="ico ico-search"></span> Запустить анализ
+            </button>
+            <button class="rb-btn rb-btn-secondary" onclick="getRecommendations()" id="btnRecommend" disabled>
+                <span class="ico ico-bot"></span> Получить рекомендации LLM
+            </button>
+            <span class="rb-overlap-stats" id="overlapStats"></span>
+        </div>
+
+        <div class="rb-filter-row" id="overlapFilters" style="display:none">
+            <select id="filterSeverity" onchange="applyOverlapFilters()">
+                <option value="all">Все типы</option>
+                <option value="phrase_masks">Фразовые маски (критично)</option>
+                <option value="numeric_tags">Числовые теги (высоко)</option>
+                <option value="nouns">Существительные (средне)</option>
+                <option value="verbs">Глаголы (низко)</option>
+            </select>
+            <input type="text" id="filterReason" placeholder="Фильтр по причине..." oninput="applyOverlapFilters()">
+        </div>
+
+        <div id="overlapResults">
+            <div class="rb-empty">Нажмите «Запустить анализ» для поиска пересечений маркеров между причинами обращений.</div>
+        </div>
+
+        <div id="recommendationBlock" style="display:none">
+            <h3 style="font-size:15px; font-weight:600; color:var(--gray-200); margin-bottom:12px">
+                <span class="ico ico-bot"></span> Рекомендации LLM
+            </h3>
+            <div class="rb-recommendation" id="recommendationText"></div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- TAB 2: Генератор причин                    -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="rb-panel" id="panel-generator">
+
+        <!-- Upload zone -->
+        <div class="rb-dropzone" id="dropzone"
+             ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
+             onclick="document.getElementById('fileInput').click()">
+            <div class="rb-dropzone-icon"><span class="ico ico-folder" style="font-size:48px"></span></div>
+            <div class="rb-dropzone-text">Перетащите CSV/XLSX файл или нажмите для выбора</div>
+            <div class="rb-dropzone-hint">Таблица с двумя колонками: «Причина обращения» и «Текст заявки»</div>
+            <input type="file" id="fileInput" accept=".csv,.xlsx,.tsv,.txt" style="display:none" onchange="handleFileSelect(this)">
+        </div>
+
+        <!-- Table with loaded reasons -->
+        <div id="generatorTableSection" style="display:none">
+            <div class="rb-table-actions">
+                <button class="rb-btn rb-btn-sm rb-btn-secondary" onclick="selectAllReasons()"><span class="ico ico-check-sq"></span> Выбрать все</button>
+                <button class="rb-btn rb-btn-sm rb-btn-secondary" onclick="deselectAllReasons()"><span class="ico ico-square"></span> Снять все</button>
+                <button class="rb-btn rb-btn-primary" onclick="generateSelected()" id="btnGenerateSelected">
+                    <span class="ico ico-bot"></span> Сгенерировать маркеры
+                </button>
+                <button class="rb-btn rb-btn-sm rb-btn-secondary" onclick="resetUpload()"><span class="ico ico-trash"></span> Сбросить</button>
+                <span style="margin-left:auto; font-size:12px; color:var(--gray-500)" id="uploadInfo"></span>
+            </div>
+
+            <div class="rb-progress" id="batchProgress">
+                <div class="rb-progress-bar">
+                    <div class="rb-progress-fill" id="progressFill"></div>
+                </div>
+                <div class="rb-progress-text" id="progressText"></div>
+            </div>
+
+            <div class="rb-table-wrap">
+                <table class="rb-table">
+                    <thead>
+                        <tr>
+                            <th style="width:40px">
+                                <input type="checkbox" class="rb-checkbox" id="checkAll" onchange="toggleAllReasons(this.checked)">
+                            </th>
+                            <th>Причина обращения</th>
+                            <th style="width:80px; text-align:center">Заявок</th>
+                            <th>Примеры текстов</th>
+                            <th style="width:100px">Действие</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reasonsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Generated results -->
+        <div id="generatedResults"></div>
+    </div>
+
+</div>
+
+<script>
+// ── State ──
+let currentTab = 'overlaps';
+let allOverlaps = [];
+let filteredOverlaps = [];
+let uploadSessionId = null;
+let uploadedReasons = [];
+let generatedReasons = {};
+
+// ── Theme (reuse from bot_config) ──
+function cycleTheme() {
+    const html = document.documentElement;
+    const current = html.getAttribute('data-theme');
+    let next;
+    if (!current || current === 'auto') next = 'dark';
+    else if (current === 'dark') next = 'light';
+    else next = 'auto';
+
+    if (next === 'auto') html.removeAttribute('data-theme');
+    else html.setAttribute('data-theme', next);
+
+    localStorage.setItem('bot-config-theme', next);
+    updateThemeIcon(next);
+}
+function updateThemeIcon(theme) {
+    const btn = document.getElementById('themeToggleBtn');
+    if (!btn) return;
+    const icons = { light: 'ico-sun', dark: 'ico-moon', auto: 'ico-monitor' };
+    btn.innerHTML = `<span class="ico ${icons[theme] || 'ico-monitor'}"></span>`;
+}
+(function initTheme() {
+    const saved = localStorage.getItem('bot-config-theme');
+    if (saved && saved !== 'auto') document.documentElement.setAttribute('data-theme', saved);
+    updateThemeIcon(saved || 'auto');
+})();
+
+// ── Auth ──
+function authFetch(url, opts) { return AdminNav.authFetch(url, opts); }
+
+// ── Tabs ──
+function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.rb-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    document.querySelectorAll('.rb-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + tab));
+}
+
+// ── Provider ──
+function getProvider() { return document.getElementById('llmProvider').value; }
+
+// ══════════════════════════════════════════════════════
+//  TAB 1: Overlap Analysis
+// ══════════════════════════════════════════════════════
+
+async function runOverlapAnalysis() {
+    const btn = document.getElementById('btnAnalyze');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="rb-spinner"></span> Анализ...';
+
+    try {
+        const resp = await authFetch('/api/reason-builder/analyze-overlaps', { method: 'POST' });
+        if (!resp.ok) throw new Error(await resp.text());
+        const data = await resp.json();
+        allOverlaps = data.overlaps;
+        filteredOverlaps = [...allOverlaps];
+
+        document.getElementById('overlapStats').textContent =
+            `Причин: ${data.total_reasons} | Пересечений: ${data.total_overlaps}`;
+        document.getElementById('overlapFilters').style.display = data.total_overlaps > 0 ? 'flex' : 'none';
+        document.getElementById('btnRecommend').disabled = data.total_overlaps === 0;
+
+        renderOverlaps();
+    } catch (e) {
+        alert('Ошибка анализа: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="ico ico-search"></span> Запустить анализ';
+    }
+}
+
+function applyOverlapFilters() {
+    const sevFilter = document.getElementById('filterSeverity').value;
+    const reasonFilter = document.getElementById('filterReason').value.toLowerCase();
+
+    filteredOverlaps = allOverlaps.filter(o => {
+        if (sevFilter !== 'all' && o.overlap_type !== sevFilter) return false;
+        if (reasonFilter) {
+            const inA = o.reason_a_name.toLowerCase().includes(reasonFilter);
+            const inB = o.reason_b_name.toLowerCase().includes(reasonFilter);
+            if (!inA && !inB) return false;
+        }
+        return true;
+    });
+    renderOverlaps();
+}
+
+function renderOverlaps() {
+    const container = document.getElementById('overlapResults');
+    if (filteredOverlaps.length === 0) {
+        container.innerHTML = '<div class="rb-empty">Пересечений не найдено <span class="ico ico-sparkles"></span></div>';
+        return;
+    }
+
+    const typeLabels = {
+        phrase_masks: 'Фразовые маски',
+        numeric_tags: 'Числовые теги',
+        nouns: 'Существительные',
+        verbs: 'Глаголы',
+    };
+    const typeChipClass = {
+        phrase_masks: 'phrase',
+        numeric_tags: 'numeric',
+        nouns: 'noun',
+        verbs: 'verb',
+    };
+    const severityClass = {
+        phrase_masks: 'critical',
+        numeric_tags: 'high',
+        nouns: 'medium',
+        verbs: 'low',
+    };
+    const severityLabel = {
+        phrase_masks: 'Критично',
+        numeric_tags: 'Высоко',
+        nouns: 'Средне',
+        verbs: 'Низко',
+    };
+
+    let html = '';
+    for (const o of filteredOverlaps) {
+        const chipCls = typeChipClass[o.overlap_type] || '';
+        const sevCls = severityClass[o.overlap_type] || 'low';
+        const sevLbl = severityLabel[o.overlap_type] || '';
+        const chips = o.shared_markers.map(m => `<span class="rb-chip ${chipCls}">${esc(m)}</span>`).join('');
+
+        html += `
+        <div class="rb-overlap-card">
+            <div class="rb-overlap-header">
+                <span class="rb-severity-badge ${sevCls}">${sevLbl}</span>
+                <span class="rb-overlap-reasons">«${esc(o.reason_a_name)}» ↔ «${esc(o.reason_b_name)}»</span>
+            </div>
+            <div class="rb-overlap-type">${typeLabels[o.overlap_type] || o.overlap_type} (${o.shared_markers.length} совпадений)</div>
+            <div class="rb-overlap-markers">${chips}</div>
+        </div>`;
+    }
+    container.innerHTML = html;
+}
+
+async function getRecommendations() {
+    const btn = document.getElementById('btnRecommend');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="rb-spinner"></span> Генерация...';
+    document.getElementById('recommendationBlock').style.display = 'none';
+
+    try {
+        const resp = await authFetch('/api/reason-builder/analyze-overlaps/recommend', {
+            method: 'POST',
+            body: JSON.stringify({ overlaps: allOverlaps, llm_provider: getProvider() }),
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        const data = await resp.json();
+
+        document.getElementById('recommendationText').textContent = data.recommendations;
+        document.getElementById('recommendationBlock').style.display = 'block';
+    } catch (e) {
+        alert('Ошибка LLM: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="ico ico-bot"></span> Получить рекомендации LLM';
+    }
+}
+
+// ══════════════════════════════════════════════════════
+//  TAB 2: Reason Generator
+// ══════════════════════════════════════════════════════
+
+// ── Drag & Drop ──
+function handleDragOver(e) {
+    e.preventDefault();
+    document.getElementById('dropzone').classList.add('dragover');
+}
+function handleDragLeave(e) {
+    document.getElementById('dropzone').classList.remove('dragover');
+}
+function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('dropzone').classList.remove('dragover');
+    const files = e.dataTransfer.files;
+    if (files.length > 0) uploadFile(files[0]);
+}
+function handleFileSelect(input) {
+    if (input.files.length > 0) uploadFile(input.files[0]);
+}
+
+async function uploadFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const dropzone = document.getElementById('dropzone');
+    dropzone.innerHTML = '<div class="rb-dropzone-icon"><span class="rb-spinner" style="width:48px;height:48px;border-width:4px"></span></div><div class="rb-dropzone-text">Загрузка...</div>';
+
+    try {
+        const resp = await authFetch('/api/reason-builder/upload-table', {
+            method: 'POST',
+            body: formData,
+        });
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        uploadSessionId = data.session_id;
+        uploadedReasons = data.reasons;
+        generatedReasons = {};
+
+        dropzone.style.display = 'none';
+        document.getElementById('generatorTableSection').style.display = 'block';
+        document.getElementById('uploadInfo').textContent =
+            `${file.name} — ${data.total_tickets} заявок, ${data.reasons.length} причин`;
+        renderReasonsTable();
+    } catch (e) {
+        alert('Ошибка загрузки: ' + e.message);
+        resetDropzone();
+    }
+}
+
+function resetUpload() {
+    uploadSessionId = null;
+    uploadedReasons = [];
+    generatedReasons = {};
+    document.getElementById('generatorTableSection').style.display = 'none';
+    document.getElementById('generatedResults').innerHTML = '';
+    resetDropzone();
+}
+
+function resetDropzone() {
+    const dropzone = document.getElementById('dropzone');
+    dropzone.style.display = '';
+    dropzone.innerHTML = `
+        <div class="rb-dropzone-icon"><span class="ico ico-folder" style="font-size:48px"></span></div>
+        <div class="rb-dropzone-text">Перетащите CSV/XLSX файл или нажмите для выбора</div>
+        <div class="rb-dropzone-hint">Таблица с двумя колонками: «Причина обращения» и «Текст заявки»</div>
+        <input type="file" id="fileInput" accept=".csv,.xlsx,.tsv,.txt" style="display:none" onchange="handleFileSelect(this)">
+    `;
+}
+
+function renderReasonsTable() {
+    const tbody = document.getElementById('reasonsTableBody');
+    let html = '';
+    for (const r of uploadedReasons) {
+        const samples = r.sample_texts.slice(0, 3).map(t => esc(t.substring(0, 80))).join(' | ');
+        const isGenerated = !!generatedReasons[r.name];
+        html += `
+        <tr>
+            <td><input type="checkbox" class="rb-checkbox reason-check" data-name="${esc(r.name)}" ${isGenerated ? 'disabled' : ''}></td>
+            <td class="cell-name">${esc(r.name)} ${isGenerated ? '<span style="color:var(--success); font-size:11px">✓ готово</span>' : ''}</td>
+            <td class="cell-count">${r.ticket_count}</td>
+            <td class="cell-samples" title="${esc(r.sample_texts.join('\n'))}">${samples}</td>
+            <td>
+                <button class="rb-btn rb-btn-sm rb-btn-primary" onclick="generateSingle('${escAttr(r.name)}')" ${isGenerated ? 'disabled' : ''}>
+                    ${isGenerated ? '✓' : '<span class="ico ico-bot"></span>'}
+                </button>
+            </td>
+        </tr>`;
+    }
+    tbody.innerHTML = html;
+}
+
+function selectAllReasons() {
+    document.querySelectorAll('.reason-check:not(:disabled)').forEach(cb => cb.checked = true);
+    document.getElementById('checkAll').checked = true;
+}
+function deselectAllReasons() {
+    document.querySelectorAll('.reason-check').forEach(cb => cb.checked = false);
+    document.getElementById('checkAll').checked = false;
+}
+function toggleAllReasons(checked) {
+    document.querySelectorAll('.reason-check:not(:disabled)').forEach(cb => cb.checked = checked);
+}
+
+function getSelectedReasonNames() {
+    const names = [];
+    document.querySelectorAll('.reason-check:checked').forEach(cb => names.push(cb.dataset.name));
+    return names;
+}
+
+async function generateSingle(name) {
+    const btn = event?.target?.closest?.('button');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="rb-spinner"></span>'; }
+
+    try {
+        const resp = await authFetch('/api/reason-builder/generate-reason', {
+            method: 'POST',
+            body: JSON.stringify({
+                session_id: uploadSessionId,
+                reason_name: name,
+                llm_provider: getProvider(),
+            }),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        generatedReasons[name] = data;
+        renderReasonsTable();
+        renderGeneratedResults();
+    } catch (e) {
+        alert(`Ошибка генерации «${name}»: ${e.message}`);
+        if (btn) { btn.disabled = false; btn.innerHTML = '<span class="ico ico-bot"></span>'; }
+    }
+}
+
+async function generateSelected() {
+    const names = getSelectedReasonNames();
+    if (names.length === 0) { alert('Выберите хотя бы одну причину.'); return; }
+
+    const btn = document.getElementById('btnGenerateSelected');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="rb-spinner"></span> Генерация...';
+
+    const progress = document.getElementById('batchProgress');
+    const fill = document.getElementById('progressFill');
+    const text = document.getElementById('progressText');
+    progress.classList.add('active');
+
+    let done = 0;
+    const total = names.length;
+
+    for (const name of names) {
+        text.textContent = `${done + 1} / ${total}: ${name}`;
+        fill.style.width = ((done / total) * 100) + '%';
+
+        try {
+            const resp = await authFetch('/api/reason-builder/generate-reason', {
+                method: 'POST',
+                body: JSON.stringify({
+                    session_id: uploadSessionId,
+                    reason_name: name,
+                    llm_provider: getProvider(),
+                }),
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                generatedReasons[name] = data;
+            }
+        } catch (e) {
+            console.error(`Error generating ${name}:`, e);
+        }
+        done++;
+        fill.style.width = ((done / total) * 100) + '%';
+    }
+
+    text.textContent = `Готово: ${done} / ${total}`;
+    btn.disabled = false;
+    btn.innerHTML = '<span class="ico ico-bot"></span> Сгенерировать маркеры';
+
+    renderReasonsTable();
+    renderGeneratedResults();
+
+    setTimeout(() => { progress.classList.remove('active'); }, 3000);
+}
+
+function renderGeneratedResults() {
+    const container = document.getElementById('generatedResults');
+    const names = Object.keys(generatedReasons);
+    if (names.length === 0) { container.innerHTML = ''; return; }
+
+    let html = '<h3 style="font-size:15px; font-weight:600; color:var(--gray-200); margin:24px 0 16px">Сгенерированные причины</h3>';
+
+    for (const name of names) {
+        const r = generatedReasons[name];
+        const m = r.markers || {};
+        html += `
+        <div class="rb-gen-card" id="gen-card-${esc(r.id)}">
+            <div class="rb-gen-header">
+                <span class="rb-gen-title">${esc(r.name)}</span>
+                <span class="rb-gen-badge">ID: ${esc(r.id)} | ${r.ticket_count} заявок</span>
+            </div>
+
+            ${renderMarkerSection('Глаголы-маркеры', m.verbs || [], 'verb', r.id)}
+            ${renderMarkerSection('Существительные-маркеры', m.nouns || [], 'noun', r.id)}
+            ${renderMarkerSection('Числовые теги', m.numeric_tags || [], 'numeric', r.id)}
+            ${renderMarkerSection('Фразовые маски (100%-маркеры)', m.phrase_masks || [], 'phrase', r.id)}
+
+            <div class="rb-gen-actions">
+                <button class="rb-btn rb-btn-success" onclick="addToSystem('${escAttr(name)}')"><span class="ico ico-check-circle"></span> Добавить в систему</button>
+                <button class="rb-btn rb-btn-secondary" onclick="exportDocx('${escAttr(name)}')"><span class="ico ico-upload"></span> Экспорт DOCX</button>
+            </div>
+        </div>`;
+    }
+
+    container.innerHTML = html;
+}
+
+function renderMarkerSection(title, items, chipClass, reasonId) {
+    const key = chipClass === 'numeric' ? 'numeric_tags' : chipClass === 'phrase' ? 'phrase_masks' : chipClass + 's';
+    const chips = items.map((item, i) => `
+        <span class="rb-chip ${chipClass}">
+            ${esc(item)}
+            <span class="rb-chip-remove" onclick="removeMarker('${escAttr(reasonId)}', '${key}', ${i})">×</span>
+        </span>
+    `).join('');
+
+    return `
+    <div class="rb-gen-section">
+        <div class="rb-gen-section-title">${title}</div>
+        <div class="rb-chips" id="chips-${reasonId}-${key}">${chips}</div>
+        <div class="rb-chip-add" style="margin-top:4px">
+            <input type="text" placeholder="Добавить..." id="input-${reasonId}-${key}"
+                   onkeydown="if(event.key==='Enter')addMarker('${escAttr(reasonId)}','${key}')">
+            <button class="rb-btn rb-btn-sm rb-btn-secondary" onclick="addMarker('${escAttr(reasonId)}','${key}')">+</button>
+        </div>
+    </div>`;
+}
+
+function removeMarker(reasonId, markerType, index) {
+    // Find the reason by ID
+    for (const name in generatedReasons) {
+        if (generatedReasons[name].id === reasonId) {
+            const arr = generatedReasons[name].markers[markerType];
+            if (arr) {
+                arr.splice(index, 1);
+                renderGeneratedResults();
+            }
+            break;
+        }
+    }
+}
+
+function addMarker(reasonId, markerType) {
+    const input = document.getElementById(`input-${reasonId}-${markerType}`);
+    const value = input.value.trim();
+    if (!value) return;
+
+    for (const name in generatedReasons) {
+        if (generatedReasons[name].id === reasonId) {
+            if (!generatedReasons[name].markers[markerType]) {
+                generatedReasons[name].markers[markerType] = [];
+            }
+            generatedReasons[name].markers[markerType].push(value);
+            renderGeneratedResults();
+            break;
+        }
+    }
+}
+
+async function addToSystem(name) {
+    const r = generatedReasons[name];
+    if (!r) return;
+
+    const reason = {
+        id: r.id,
+        name: r.name,
+        is_active: true,
+        folder: '',
+        markers: {
+            verbs: r.markers.verbs || [],
+            nouns: r.markers.nouns || [],
+            numeric_tags: r.markers.numeric_tags || [],
+            phrase_masks: r.markers.phrase_masks || [],
+        },
+        thematic_sections: [],
+        typical_complaints: [],
+        example_answers: [],
+        escalation_rules: { enabled: false, qa_pairs: [], metrics: { score_threshold: 0.7, keyword_patterns: [] } },
+        classification_rules: { enabled: false, min_score_threshold: null, required_markers: [], clarification_text: '' },
+    };
+
+    try {
+        const resp = await authFetch('/api/reason-builder/add-reason', {
+            method: 'POST',
+            body: JSON.stringify({ reason }),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        alert(`Причина «${r.name}» добавлена в систему!`);
+    } catch (e) {
+        alert('Ошибка: ' + e.message);
+    }
+}
+
+async function exportDocx(name) {
+    const r = generatedReasons[name];
+    if (!r) return;
+
+    const reason = {
+        id: r.id,
+        name: r.name,
+        is_active: true,
+        folder: '',
+        markers: {
+            verbs: r.markers.verbs || [],
+            nouns: r.markers.nouns || [],
+            numeric_tags: r.markers.numeric_tags || [],
+            phrase_masks: r.markers.phrase_masks || [],
+        },
+        thematic_sections: [],
+        typical_complaints: [],
+        example_answers: [],
+        escalation_rules: { enabled: false, qa_pairs: [], metrics: { score_threshold: 0.7, keyword_patterns: [] } },
+        classification_rules: { enabled: false, min_score_threshold: null, required_markers: [], clarification_text: '' },
+    };
+
+    try {
+        const resp = await authFetch('/api/reason-builder/export-reason-docx', {
+            method: 'POST',
+            body: JSON.stringify({ reason }),
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${r.id}.docx`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        alert('Ошибка экспорта: ' + e.message);
+    }
+}
+
+// ── Utility ──
+function esc(s) {
+    if (!s) return '';
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+}
+function escAttr(s) {
+    return String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+    AdminNav.init({ currentPage: 'reason-builder' });
+});
+</script>
+
+</body>
+</html>

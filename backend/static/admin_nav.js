@@ -81,6 +81,7 @@ const AdminNav = (() => {
             <div class="admin-nav__links">
                 <a href="/bot-config" class="admin-nav__link ${currentPage === 'bot-config' ? 'active' : ''}">Настройки бота</a>
                 <a href="/kb-admin" class="admin-nav__link ${currentPage === 'kb-admin' ? 'active' : ''}">База знаний</a>
+                <a href="/reason-builder" class="admin-nav__link ${currentPage === 'reason-builder' ? 'active' : ''}">Помощник причин</a>
                 ${role === 'superadmin' ? `
                 <a href="/admin-users" class="admin-nav__link ${currentPage === 'admin-users' ? 'active' : ''}">Пользователи</a>
                 <a href="/admin-audit" class="admin-nav__link ${currentPage === 'admin-audit' ? 'active' : ''}">Аудит</a>

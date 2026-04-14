@@ -193,9 +193,9 @@ function renderUsers() {
             <td style="color:var(--gray-500);font-size:13px">${u.last_login_at ? new Date(u.last_login_at).toLocaleString('ru') : '—'}</td>
             <td>
                 <div class="actions-cell">
-                    <button class="btn btn-sm btn-ghost" onclick="openEditModal(${u.id})">✏️</button>
-                    <button class="btn btn-sm btn-ghost" onclick="toggleActive(${u.id}, ${u.is_active})">${u.is_active ? '🔒' : '🔓'}</button>
-                    <button class="btn btn-sm btn-ghost" onclick="deleteUser(${u.id})" style="color:var(--danger)">🗑</button>
+                    <button class="btn btn-sm btn-ghost" onclick="openEditModal(${u.id})"><span class="ico ico-pencil"></span></button>
+                    <button class="btn btn-sm btn-ghost" onclick="toggleActive(${u.id}, ${u.is_active})">${u.is_active ? '<span class="ico ico-lock"></span>' : '<span class="ico ico-unlock"></span>'}</button>
+                    <button class="btn btn-sm btn-ghost" onclick="deleteUser(${u.id})" style="color:var(--danger)"><span class="ico ico-trash"></span></button>
                 </div>
             </td>
         `;

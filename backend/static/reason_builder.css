@@ -1,0 +1,486 @@
+/* ═══════════════════════════════════════════════════════
+   reason_builder.css — Помощник формирования причин
+   Extends bot_config.css theming
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Page layout ── */
+.rb-page {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    height: calc(100vh - 44px - 40px); /* minus admin-nav + subheader */
+}
+
+.rb-subheader {
+    background: var(--gray-900);
+    border-bottom: 1px solid var(--gray-800);
+    padding: 8px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.rb-subheader-left {
+    display: flex;
+    gap: 0;
+}
+
+.rb-subheader-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.rb-subheader-right label {
+    font-size: 12px;
+    color: var(--gray-400);
+    font-weight: 500;
+}
+
+.rb-subheader-right select {
+    background: var(--gray-800);
+    color: var(--gray-200);
+    border: 1px solid var(--gray-700);
+    border-radius: var(--radius-sm);
+    padding: 5px 10px;
+    font-size: 13px;
+    cursor: pointer;
+}
+.rb-subheader-right select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* ── Tabs ── */
+.rb-tab {
+    padding: 8px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--gray-400);
+    cursor: pointer;
+    border: none;
+    background: none;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+}
+.rb-tab:hover {
+    color: var(--gray-200);
+}
+.rb-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+/* ── Content ── */
+.rb-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+}
+
+.rb-panel {
+    display: none;
+}
+.rb-panel.active {
+    display: block;
+}
+
+/* ── Overlap analysis ── */
+.rb-overlap-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.rb-overlap-stats {
+    font-size: 13px;
+    color: var(--gray-400);
+    margin-left: auto;
+}
+
+.rb-filter-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.rb-filter-row select,
+.rb-filter-row input {
+    background: var(--gray-800);
+    color: var(--gray-200);
+    border: 1px solid var(--gray-700);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    font-size: 13px;
+}
+.rb-filter-row input:focus,
+.rb-filter-row select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.rb-overlap-card {
+    background: var(--gray-900);
+    border: 1px solid var(--gray-800);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 12px;
+}
+
+.rb-overlap-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.rb-overlap-reasons {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--gray-200);
+}
+
+.rb-severity-badge {
+    padding: 2px 8px;
+    border-radius: var(--radius-xs);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.rb-severity-badge.critical { background: rgba(239,68,68,0.15); color: #fca5a5; }
+.rb-severity-badge.high     { background: rgba(245,158,11,0.15); color: #fcd34d; }
+.rb-severity-badge.medium   { background: rgba(168,85,247,0.15); color: #d8b4fe; }
+.rb-severity-badge.low      { background: rgba(34,197,94,0.15);  color: #86efac; }
+
+.rb-overlap-type {
+    font-size: 12px;
+    color: var(--gray-500);
+    margin-bottom: 6px;
+}
+
+.rb-overlap-markers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.rb-recommendation {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--gray-900);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--gray-200);
+    white-space: pre-wrap;
+}
+
+/* ── Generator ── */
+.rb-dropzone {
+    border: 2px dashed var(--gray-700);
+    border-radius: var(--radius);
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 20px;
+}
+.rb-dropzone:hover,
+.rb-dropzone.dragover {
+    border-color: var(--accent);
+    background: var(--accent-subtle);
+}
+.rb-dropzone-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+}
+.rb-dropzone-text {
+    font-size: 14px;
+    color: var(--gray-400);
+    margin-bottom: 4px;
+}
+.rb-dropzone-hint {
+    font-size: 12px;
+    color: var(--gray-600);
+}
+
+/* ── Reasons table ── */
+.rb-table-wrap {
+    overflow-x: auto;
+    margin-bottom: 20px;
+}
+
+.rb-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.rb-table th,
+.rb-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--gray-800);
+}
+.rb-table th {
+    color: var(--gray-400);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: var(--gray-900);
+    position: sticky;
+    top: 0;
+}
+.rb-table td {
+    color: var(--gray-200);
+}
+.rb-table tr:hover td {
+    background: var(--accent-subtle);
+}
+.rb-table .cell-name {
+    font-weight: 500;
+    max-width: 300px;
+}
+.rb-table .cell-count {
+    text-align: center;
+    font-weight: 600;
+    color: var(--accent);
+}
+.rb-table .cell-samples {
+    max-width: 400px;
+    font-size: 12px;
+    color: var(--gray-400);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rb-table-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+/* ── Generated reason card ── */
+.rb-gen-card {
+    background: var(--gray-900);
+    border: 1px solid var(--gray-800);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+}
+
+.rb-gen-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.rb-gen-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--gray-100);
+}
+
+.rb-gen-badge {
+    font-size: 11px;
+    color: var(--gray-500);
+    background: var(--gray-800);
+    padding: 2px 8px;
+    border-radius: var(--radius-xs);
+}
+
+.rb-gen-section {
+    margin-bottom: 12px;
+}
+
+.rb-gen-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gray-400);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.rb-gen-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--gray-800);
+}
+
+/* ── Chip styles (reuse from bot_config) ── */
+.rb-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rb-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid;
+    cursor: default;
+}
+.rb-chip .rb-chip-remove {
+    cursor: pointer;
+    opacity: 0.6;
+    font-size: 14px;
+    margin-left: 2px;
+    line-height: 1;
+}
+.rb-chip .rb-chip-remove:hover { opacity: 1; color: var(--danger); }
+
+.rb-chip.verb    { background: rgba(34,197,94,0.12);  border-color: rgba(34,197,94,0.2);  color: #86efac; }
+.rb-chip.noun    { background: rgba(168,85,247,0.12); border-color: rgba(168,85,247,0.2); color: #d8b4fe; }
+.rb-chip.numeric { background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.2); color: #fcd34d; }
+.rb-chip.phrase  { background: rgba(244,63,94,0.12);  border-color: rgba(244,63,94,0.2);  color: #fda4af; }
+
+.rb-chip-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.rb-chip-add input {
+    background: var(--gray-800);
+    color: var(--gray-200);
+    border: 1px solid var(--gray-700);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 12px;
+    width: 150px;
+}
+.rb-chip-add input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* ── Progress bar ── */
+.rb-progress {
+    margin: 16px 0;
+    display: none;
+}
+.rb-progress.active { display: block; }
+.rb-progress-bar {
+    height: 6px;
+    background: var(--gray-800);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.rb-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.3s;
+    width: 0;
+}
+.rb-progress-text {
+    font-size: 12px;
+    color: var(--gray-400);
+    margin-top: 4px;
+}
+
+/* ── Buttons (reuse from bot_config) ── */
+.rb-btn {
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.rb-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.rb-btn-primary {
+    background: var(--accent);
+    color: #fff;
+}
+.rb-btn-primary:hover:not(:disabled) {
+    background: var(--accent-dark);
+}
+.rb-btn-success {
+    background: var(--success);
+    color: #fff;
+}
+.rb-btn-success:hover:not(:disabled) {
+    filter: brightness(1.1);
+}
+.rb-btn-secondary {
+    background: var(--gray-800);
+    color: var(--gray-300);
+    border: 1px solid var(--gray-700);
+}
+.rb-btn-secondary:hover:not(:disabled) {
+    background: var(--gray-700);
+    color: var(--gray-100);
+}
+.rb-btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+/* ── Empty state ── */
+.rb-empty {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--gray-500);
+    font-size: 14px;
+}
+
+/* ── Loading spinner ── */
+.rb-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: rb-spin 0.6s linear infinite;
+}
+@keyframes rb-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Checkbox ── */
+.rb-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+/* ── Theme toggle (same as bot_config) ── */
+.theme-toggle {
+    background: none;
+    border: 1px solid var(--gray-700);
+    border-radius: var(--radius-sm);
+    padding: 5px 8px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.15s;
+}
+.theme-toggle:hover {
+    border-color: var(--gray-500);
+}
+
+/* ── Scrollbar ── */
+.rb-content::-webkit-scrollbar { width: 6px; }
+.rb-content::-webkit-scrollbar-track { background: transparent; }
+.rb-content::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+.rb-content::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }

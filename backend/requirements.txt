@@ -19,6 +19,7 @@ lxml==5.3.0
 
 # Document import
 python-docx==1.1.2
+openpyxl==3.1.5
 
 # Database
 aiosqlite==0.20.0
