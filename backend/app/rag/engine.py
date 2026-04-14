@@ -772,13 +772,10 @@ class RAGEngine:
         # Если контекст из базы знаний пустой — сразу эскалация без вызова LLM
         if context == "Нет дополнительного контекста.":
             _total = _time.time() - _start
-            logger.info(
-                f"[ENGINE] L3=skip_llm (no KB context) | reason={reason.name} | time={_total:.1f}s"
-            )
+            logger.info(f"[ENGINE] L3=skip_llm (no KB context) | reason={reason.name} | time={_total:.1f}s")
             resp = RAGResponse(
                 answer=(
-                    "По данному вопросу недостаточно информации в базе знаний. "
-                    "Передаю ваше обращение оператору."
+                    "По данному вопросу недостаточно информации в базе знаний. " "Передаю ваше обращение оператору."
                 ),
                 confidence=0.0,
                 confidence_reason="Нет контекста в базе знаний — LLM не вызывался",
