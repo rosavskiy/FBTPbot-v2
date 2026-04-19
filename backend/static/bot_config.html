@@ -281,6 +281,18 @@
 
 <div class="notification" id="notification"></div>
 
+<!-- Custom Confirm Dialog -->
+<div class="confirm-overlay" id="confirmOverlay">
+    <div class="confirm-dialog">
+        <div class="confirm-dialog__title" id="confirmTitle">Подтверждение</div>
+        <div class="confirm-dialog__message" id="confirmMessage"></div>
+        <div class="confirm-dialog__actions">
+            <button class="btn btn-secondary" id="confirmCancel">Отмена</button>
+            <button class="btn btn-danger" id="confirmOk">Удалить</button>
+        </div>
+    </div>
+</div>
+
 <!-- LLM Settings Modal -->
 <div class="modal-overlay" id="llmSettingsModal">
     <div class="modal" style="max-width:520px; height:auto; max-height:80vh;">
@@ -541,7 +553,7 @@ async function uploadImage(input) {
 }
 
 async function deleteImage(code) {
-    if (!confirm(`Удалить файл с кодом ${code}?`)) return;
+    if (!await showConfirm(`Удалить файл с кодом ${code}?`)) return;
     try {
         const r = await fetch(`${API}/images/${code}`, { method: 'DELETE' });
         if (!r.ok) { const data = await r.json(); throw new Error(data.detail || 'Ошибка'); }
@@ -868,7 +880,7 @@ async function deleteFolder(folderPath) {
     const parentLabel = parentFolder || 'корень';
 
     if (affected.length > 0) {
-        if (!confirm(`Удалить папку «${folderPath}»?\n\n${affected.length} причин(а) будут перемещены в «${parentLabel}».`)) return;
+        if (!await showConfirm(`Удалить папку «${folderPath}»?\n\n${affected.length} причин(а) будут перемещены в «${parentLabel}».`)) return;
         // Move each reason to parent folder via PATCH
         for (const r of affected) {
             const newFolder = r.folder === folderPath
@@ -1245,8 +1257,8 @@ function addSection() {
     renderSections();
 }
 
-function removeSection(idx) {
-    if (!confirm('Удалить раздел?')) return;
+async function removeSection(idx) {
+    if (!await showConfirm('Удалить раздел?')) return;
     currentReason.thematic_sections.splice(idx, 1);
     renderSections();
 }
@@ -1409,7 +1421,7 @@ async function saveReason() {
 }
 
 async function deleteReason() {
-    if (!currentReasonId || !confirm(`Удалить "${currentReason.name}"?`)) return;
+    if (!currentReasonId || !await showConfirm(`Удалить "${currentReason.name}"?`)) return;
     try {
         const r = await fetch(`${API}/reasons/${currentReasonId}`, { method: 'DELETE' });
         if (!r.ok) throw new Error('Ошибка удаления');
@@ -1550,6 +1562,30 @@ function notify(msg, type = 'success') {
     el.textContent = msg;
     el.className = `notification ${type} show`;
     setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function showConfirm(message, {title = 'Подтверждение', okText = 'Удалить'} = {}) {
+    return new Promise(resolve => {
+        const overlay = document.getElementById('confirmOverlay');
+        document.getElementById('confirmTitle').textContent = title;
+        document.getElementById('confirmMessage').textContent = message;
+        const okBtn = document.getElementById('confirmOk');
+        okBtn.textContent = okText;
+        overlay.classList.add('open');
+        function cleanup(result) {
+            overlay.classList.remove('open');
+            okBtn.removeEventListener('click', onOk);
+            document.getElementById('confirmCancel').removeEventListener('click', onCancel);
+            overlay.removeEventListener('click', onBackdrop);
+            resolve(result);
+        }
+        function onOk() { cleanup(true); }
+        function onCancel() { cleanup(false); }
+        function onBackdrop(e) { if (e.target === overlay) cleanup(false); }
+        okBtn.addEventListener('click', onOk);
+        document.getElementById('confirmCancel').addEventListener('click', onCancel);
+        overlay.addEventListener('click', onBackdrop);
+    });
 }
 
 // ── Escalation Rules ──
