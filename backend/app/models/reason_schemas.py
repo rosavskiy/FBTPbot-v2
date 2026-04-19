@@ -104,6 +104,24 @@ class ClassificationRules(BaseModel):
     )
 
 
+class FullContextLLM(BaseModel):
+    """Настройки режима Full-Context LLM для причины обращения.
+
+    Когда включён — вся БЗ причины целиком отправляется в LLM,
+    минуя L2-классификацию по разделам (ExampleQA bypass сохраняется).
+    """
+
+    enabled: bool = Field(False, description="Включён ли Full-Context режим для этой причины")
+    provider: str = Field(
+        "default",
+        description="LLM-провайдер: 'default' (глобальный), 'deepseek', 'yandex'",
+    )
+    custom_prompt: str = Field(
+        "",
+        description="Кастомный system prompt (если пусто — глобальный FULL_CONTEXT_SYSTEM_PROMPT)",
+    )
+
+
 class Markers(BaseModel):
     """4 типа маркеров для L1-классификации."""
 
@@ -135,6 +153,9 @@ class ContactReason(BaseModel):
     )
     classification_rules: ClassificationRules = Field(
         default_factory=ClassificationRules, description="Правила классификации L1 (пороги, обязательные маркеры)"
+    )
+    full_context_llm: FullContextLLM = Field(
+        default_factory=FullContextLLM, description="Настройки Full-Context LLM режима"
     )
 
 

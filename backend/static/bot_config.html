@@ -88,6 +88,37 @@
                 </div>
             </div>
 
+            <!-- Full-Context LLM Mode -->
+            <div class="card">
+                <div class="card-title">Режим ИИ
+                    <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+                        <span id="fcModeLabel" style="font-size:12px; color:var(--gray-500)">Стандартный</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="fcEnabled" onchange="toggleFullContext(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                        <span style="font-size:12px; font-weight:600; color:var(--primary)">Full-Context LLM</span>
+                    </div>
+                </div>
+                <div id="fcBody" style="display:none">
+                    <div id="fcWarning" style="display:none; background:rgba(250,204,21,0.12); border:1px solid rgba(250,204,21,0.3); border-radius:8px; padding:10px 14px; margin-bottom:12px; font-size:13px; color:#fde68a;">
+                        <span class="ico ico-alert-tri"></span> <span id="fcWarningText"></span>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-label">LLM-провайдер для этой причины</div>
+                        <select class="form-input" id="fcProvider" style="max-width:300px" onchange="ensureFullContextLLM(); currentReason.full_context_llm.provider=this.value">
+                            <option value="default">По умолчанию (глобальный)</option>
+                            <option value="deepseek">DeepSeek</option>
+                            <option value="yandex">Yandex</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-label">Кастомный system prompt <span style="color:var(--gray-500)">(если пусто — используется глобальный)</span></div>
+                        <textarea class="form-input" id="fcCustomPrompt" rows="5" placeholder="Вот файл базы знаний, дай ответ основываясь на этом файле..." style="font-size:13px; resize:vertical" onchange="ensureFullContextLLM(); currentReason.full_context_llm.custom_prompt=this.value"></textarea>
+                    </div>
+                </div>
+            </div>
+
             <!-- Markers -->
             <div class="card">
                 <div class="card-title"><span class="ico ico-tag"></span> Маркеры для классификации (L1)</div>
@@ -847,7 +878,8 @@ function createNewReason() {
         markers: { verbs: [], nouns: [], numeric_tags: [], phrase_masks: [] },
         thematic_sections: [], typical_complaints: [], example_answers: [],
         escalation_rules: { enabled: false, qa_pairs: [], metrics: { score_threshold: 0.7, keyword_patterns: [] } },
-        classification_rules: { enabled: false, min_score_threshold: null, required_markers: [], clarification_text: '' }
+        classification_rules: { enabled: false, min_score_threshold: null, required_markers: [], clarification_text: '' },
+        full_context_llm: { enabled: false, provider: 'default', custom_prompt: '' }
     };
     renderEditor();
 }
@@ -1139,6 +1171,61 @@ function updateRequiredMarkers() {
     currentReason.classification_rules.required_markers = markers;
 }
 
+// ── Full-Context LLM ──
+function ensureFullContextLLM() {
+    if (!currentReason.full_context_llm) {
+        currentReason.full_context_llm = { enabled: false, provider: 'default', custom_prompt: '' };
+    }
+}
+
+function toggleFullContext(enabled) {
+    ensureFullContextLLM();
+    currentReason.full_context_llm.enabled = enabled;
+    document.getElementById('fcBody').style.display = enabled ? 'block' : 'none';
+    document.getElementById('fcModeLabel').textContent = enabled ? 'Full-Context' : 'Стандартный';
+    if (enabled) updateFcWarning();
+}
+
+function renderFullContextLLM() {
+    ensureFullContextLLM();
+    const fc = currentReason.full_context_llm;
+    document.getElementById('fcEnabled').checked = fc.enabled;
+    document.getElementById('fcProvider').value = fc.provider || 'default';
+    document.getElementById('fcCustomPrompt').value = fc.custom_prompt || '';
+    document.getElementById('fcBody').style.display = fc.enabled ? 'block' : 'none';
+    document.getElementById('fcModeLabel').textContent = fc.enabled ? 'Full-Context' : 'Стандартный';
+    if (fc.enabled) updateFcWarning();
+}
+
+function estimateReasonContextSize() {
+    if (!currentReason) return 0;
+    let size = 0;
+    (currentReason.thematic_sections || []).forEach(s => {
+        size += (s.title || '').length;
+        (s.qa_pairs || []).forEach(qa => { size += (qa.question || '').length + (qa.answer || '').length; });
+    });
+    (currentReason.typical_complaints || []).forEach(c => {
+        size += (c.description || '').length + (c.context || '').length + (c.response_template || '').length;
+    });
+    (currentReason.example_answers || []).forEach(ex => {
+        (ex.user_questions || []).forEach(q => { size += q.length; });
+        size += (ex.ideal_answer || '').length;
+    });
+    return size;
+}
+
+function updateFcWarning() {
+    const size = estimateReasonContextSize();
+    const warning = document.getElementById('fcWarning');
+    const warningText = document.getElementById('fcWarningText');
+    if (size > 20000) {
+        warningText.textContent = `Контекст причины (~${Math.round(size/1000)}K символов) может превысить лимит Yandex (8K токенов). Рекомендуется использовать DeepSeek.`;
+        warning.style.display = 'block';
+    } else {
+        warning.style.display = 'none';
+    }
+}
+
 // ── Editor rendering ──
 function renderEditor() {
     document.getElementById('emptyState').style.display = 'none';
@@ -1172,6 +1259,9 @@ function renderEditor() {
 
     // Classification Rules
     renderClassificationRules();
+
+    // Full-Context LLM
+    renderFullContextLLM();
 }
 
 function renderChips(type, items) {
@@ -1392,6 +1482,11 @@ function syncCurrentReasonFromForm() {
     currentReason.name = document.getElementById('reasonName').value.trim();
     currentReason.is_active = document.getElementById('reasonActive').checked;
     currentReason.folder = document.getElementById('reasonFolder').value.trim();
+    // Full-Context LLM
+    ensureFullContextLLM();
+    currentReason.full_context_llm.enabled = document.getElementById('fcEnabled').checked;
+    currentReason.full_context_llm.provider = document.getElementById('fcProvider').value;
+    currentReason.full_context_llm.custom_prompt = document.getElementById('fcCustomPrompt').value;
 }
 
 async function saveReason() {
@@ -1745,6 +1840,8 @@ async function sendDebugMessage() {
                 'classification_only': '<span class="ico ico-tag"></span> Только классификация',
                 'generation': '<span class="ico ico-pen"></span> Генерация ответа',
                 'classification+generation': '<span class="ico ico-tag"></span>+<span class="ico ico-pen"></span> Классификация + Генерация',
+                'full_context_generation': '<span class="ico ico-pen"></span> Full-Context генерация',
+                'classification+full_context_generation': '<span class="ico ico-tag"></span>+<span class="ico ico-pen"></span> Классификация + Full-Context генерация',
             };
             const invLabel = involvementLabels[t.llm_involvement] || t.llm_involvement;
 
@@ -1772,6 +1869,14 @@ async function sendDebugMessage() {
                 } else {
                     traceHtml += `<div style="color:#86efac">Не сработало</div>`;
                 }
+            }
+
+            if (t.full_context_mode) {
+                traceHtml += `<h4>Full-Context LLM</h4>`;
+                traceHtml += `<div style="color:var(--primary)"><span class="ico ico-pen"></span> Режим: <b>Full-Context</b>`;
+                if (t.full_context_provider) traceHtml += ` | Провайдер: <b>${t.full_context_provider}</b>`;
+                if (t.full_context_chars != null) traceHtml += ` | Размер контекста: <b>${(t.full_context_chars/1000).toFixed(1)}K</b> символов`;
+                traceHtml += `</div>`;
             }
 
             if (t.l2_method) {

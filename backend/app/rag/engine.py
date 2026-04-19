@@ -71,6 +71,37 @@ LLM_CLASSIFY_PROMPT = """Пользователь обратился с вопр
 {{"choice": <номер>, "reason": "<обоснование>"}}
 """
 
+FULL_CONTEXT_SYSTEM_PROMPT = """Ты — ИИ-ассистент техподдержки ООО «Фармбазис» (ПО для аптек).
+
+Тебе предоставлена ПОЛНАЯ база знаний по теме обращения. Найди в ней релевантную информацию и дай исчерпывающий ответ.
+
+ГЛАВНОЕ ОГРАНИЧЕНИЕ: Ответ ДОЛЖЕН быть НЕ БОЛЕЕ 2000 символов (кириллица). Пиши КРАТКО, только суть и действия.
+
+ПРАВИЛА:
+1. Отвечай ТОЛЬКО по предоставленной базе знаний.
+2. Если вопрос про настройку, проведение документа, исправление ошибки или другую процедуру — отвечай НУМЕРОВАННЫМИ ШАГАМИ с описанием действий.
+3. Не сокращай пошаговые инструкции до общего пересказа.
+4. Дай полный исчерпывающий ответ по существу.
+5. Предлагай обратиться к оператору ТОЛЬКО если информации в базе знаний недостаточно.
+6. Русский язык, профессиональный тон.
+7. Не раскрывай механику бота.
+
+В конце ОБЯЗАТЕЛЬНО добавь:
+```confidence
+{"confidence": <0.0-1.0>, "reason": "<кратко>"}
+```
+"""
+
+FULL_CONTEXT_TEMPLATE = """
+ПРИЧИНА ОБРАЩЕНИЯ: {reason_name}
+
+ПОЛНАЯ БАЗА ЗНАНИЙ ПО ТЕМЕ:
+{context}
+
+ВОПРОС ПОЛЬЗОВАТЕЛЯ:
+{question}
+"""
+
 MAX_ANSWER_BYTES = 4096
 
 
@@ -315,6 +346,41 @@ class RAGEngine:
                 parts.append(f"Вопрос: {qa.question}\nОтвет: {qa.answer}")
 
         return "\n\n---\n\n".join(parts) if parts else "Нет дополнительного контекста."
+
+    @staticmethod
+    def _build_full_context(reason: ContactReason) -> str:
+        """Формирование ПОЛНОГО контекста из всей БЗ причины обращения."""
+        parts: list[str] = []
+
+        for section in reason.thematic_sections:
+            section_lines = [f"## {section.title}"]
+            for qa in section.qa_pairs:
+                section_lines.append(f"Вопрос: {qa.question}\nОтвет: {qa.answer}")
+            parts.append("\n\n".join(section_lines))
+
+        if reason.typical_complaints:
+            complaint_lines = ["## Типовые жалобы"]
+            for c in reason.typical_complaints:
+                complaint_lines.append(
+                    f"Жалоба: {c.description}\nКонтекст: {c.context}\nШаблон ответа: {c.response_template}"
+                )
+            parts.append("\n\n".join(complaint_lines))
+
+        if reason.example_answers:
+            example_lines = ["## Примеры ответов"]
+            for ex in reason.example_answers:
+                questions = ", ".join(ex.user_questions) if ex.user_questions else ex.user_question
+                example_lines.append(f"Вопрос: {questions}\nОтвет: {ex.ideal_answer}")
+            parts.append("\n\n".join(example_lines))
+
+        return "\n\n---\n\n".join(parts) if parts else "Нет дополнительного контекста."
+
+    @staticmethod
+    def _create_provider_client(provider: str) -> YandexGPTClient | DeepSeekClient:
+        """Создать LLM-клиент по имени провайдера (для per-reason override)."""
+        if provider == "deepseek":
+            return DeepSeekClient()
+        return YandexGPTClient()
 
     @staticmethod
     def _check_required_markers(
@@ -624,9 +690,7 @@ class RAGEngine:
                     f"< threshold={cls_rules.min_score_threshold:.1f} | time={_total:.1f}s"
                 )
                 resp = RAGResponse(
-                    answer=(
-                        f"Не удалось точно определить тему (score={winning_score:.1f}). " "Передаю вопрос оператору."
-                    ),
+                    answer=(f"Не удалось точно определить тему (score={winning_score:.1f}). Передаю вопрос оператору."),
                     confidence=0.0,
                     confidence_reason="L1.1: score ниже per-reason порога",
                     needs_escalation=True,
@@ -688,8 +752,7 @@ class RAGEngine:
             _total = _time.time() - _start
             logger.info(f"[ENGINE] L1.5=forced_escalation | trigger={escalation_check['trigger']} | time={_total:.1f}s")
             esc_answer = escalation_check.get("answer") or (
-                "По данному вопросу необходима консультация специалиста техподдержки. "
-                "Передаю ваше обращение оператору."
+                "По данному вопросу необходима консультация специалиста техподдержки. Передаю ваше обращение оператору."
             )
             resp = RAGResponse(
                 answer=esc_answer,
@@ -722,6 +785,202 @@ class RAGEngine:
                     "llm_involvement": "classification_only" if llm_used_for_classify else "none",
                     "processing_time_ms": int(_total * 1000),
                 }
+            return resp
+
+        # ── Full-Context LLM / Standard L2→L3 branching ──
+        if reason.full_context_llm.enabled:
+            # ── Full-Context path: вся БЗ причины → LLM ──
+            # ExampleQA bypass — всё ещё проверяем (быстро и бесплатно)
+            l2 = classify_section(question, reason)
+
+            if l2.method == "example_match" and l2.best_example:
+                _total = _time.time() - _start
+                logger.info(f"[ENGINE] FC:L2=example_match → direct answer | time={_total:.1f}s")
+                resp = RAGResponse(
+                    answer=_strip_markdown(_truncate_to_bytes(l2.best_example.ideal_answer, MAX_ANSWER_BYTES)),
+                    confidence=0.95,
+                    confidence_reason="Точное совпадение с примером ответа (full-context bypass)",
+                    detected_reason=reason.id,
+                    detected_reason_name=reason.name,
+                    thematic_section=l2.section.title if l2.section else "",
+                    classification_method=f"L1:{l1_method}/FC:example_bypass",
+                    files=resolve_file_codes(l2.best_example.file_codes),
+                )
+                if debug:
+                    resp.debug_trace = {
+                        "l1_method": l1_method,
+                        "l1_confident": l1_confident,
+                        "l1_reason": reason.name,
+                        "l1_reason_id": reason.id,
+                        "l1_candidates": l1_candidates_data,
+                        "escalation_check": escalation_check,
+                        "full_context_mode": True,
+                        "l2_method": l2.method,
+                        "l2_section": l2.section.title if l2.section else None,
+                        "l2_best_qa_score": l2.best_qa_score,
+                        "l2_best_example_score": l2.best_example_score,
+                        "l2_best_complaint_score": l2.best_complaint_score,
+                        "llm_prompt": None,
+                        "llm_raw_response": None,
+                        "llm_provider": None,
+                        "llm_temperature": None,
+                        "confidence_parsed": 0.95,
+                        "confidence_reason": "Точное совпадение с примером ответа (full-context bypass)",
+                        "llm_involvement": "classification_only" if llm_used_for_classify else "none",
+                        "processing_time_ms": int(_total * 1000),
+                    }
+                return resp
+
+            # Собираем полный контекст из всей БЗ причины
+            full_context = self._build_full_context(reason)
+            full_context_chars = len(full_context)
+
+            if full_context == "Нет дополнительного контекста.":
+                _total = _time.time() - _start
+                logger.info(f"[ENGINE] FC=skip_llm (no KB context) | reason={reason.name} | time={_total:.1f}s")
+                resp = RAGResponse(
+                    answer="По данному вопросу недостаточно информации в базе знаний. Передаю ваше обращение оператору.",
+                    confidence=0.0,
+                    confidence_reason="Нет контекста в базе знаний — LLM не вызывался",
+                    needs_escalation=True,
+                    detected_reason=reason.id,
+                    detected_reason_name=reason.name,
+                    classification_method=f"L1:{l1_method}/FC:no_context",
+                )
+                if debug:
+                    resp.debug_trace = {
+                        "l1_method": l1_method,
+                        "l1_confident": l1_confident,
+                        "l1_reason": reason.name,
+                        "l1_reason_id": reason.id,
+                        "l1_candidates": l1_candidates_data,
+                        "escalation_check": escalation_check,
+                        "full_context_mode": True,
+                        "full_context_chars": 0,
+                        "l2_method": "skipped",
+                        "l2_section": None,
+                        "l2_best_qa_score": None,
+                        "l2_best_example_score": None,
+                        "l2_best_complaint_score": None,
+                        "llm_prompt": None,
+                        "llm_raw_response": None,
+                        "llm_provider": None,
+                        "llm_temperature": None,
+                        "confidence_parsed": 0.0,
+                        "confidence_reason": "Нет контекста в базе знаний — LLM не вызывался",
+                        "llm_involvement": "classification_only" if llm_used_for_classify else "none",
+                        "processing_time_ms": int(_total * 1000),
+                    }
+                return resp
+
+            # Определяем провайдер: per-reason override или глобальный
+            fc_settings = reason.full_context_llm
+            fc_system_prompt = fc_settings.custom_prompt or FULL_CONTEXT_SYSTEM_PROMPT
+
+            messages = [{"role": "system", "text": fc_system_prompt}]
+            if chat_history:
+                for msg in chat_history[-6:]:
+                    messages.append({"role": msg["role"], "text": msg["content"]})
+
+            user_message = FULL_CONTEXT_TEMPLATE.format(
+                reason_name=reason.name,
+                context=full_context,
+                question=question,
+            )
+            messages.append({"role": "user", "text": user_message})
+
+            llm_snapshot = get_llm_settings_snapshot()
+            llm_temp = float(llm_snapshot.get("llm_temperature", "0.1"))
+            fc_provider = fc_settings.provider
+            if fc_provider == "default":
+                fc_provider = llm_snapshot["llm_provider"]
+            fc_provider_name = fc_provider
+
+            logger.info(
+                f"[ENGINE] FC provider={fc_provider_name} | reason={reason.name} | context_chars={full_context_chars}"
+            )
+
+            raw_answer = None
+            override_client = None
+            try:
+                if fc_settings.provider != "default":
+                    override_client = self._create_provider_client(fc_provider)
+                    raw_answer = await override_client.complete(messages, temperature=llm_temp, max_tokens=1200)
+                else:
+                    await self._ensure_llm_client()
+                    raw_answer = await self.llm.complete(messages, temperature=llm_temp, max_tokens=1200)
+                llm_used_for_generate = True
+            except Exception as e:
+                logger.error(f"FC LLM error ({fc_provider_name}): {e}")
+                return RAGResponse(
+                    answer="Техническая ошибка. Попробуйте позже или обратитесь к оператору.",
+                    confidence=0.0,
+                    confidence_reason=f"Ошибка LLM (full-context): {e}",
+                    needs_escalation=True,
+                    detected_reason=reason.id,
+                    detected_reason_name=reason.name,
+                    classification_method=f"L1:{l1_method}/FC:error",
+                )
+            finally:
+                if override_client is not None:
+                    await override_client.close()
+
+            clean_answer, confidence, conf_reason = self._parse_confidence(raw_answer)
+            clean_answer = _strip_markdown(clean_answer)
+            clean_answer = _truncate_to_bytes(clean_answer, MAX_ANSWER_BYTES)
+
+            needs_escalation = confidence < settings.rag_confidence_threshold
+            if not needs_escalation:
+                clean_answer = _strip_operator_footer(clean_answer)
+
+            _total = _time.time() - _start
+            logger.info(
+                f"[ENGINE] FC DONE | conf={confidence:.2f} | escalation={needs_escalation} | "
+                f"time={_total:.1f}s | method=L1:{l1_method}/FC"
+            )
+
+            llm_involvement = (
+                "classification+full_context_generation" if llm_used_for_classify else "full_context_generation"
+            )
+
+            resp = RAGResponse(
+                answer=clean_answer,
+                confidence=confidence,
+                confidence_reason=conf_reason,
+                needs_escalation=needs_escalation,
+                detected_reason=reason.id,
+                detected_reason_name=reason.name,
+                thematic_section="Full-Context",
+                classification_method=f"L1:{l1_method}/FC",
+            )
+
+            if debug:
+                prompt_text = "\n\n".join(f"[{m['role']}]\n{m.get('text', m.get('content', ''))}" for m in messages)
+                resp.debug_trace = {
+                    "l1_method": l1_method,
+                    "l1_confident": l1_confident,
+                    "l1_reason": reason.name,
+                    "l1_reason_id": reason.id,
+                    "l1_candidates": l1_candidates_data,
+                    "escalation_check": escalation_check,
+                    "full_context_mode": True,
+                    "full_context_provider": fc_provider_name,
+                    "full_context_chars": full_context_chars,
+                    "l2_method": "skipped",
+                    "l2_section": None,
+                    "l2_best_qa_score": None,
+                    "l2_best_example_score": None,
+                    "l2_best_complaint_score": None,
+                    "llm_prompt": prompt_text,
+                    "llm_raw_response": raw_answer,
+                    "llm_provider": fc_provider_name,
+                    "llm_temperature": llm_temp,
+                    "confidence_parsed": confidence,
+                    "confidence_reason": conf_reason,
+                    "llm_involvement": llm_involvement,
+                    "processing_time_ms": int(_total * 1000),
+                }
+
             return resp
 
         # ── L2: Определение тематического раздела ──
@@ -774,9 +1033,7 @@ class RAGEngine:
             _total = _time.time() - _start
             logger.info(f"[ENGINE] L3=skip_llm (no KB context) | reason={reason.name} | time={_total:.1f}s")
             resp = RAGResponse(
-                answer=(
-                    "По данному вопросу недостаточно информации в базе знаний. " "Передаю ваше обращение оператору."
-                ),
+                answer=("По данному вопросу недостаточно информации в базе знаний. Передаю ваше обращение оператору."),
                 confidence=0.0,
                 confidence_reason="Нет контекста в базе знаний — LLM не вызывался",
                 needs_escalation=True,
@@ -924,7 +1181,7 @@ class RAGEngine:
         """LLM-классификация причины обращения при неоднозначности."""
         top_candidates = l1.candidates[:5]
         candidates_text = "\n".join(
-            f"{i+1}. {c.reason.name} (маркеры: nouns={c.noun_matches}, verbs={c.verb_matches})"
+            f"{i + 1}. {c.reason.name} (маркеры: nouns={c.noun_matches}, verbs={c.verb_matches})"
             for i, c in enumerate(top_candidates)
         )
 
@@ -964,7 +1221,7 @@ class RAGEngine:
     def _build_clarification_response(self, question: str, l1: L1Result) -> RAGResponse:
         """Сформировать ответ-уточнение с вариантами причин."""
         top_candidates = l1.candidates[:5]
-        options = "\n".join(f"{i+1}. {c.reason.name}" for i, c in enumerate(top_candidates))
+        options = "\n".join(f"{i + 1}. {c.reason.name}" for i, c in enumerate(top_candidates))
         answer = f"Уточните, пожалуйста, к какой теме относится ваш вопрос:\n\n{options}\n\nУкажите номер или опишите подробнее."
 
         candidates_list = [
@@ -1035,8 +1292,7 @@ class RAGEngine:
                 ):
                     dry_run["verdict"] = "escalation"
                     dry_run["reason"] = (
-                        f"score={l1.winning_candidate.score:.1f} < "
-                        f"per_reason_min={cls_rules.min_score_threshold:.1f}"
+                        f"score={l1.winning_candidate.score:.1f} < per_reason_min={cls_rules.min_score_threshold:.1f}"
                     )
 
                 # Required markers check
