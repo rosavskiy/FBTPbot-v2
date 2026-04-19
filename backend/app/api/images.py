@@ -1,7 +1,7 @@
-"""API для управления изображениями (Image Management).
+"""API для управления файлами (File Management).
 
-Загрузка, список, удаление изображений с уникальными кодами.
-Используется для привязки изображений к ExampleQA через image_codes.
+Загрузка, список, удаление файлов с уникальными кодами.
+Используется для привязки файлов (изображений, документов) к ExampleQA через file_codes.
 """
 
 from __future__ import annotations
@@ -32,19 +32,19 @@ _editor = Depends(require_role("superadmin", "admin"))
 IMAGES_DIR = Path("./data/bot_images")
 METADATA_FILE = IMAGES_DIR / "metadata.json"
 
-ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-MAX_FILE_SIZE = 1 * 1024 * 1024  # 1 MB
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 
 
-class ImageInfo(BaseModel):
+class FileInfo(BaseModel):
     code: str
     original_name: str
     stored_as: str
     url: str
+    ext: str = ""
 
 
-class ImagesListResponse(BaseModel):
-    images: list[ImageInfo] = Field(default_factory=list)
+class FilesListResponse(BaseModel):
+    files: list[FileInfo] = Field(default_factory=list)
 
 
 def _ensure_dirs():
@@ -75,93 +75,82 @@ def _next_code() -> str:
     return str(uuid.uuid4())
 
 
-_MIME_MAP = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".gif": "image/gif",
-    ".webp": "image/webp",
-}
+def resolve_file_codes(codes: list[str]) -> list[dict]:
+    """Resolve file codes to base64 data URIs, file paths and extensions.
 
-
-def resolve_image_codes(codes: list[str]) -> list[dict]:
-    """Resolve image codes to base64 data URIs and file paths.
-
-    Returns list of dicts: {"code", "data_uri", "file_path"}.
+    Returns list of dicts: {"code", "data_uri", "file_path", "ext"}.
     Skips codes that don't exist or can't be read.
     """
     if not codes:
         return []
 
-    images_meta = _load_metadata()
-    code_to_meta = {img["code"]: img for img in images_meta}
+    files_meta = _load_metadata()
+    code_to_meta = {f["code"]: f for f in files_meta}
     result: list[dict] = []
 
     for code in codes:
         meta = code_to_meta.get(code)
         if not meta:
-            logger.warning(f"Image code '{code}' not found in metadata")
+            logger.warning(f"File code '{code}' not found in metadata")
             continue
 
         stored_as = meta.get("stored_as", "")
         file_path = IMAGES_DIR / stored_as
         if not file_path.is_file():
-            logger.warning(f"Image file not found: {file_path}")
+            logger.warning(f"File not found: {file_path}")
             continue
 
         try:
             raw = file_path.read_bytes()
-            ext = file_path.suffix.lower()
-            mime = _MIME_MAP.get(ext) or mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+            ext = file_path.suffix.lower().lstrip(".")
+            mime = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
             b64 = base64.b64encode(raw).decode("ascii")
             result.append(
                 {
                     "code": code,
                     "data_uri": f"data:{mime};base64,{b64}",
                     "file_path": str(file_path.resolve()),
+                    "ext": ext,
                 }
             )
         except Exception as exc:
-            logger.warning(f"Failed to read image '{code}': {exc}")
+            logger.warning(f"Failed to read file '{code}': {exc}")
 
     return result
 
 
-@router.get("", response_model=ImagesListResponse)
-async def list_images(user: AdminUser = _any_admin):
-    """Список всех загруженных изображений."""
-    images = _load_metadata()
+@router.get("", response_model=FilesListResponse)
+async def list_files(user: AdminUser = _any_admin):
+    """Список всех загруженных файлов."""
+    files = _load_metadata()
     result = []
-    for img in images:
+    for f in files:
+        ext = Path(f.get("stored_as", "")).suffix.lower().lstrip(".")
         result.append(
-            ImageInfo(
-                code=img["code"],
-                original_name=img.get("original_name", ""),
-                stored_as=img.get("stored_as", ""),
-                url=f"/static/bot_images/{img['stored_as']}",
+            FileInfo(
+                code=f["code"],
+                original_name=f.get("original_name", ""),
+                stored_as=f.get("stored_as", ""),
+                url=f"/static/bot_images/{f['stored_as']}",
+                ext=ext,
             )
         )
-    return ImagesListResponse(images=result)
+    return FilesListResponse(files=result)
 
 
-@router.post("", response_model=ImageInfo)
-async def upload_image(
+@router.post("", response_model=FileInfo)
+async def upload_file(
     file: UploadFile = File(...),
     user: AdminUser = _editor,
     db: AsyncSession = Depends(get_admin_db),
 ):
-    """Загрузить изображение и присвоить уникальный GUID-код."""
+    """Загрузить файл и присвоить уникальный GUID-код."""
     _ensure_dirs()
 
-    # Validate file extension
+    # Validate file name
     if not file.filename:
         raise HTTPException(status_code=400, detail="Имя файла отсутствует")
     ext = Path(file.filename).suffix.lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Недопустимый формат. Разрешены: {', '.join(ALLOWED_EXTENSIONS)}",
-        )
 
     # Validate file size
     content = await file.read()
@@ -188,29 +177,30 @@ async def upload_image(
     )
     _save_metadata(images)
 
-    logger.info(f"Image uploaded: code={code}, file={file.filename}, stored={stored_as}")
+    logger.info(f"File uploaded: code={code}, file={file.filename}, stored={stored_as}")
 
     await log_action(
         db,
         user_id=user.id,
         username=user.username,
         action="create",
-        entity_type="image",
+        entity_type="file",
         entity_id=code,
         entity_name=file.filename,
     )
 
-    return ImageInfo(
+    return FileInfo(
         code=code,
         original_name=file.filename,
         stored_as=stored_as,
         url=f"/static/bot_images/{stored_as}",
+        ext=ext.lstrip("."),
     )
 
 
 @router.delete("/{image_code}")
-async def delete_image(image_code: str, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
-    """Удалить изображение по коду."""
+async def delete_file(image_code: str, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)):
+    """Удалить файл по коду."""
     images = _load_metadata()
     found = None
     for i, img in enumerate(images):
@@ -218,7 +208,7 @@ async def delete_image(image_code: str, user: AdminUser = _editor, db: AsyncSess
             found = i
             break
     if found is None:
-        raise HTTPException(status_code=404, detail="Изображение не найдено")
+        raise HTTPException(status_code=404, detail="Файл не найден")
 
     img = images.pop(found)
     file_path = IMAGES_DIR / img["stored_as"]
@@ -226,10 +216,10 @@ async def delete_image(image_code: str, user: AdminUser = _editor, db: AsyncSess
         file_path.unlink()
 
     _save_metadata(images)
-    logger.info(f"Image deleted: code={image_code}")
+    logger.info(f"File deleted: code={image_code}")
 
     await log_action(
-        db, user_id=user.id, username=user.username, action="delete", entity_type="image", entity_id=image_code
+        db, user_id=user.id, username=user.username, action="delete", entity_type="file", entity_id=image_code
     )
 
     return {"status": "deleted", "code": image_code}

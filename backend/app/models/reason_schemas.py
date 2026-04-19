@@ -39,7 +39,15 @@ class ExampleQA(BaseModel):
     user_question: str = Field("", description="Типичный вопрос пользователя (legacy, для обратной совместимости)")
     user_questions: list[str] = Field(default_factory=list, description="Варианты вопросов пользователя")
     ideal_answer: str = Field(..., description="Идеальный ответ бота")
-    image_codes: list[str] = Field(default_factory=list, description="Коды привязанных изображений")
+    file_codes: list[str] = Field(default_factory=list, description="Коды привязанных файлов (изображения, документы)")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_image_codes(cls, values: dict) -> dict:
+        """Обратная совместимость: image_codes → file_codes."""
+        if isinstance(values, dict) and "image_codes" in values and "file_codes" not in values:
+            values["file_codes"] = values.pop("image_codes")
+        return values
 
     @model_validator(mode="after")
     def _migrate_user_question(self) -> ExampleQA:

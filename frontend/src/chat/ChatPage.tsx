@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { api, ChatResponse, ImageData, SuggestedTopic } from '../api/client'
+import { api, ChatResponse, FileData, SuggestedTopic } from '../api/client'
 import ReactMarkdown from 'react-markdown'
 import './ChatPage.css'
 
@@ -9,7 +9,7 @@ interface Message {
   confidence?: number
   needsEscalation?: boolean
   youtubeLinks?: string[]
-  images?: ImageData[]
+  files?: FileData[]
   sourceArticles?: string[]
   suggestedTopics?: SuggestedTopic[]
   responseType?: 'answer' | 'clarification'
@@ -68,7 +68,7 @@ export function ChatPage() {
         confidence: response.confidence,
         needsEscalation: response.needs_escalation,
         youtubeLinks: response.youtube_links,
-        images: response.images?.length ? response.images : undefined,
+        files: response.files?.length ? response.files : undefined,
         sourceArticles: response.source_articles,
         suggestedTopics: response.suggested_topics || undefined,
         responseType: response.response_type,
@@ -158,7 +158,7 @@ export function ChatPage() {
         confidence: response.confidence,
         needsEscalation: response.needs_escalation,
         youtubeLinks: response.youtube_links,
-        images: response.images?.length ? response.images : undefined,
+        files: response.files?.length ? response.files : undefined,
         sourceArticles: response.source_articles,
         responseType: response.response_type,
         suggestedTopics: response.suggested_topics || undefined,
@@ -215,18 +215,30 @@ export function ChatPage() {
                 </div>
               )}
 
-              {/* Изображения */}
-              {msg.images && msg.images.length > 0 && (
+              {/* Вложения (изображения и документы) */}
+              {msg.files && msg.files.length > 0 && (
                 <div className="chat-images">
-                  {msg.images.map((img, j) => (
-                    <a key={j} href={img.data_uri} target="_blank" rel="noopener noreferrer">
-                      <img
-                        src={img.data_uri}
-                        alt={`Скриншот ${img.code}`}
-                        className="chat-image"
-                      />
-                    </a>
-                  ))}
+                  {msg.files.map((file, j) => {
+                    const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(file.ext?.toLowerCase() ?? '')
+                    return isImage ? (
+                      <a key={j} href={file.data_uri} target="_blank" rel="noopener noreferrer">
+                        <img
+                          src={file.data_uri}
+                          alt={`Скриншот ${file.code}`}
+                          className="chat-image"
+                        />
+                      </a>
+                    ) : (
+                      <a
+                        key={j}
+                        href={file.data_uri}
+                        download={`file.${file.ext || 'bin'}`}
+                        className="chat-file-link"
+                      >
+                        📄 {file.ext?.toUpperCase() || 'FILE'} — скачать
+                      </a>
+                    )
+                  })}
                 </div>
               )}
 

@@ -39,7 +39,7 @@ HEADER_ROW = [
     "thematic_section",
     "response_type",
     "youtube_links",
-    "has_images",
+    "has_files",
     "is_debug",
 ]
 
@@ -115,7 +115,7 @@ class GoogleSheetLogger:
         thematic_section: str | None = None,
         response_type: str = "answer",
         youtube_links: list[str] | None = None,
-        has_images: bool = False,
+        has_files: bool = False,
         is_debug: bool = False,
     ) -> None:
         """Добавить строку в таблицу (не блокирует event loop)."""
@@ -139,7 +139,7 @@ class GoogleSheetLogger:
                     thematic_section=thematic_section or "",
                     response_type=response_type,
                     youtube_links=youtube_links or [],
-                    has_images=has_images,
+                    has_files=has_files,
                     is_debug=is_debug,
                 )
             except Exception as e:
@@ -162,7 +162,7 @@ class GoogleSheetLogger:
         thematic_section: str,
         response_type: str,
         youtube_links: list[str],
-        has_images: bool,
+        has_files: bool,
         is_debug: bool = False,
     ) -> None:
         if self._sheet is None:
@@ -188,7 +188,7 @@ class GoogleSheetLogger:
             thematic_section,
             response_type,
             ", ".join(youtube_links),
-            "Да" if has_images else "Нет",
+            "Да" if has_files else "Нет",
             "debug" if is_debug else "",
         ]
         self._sheet.append_row(row, value_input_option="USER_ENTERED")

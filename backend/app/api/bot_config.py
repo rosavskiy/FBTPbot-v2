@@ -177,13 +177,13 @@ def _reason_to_docx_lines(reason: ContactReason) -> list[str]:
         lines.append(f"| {description} | {context} | {response_template} |")
 
     lines.extend(["", "---", "", "### Раздел: Готовые ответы"])
-    lines.extend(["", "| Вопрос пользователя | Идеальный ответ | Изображения |", "| :--- | :--- | :--- |"])
+    lines.extend(["", "| Вопрос пользователя | Идеальный ответ | Файлы |", "| :--- | :--- | :--- |"])
     for example in reason.example_answers:
         questions = example.user_questions or ([example.user_question] if example.user_question else [])
         question = sanitize_cell(" ;; ".join(questions))
         answer = sanitize_cell(example.ideal_answer)
-        images = sanitize_cell(",".join(example.image_codes)) if example.image_codes else ""
-        lines.append(f"| {question} | {answer} | {images} |")
+        files = sanitize_cell(",".join(example.file_codes)) if example.file_codes else ""
+        lines.append(f"| {question} | {answer} | {files} |")
 
     # ── Escalation rules (L1.5) ──
     esc = reason.escalation_rules

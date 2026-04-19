@@ -92,11 +92,12 @@ class DebugTrace(BaseModel):
     processing_time_ms: int = Field(0, description="Время обработки в мс")
 
 
-class ImageData(BaseModel):
-    """Изображение в формате base64 data URI."""
+class FileData(BaseModel):
+    """Вложение (изображение или документ) в формате base64 data URI."""
 
-    code: str = Field(..., description="Код изображения")
-    data_uri: str = Field(..., description="Base64 data URI (data:image/...;base64,...)")
+    code: str = Field(..., description="Код файла")
+    data_uri: str = Field(..., description="Base64 data URI")
+    ext: str = Field("", description="Расширение файла без точки (png, pdf, docx …)")
 
 
 class ChatResponse(BaseModel):
@@ -114,8 +115,8 @@ class ChatResponse(BaseModel):
     needs_escalation: bool = Field(False, description="Требуется ли помощь оператора")
     source_articles: list[str] = Field(default_factory=list, description="ID статей-источников")
     youtube_links: list[str] = Field(default_factory=list, description="YouTube ссылки")
-    has_images: bool = Field(False, description="Есть ли скриншоты в источниках")
-    images: list[ImageData] = Field(default_factory=list, description="Изображения в формате base64 data URI")
+    has_files: bool = Field(False, description="Есть ли вложения (изображения, документы)")
+    files: list[FileData] = Field(default_factory=list, description="Вложения в формате base64 data URI")
     response_type: str = Field("answer", description="Тип ответа: answer | clarification")
     suggested_topics: list[SuggestedTopicSchema] | None = Field(
         None, description="Предложенные темы для уточнения (при response_type=clarification)"

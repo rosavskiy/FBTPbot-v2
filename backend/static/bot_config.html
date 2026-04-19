@@ -48,14 +48,14 @@
     <div class="main" id="mainContent">
         <div class="empty-state" id="emptyState">Выберите причину обращения из списка слева</div>
 
-        <!-- Images Section (global, always visible) -->
+        <!-- Files Section (global, always visible) -->
         <div class="card card-collapsible" id="imagesCard" onclick="toggleImagesCard(event)">
-            <div class="card-title"><span class="collapse-arrow"></span> <span class="ico ico-image"></span> Изображения</div>
+            <div class="card-title"><span class="collapse-arrow"></span> <span class="ico ico-image"></span> Файлы</div>
             <div class="card-body" onclick="event.stopPropagation()">
                 <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
-                    <input type="file" id="imageUploadInput" accept=".png,.jpg,.jpeg,.gif,.webp" style="display:none" onchange="uploadImage(this)">
+                    <input type="file" id="imageUploadInput" style="display:none" onchange="uploadImage(this)">
                     <button class="btn btn-sm btn-success" onclick="document.getElementById('imageUploadInput').click()"><span class="ico ico-upload"></span> Загрузить</button>
-                    <span style="font-size:12px; color:var(--gray-500)">PNG, JPG, GIF, WEBP (макс. 1 МБ)</span>
+                    <span style="font-size:12px; color:var(--gray-500)">Любой формат (макс. 5 МБ)</span>
                 </div>
                 <div class="img-grid" id="imagesGrid"></div>
             </div>
@@ -418,17 +418,17 @@
     </div>
 </div>
 
-<!-- Image Picker Modal -->
+<!-- File Picker Modal -->
 <div class="modal-overlay" id="imagePickerModal">
     <div class="modal" style="max-width:600px; height:auto; max-height:80vh;">
         <div class="modal-header">
-            <h2><span class="ico ico-image"></span> Выбор изображения</h2>
+            <h2><span class="ico ico-image"></span> Выбор файла</h2>
             <button class="btn btn-sm btn-danger btn-close" onclick="closeImagePicker()"></button>
         </div>
         <div class="modal-body" style="padding:16px; overflow-y:auto;">
             <div class="img-grid" id="imagePickerGrid"></div>
             <div id="imagePickerEmpty" style="text-align:center; color:var(--gray-500); padding:20px; display:none;">
-                Нет загруженных изображений. Загрузите в разделе <span class="ico ico-image"></span> Изображения.
+                Нет загруженных файлов. Загрузите в разделе <span class="ico ico-image"></span> Файлы.
             </div>
             <div style="margin-top:16px; display:flex; gap:8px;">
                 <button class="btn btn-primary" onclick="confirmImagePicker()"><span class="ico ico-check-circle"></span> Привязать выбранные</button>
@@ -490,25 +490,31 @@ async function loadImages() {
         const r = await fetch(`${API}/images`);
         if (!r.ok) return;
         const data = await r.json();
-        allImages = data.images || [];
+        allImages = data.files || [];
         renderImagesGrid();
     } catch (e) {
-        console.warn('Failed to load images:', e);
+        console.warn('Failed to load files:', e);
     }
 }
 
 function renderImagesGrid() {
     const grid = document.getElementById('imagesGrid');
+    const IMAGE_EXTS = ['png','jpg','jpeg','gif','webp'];
     grid.innerHTML = '';
     if (!allImages.length) {
-        grid.innerHTML = '<div style="color:var(--gray-500); font-size:13px; padding:8px;">Нет загруженных изображений</div>';
+        grid.innerHTML = '<div style="color:var(--gray-500); font-size:13px; padding:8px;">Нет загруженных файлов</div>';
         return;
     }
     allImages.forEach(img => {
         const card = document.createElement('div');
         card.className = 'img-card';
+        const ext = (img.ext || '').toLowerCase();
+        const isImage = IMAGE_EXTS.includes(ext);
+        const preview = isImage
+            ? `<img src="${img.url}" alt="${img.original_name}" loading="lazy">`
+            : `<div style="display:flex;align-items:center;justify-content:center;height:80px;font-size:28px;color:var(--gray-400);">📄 <span style="font-size:14px;margin-left:4px;">${ext.toUpperCase()}</span></div>`;
         card.innerHTML = `
-            <img src="${img.url}" alt="${img.original_name}" loading="lazy">
+            ${preview}
             <div class="img-code">Код: ${img.code}</div>
             <div class="img-name">${img.original_name}</div>
             <button class="img-delete" onclick="event.stopPropagation(); deleteImage('${img.code}')" title="Удалить"></button>
@@ -527,7 +533,7 @@ async function uploadImage(input) {
         const r = await fetch(`${API}/images`, { method: 'POST', body: formData });
         const data = await r.json();
         if (!r.ok) throw new Error(data.detail || 'Ошибка загрузки');
-        notify(`Изображение загружено, код: ${data.code}`, 'success');
+        notify(`Файл загружен, код: ${data.code}`, 'success');
         await loadImages();
     } catch (e) {
         notify(e.message, 'error');
@@ -535,11 +541,11 @@ async function uploadImage(input) {
 }
 
 async function deleteImage(code) {
-    if (!confirm(`Удалить изображение с кодом ${code}?`)) return;
+    if (!confirm(`Удалить файл с кодом ${code}?`)) return;
     try {
         const r = await fetch(`${API}/images/${code}`, { method: 'DELETE' });
         if (!r.ok) { const data = await r.json(); throw new Error(data.detail || 'Ошибка'); }
-        notify('Изображение удалено', 'success');
+        notify('Файл удалён', 'success');
         await loadImages();
     } catch (e) {
         notify(e.message, 'error');
@@ -555,7 +561,7 @@ function toggleImagesCard(e) {
 // ── Image Picker for ExampleQA ──
 function openImagePicker(exIdx) {
     imagePickerExampleIdx = exIdx;
-    const existing = currentReason.example_answers[exIdx].image_codes || [];
+    const existing = currentReason.example_answers[exIdx].file_codes || [];
     imagePickerSelected = new Set(existing);
     renderImagePickerGrid();
     document.getElementById('imagePickerModal').classList.add('open');
@@ -569,6 +575,7 @@ function closeImagePicker() {
 function renderImagePickerGrid() {
     const grid = document.getElementById('imagePickerGrid');
     const empty = document.getElementById('imagePickerEmpty');
+    const IMAGE_EXTS = ['png','jpg','jpeg','gif','webp'];
     grid.innerHTML = '';
     if (!allImages.length) {
         empty.style.display = 'block';
@@ -578,8 +585,13 @@ function renderImagePickerGrid() {
     allImages.forEach(img => {
         const card = document.createElement('div');
         card.className = 'img-card' + (imagePickerSelected.has(img.code) ? ' selected' : '');
+        const ext = (img.ext || '').toLowerCase();
+        const isImage = IMAGE_EXTS.includes(ext);
+        const preview = isImage
+            ? `<img src="${img.url}" alt="${img.original_name}" loading="lazy">`
+            : `<div style="display:flex;align-items:center;justify-content:center;height:80px;font-size:28px;color:var(--gray-400);">📄 <span style="font-size:14px;margin-left:4px;">${ext.toUpperCase()}</span></div>`;
         card.innerHTML = `
-            <img src="${img.url}" alt="${img.original_name}" loading="lazy">
+            ${preview}
             <div class="img-code">Код: ${img.code}</div>
             <div class="img-name">${img.original_name}</div>
         `;
@@ -597,7 +609,7 @@ function renderImagePickerGrid() {
 
 function confirmImagePicker() {
     if (imagePickerExampleIdx !== null && currentReason) {
-        currentReason.example_answers[imagePickerExampleIdx].image_codes = Array.from(imagePickerSelected);
+        currentReason.example_answers[imagePickerExampleIdx].file_codes = Array.from(imagePickerSelected);
         renderExamples();
     }
     closeImagePicker();
@@ -1293,7 +1305,7 @@ function renderExamples() {
         if (!ex.user_questions || !ex.user_questions.length) {
             ex.user_questions = ex.user_question ? [ex.user_question] : [''];
         }
-        if (!ex.image_codes) ex.image_codes = [];
+        if (!ex.file_codes) ex.file_codes = [];
 
         const div = document.createElement('div');
         div.className = 'qa-pair';
@@ -1306,17 +1318,17 @@ function renderExamples() {
                 </div>`;
         });
 
-        // Image codes badges
+        // File codes badges
         let imgBadgesHtml = '';
-        if (ex.image_codes.length > 0) {
+        if (ex.file_codes.length > 0) {
             imgBadgesHtml = '<div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;">' +
-                ex.image_codes.map((code, ci) => `<span class="chip" style="font-size:11px; padding:2px 8px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:middle;" title="${code}"><span class="ico ico-image"></span> ${code} <span class="remove" onclick="removeExampleImage(${ei},${ci})"></span></span>`).join('') +
+                ex.file_codes.map((code, ci) => `<span class="chip" style="font-size:11px; padding:2px 8px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:middle;" title="${code}"><span class="ico ico-image"></span> ${code} <span class="remove" onclick="removeExampleImage(${ei},${ci})"></span></span>`).join('') +
                 '</div>';
         }
 
         div.innerHTML = `
             <div class="qa-actions">
-                <button class="btn btn-sm btn-secondary" onclick="openImagePicker(${ei})" title="Привязать изображение" style="font-size:11px; padding:3px 6px;"><span class="ico ico-image"></span></button>
+                <button class="btn btn-sm btn-secondary" onclick="openImagePicker(${ei})" title="Привязать файл" style="font-size:11px; padding:3px 6px;"><span class="ico ico-image"></span></button>
                 <button class="btn btn-sm btn-danger btn-close" onclick="removeExample(${ei})"></button>
             </div>
             <div class="form-label">Вопросы пользователя</div>
@@ -1347,12 +1359,12 @@ function syncExampleLegacy(exIdx) {
 }
 
 function removeExampleImage(exIdx, imgIdx) {
-    currentReason.example_answers[exIdx].image_codes.splice(imgIdx, 1);
+    currentReason.example_answers[exIdx].file_codes.splice(imgIdx, 1);
     renderExamples();
 }
 
 function addExample() {
-    currentReason.example_answers.push({ user_question: '', user_questions: [''], ideal_answer: '', image_codes: [] });
+    currentReason.example_answers.push({ user_question: '', user_questions: [''], ideal_answer: '', file_codes: [] });
     renderExamples();
 }
 

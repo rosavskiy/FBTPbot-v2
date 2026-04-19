@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from app.api.images import resolve_image_codes
+from app.api.images import resolve_file_codes
 from app.classifier.reason_classifier import ClassificationCandidate, L1Result, classify_reason
 from app.classifier.section_classifier import L2Result, classify_section
 from app.config import settings
@@ -84,7 +84,7 @@ class RAGResponse:
     needs_escalation: bool = False
     source_articles: list[str] = field(default_factory=list)
     youtube_links: list[str] = field(default_factory=list)
-    images: list[dict] = field(default_factory=list)
+    files: list[dict] = field(default_factory=list)
     detected_reason: str = ""
     detected_reason_name: str = ""
     thematic_section: str = ""
@@ -739,7 +739,7 @@ class RAGEngine:
                 detected_reason_name=reason.name,
                 thematic_section=l2.section.title if l2.section else "",
                 classification_method=f"L1:{l1_method}/L2:{l2.method}",
-                images=resolve_image_codes(l2.best_example.image_codes),
+                files=resolve_file_codes(l2.best_example.file_codes),
             )
             if debug:
                 resp.debug_trace = {
@@ -888,8 +888,8 @@ class RAGEngine:
             detected_reason_name=reason.name,
             thematic_section=section_title,
             classification_method=f"L1:{l1_method}/L2:{l2.method}",
-            images=resolve_image_codes(l2.best_example.image_codes)
-            if l2.best_example and l2.best_example.image_codes
+            files=resolve_file_codes(l2.best_example.file_codes)
+            if l2.best_example and l2.best_example.file_codes
             else [],
         )
 

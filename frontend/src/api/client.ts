@@ -11,9 +11,10 @@ export interface SuggestedTopic {
   snippet: string
 }
 
-export interface ImageData {
+export interface FileData {
   code: string
   data_uri: string
+  ext: string
 }
 
 export interface ChatResponse {
@@ -23,8 +24,8 @@ export interface ChatResponse {
   needs_escalation: boolean
   source_articles: string[]
   youtube_links: string[]
-  has_images: boolean
-  images: ImageData[]
+  has_files: boolean
+  files: FileData[]
   response_type: 'answer' | 'clarification'
   suggested_topics: SuggestedTopic[] | null
   llm_provider?: string | null

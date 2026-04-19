@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { api, ChatResponse, ImageData, SuggestedTopic } from '../api/client'
+import { api, ChatResponse, FileData, SuggestedTopic } from '../api/client'
 import ReactMarkdown from 'react-markdown'
 import './ChatWidget.css'
 
@@ -7,7 +7,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   youtubeLinks?: string[]
-  images?: ImageData[]
+  files?: FileData[]
   needsEscalation?: boolean
   suggestedTopics?: SuggestedTopic[]
   responseType?: 'answer' | 'clarification'
@@ -57,6 +57,7 @@ export function ChatWidget() {
         role: 'assistant',
         content: response.answer,
         youtubeLinks: response.youtube_links,
+        files: response.files?.length ? response.files : undefined,
         needsEscalation: response.needs_escalation,
         suggestedTopics: response.suggested_topics || undefined,
         responseType: response.response_type,
@@ -119,7 +120,7 @@ export function ChatWidget() {
         role: 'assistant',
         content: response.answer,
         youtubeLinks: response.youtube_links,
-        images: response.images?.length ? response.images : undefined,
+        files: response.files?.length ? response.files : undefined,
         needsEscalation: response.needs_escalation,
         suggestedTopics: response.suggested_topics || undefined,
         responseType: response.response_type,
@@ -175,17 +176,29 @@ export function ChatWidget() {
                     📹 Видео-инструкция
                   </a>
                 ))}
-                {msg.images && msg.images.length > 0 && (
+                {msg.files && msg.files.length > 0 && (
                   <div className="widget-images">
-                    {msg.images.map((img, j) => (
-                      <a key={j} href={img.data_uri} target="_blank" rel="noopener noreferrer">
-                        <img
-                          src={img.data_uri}
-                          alt={`Скриншот ${img.code}`}
-                          className="widget-chat-image"
-                        />
-                      </a>
-                    ))}
+                    {msg.files.map((file, j) => {
+                      const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(file.ext?.toLowerCase() ?? '')
+                      return isImage ? (
+                        <a key={j} href={file.data_uri} target="_blank" rel="noopener noreferrer">
+                          <img
+                            src={file.data_uri}
+                            alt={`Скриншот ${file.code}`}
+                            className="widget-chat-image"
+                          />
+                        </a>
+                      ) : (
+                        <a
+                          key={j}
+                          href={file.data_uri}
+                          download={`file.${file.ext || 'bin'}`}
+                          className="widget-file-link"
+                        >
+                          📄 {file.ext?.toUpperCase() || 'FILE'} — скачать
+                        </a>
+                      )
+                    })}
                   </div>
                 )}
                 {/* Кнопки выбора темы (уточнение) */}

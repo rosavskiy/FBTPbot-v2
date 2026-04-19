@@ -198,14 +198,14 @@ def parse_docx(path: Path) -> dict:
             if q and a:
                 # Support multiple questions separated by " ;; "
                 questions = [s.strip() for s in q.split(" ;; ") if s.strip()]
-                image_codes = []
+                file_codes = []
                 if len(cells) >= 3 and cells[2].strip():
-                    image_codes = [c.strip() for c in cells[2].split(",") if c.strip()]
+                    file_codes = [c.strip() for c in cells[2].split(",") if c.strip()]
                 return {
                     "user_question": questions[0] if questions else q,
                     "user_questions": questions if questions else [q],
                     "ideal_answer": a,
-                    "image_codes": image_codes,
+                    "file_codes": file_codes,
                 }
         return None
 

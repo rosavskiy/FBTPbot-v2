@@ -17,7 +17,7 @@ from app.models.schemas import (
     ChatRequest,
     ChatResponse,
     DebugTrace,
-    ImageData,
+    FileData,
     compute_confidence_label,
     compute_confidence_level,
 )
@@ -104,7 +104,7 @@ async def send_message(
             thematic_section=rag_response.thematic_section,
             response_type="answer",
             youtube_links=rag_response.youtube_links,
-            has_images=bool(rag_response.images),
+            has_files=bool(rag_response.files),
             is_debug=request.debug,
         )
     )
@@ -118,8 +118,8 @@ async def send_message(
         needs_escalation=rag_response.needs_escalation,
         source_articles=rag_response.source_articles,
         youtube_links=rag_response.youtube_links,
-        has_images=bool(rag_response.images),
-        images=[ImageData(code=img["code"], data_uri=img["data_uri"]) for img in rag_response.images],
+        has_files=bool(rag_response.files),
+        files=[FileData(code=f["code"], data_uri=f["data_uri"], ext=f.get("ext", "")) for f in rag_response.files],
         response_type="answer",
         detected_reason=rag_response.detected_reason_name,
         thematic_section=rag_response.thematic_section,
