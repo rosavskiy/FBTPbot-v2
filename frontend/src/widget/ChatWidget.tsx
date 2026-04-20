@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { api, ChatResponse, FileData, SuggestedTopic } from '../api/client'
+import { api, ChatResponse, FileData, SuggestedTopic, toDataUri } from '../api/client'
 import ReactMarkdown from 'react-markdown'
 import './ChatWidget.css'
 
@@ -180,10 +180,11 @@ export function ChatWidget() {
                   <div className="widget-images">
                     {msg.files.map((file, j) => {
                       const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(file.ext?.toLowerCase() ?? '')
+                      const uri = toDataUri(file)
                       return isImage ? (
-                        <a key={j} href={file.data_uri} target="_blank" rel="noopener noreferrer">
+                        <a key={j} href={uri} target="_blank" rel="noopener noreferrer">
                           <img
-                            src={file.data_uri}
+                            src={uri}
                             alt={`Скриншот ${file.code}`}
                             className="widget-chat-image"
                           />
@@ -191,7 +192,7 @@ export function ChatWidget() {
                       ) : (
                         <a
                           key={j}
-                          href={file.data_uri}
+                          href={uri}
                           download={`file.${file.ext || 'bin'}`}
                           className="widget-file-link"
                         >

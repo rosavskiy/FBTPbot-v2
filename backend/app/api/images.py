@@ -9,7 +9,6 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import mimetypes
 import uuid
 from pathlib import Path
 
@@ -103,12 +102,11 @@ def resolve_file_codes(codes: list[str]) -> list[dict]:
         try:
             raw = file_path.read_bytes()
             ext = file_path.suffix.lower().lstrip(".")
-            mime = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
             b64 = base64.b64encode(raw).decode("ascii")
             result.append(
                 {
                     "code": code,
-                    "data_uri": f"data:{mime};base64,{b64}",
+                    "data_uri": b64,
                     "file_path": str(file_path.resolve()),
                     "ext": ext,
                 }

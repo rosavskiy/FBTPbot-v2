@@ -17,6 +17,22 @@ export interface FileData {
   ext: string
 }
 
+const EXT_TO_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+}
+
+export function toDataUri(file: FileData): string {
+  const mime = EXT_TO_MIME[file.ext?.toLowerCase() ?? ''] ?? 'application/octet-stream'
+  return `data:${mime};base64,${file.data_uri}`
+}
+
 export interface ChatResponse {
   answer: string
   session_id: string

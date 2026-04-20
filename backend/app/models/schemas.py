@@ -93,10 +93,10 @@ class DebugTrace(BaseModel):
 
 
 class FileData(BaseModel):
-    """Вложение (изображение или документ) в формате base64 data URI."""
+    """Вложение (изображение или документ) в формате raw base64."""
 
     code: str = Field(..., description="Код файла")
-    data_uri: str = Field(..., description="Base64 data URI")
+    data_uri: str = Field(..., description="Raw base64 содержимое файла (без префикса data:…;base64,)")
     ext: str = Field("", description="Расширение файла без точки (png, pdf, docx …)")
 
 
