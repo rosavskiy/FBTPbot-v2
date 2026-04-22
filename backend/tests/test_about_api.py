@@ -134,3 +134,36 @@ async def test_about_api_crud_and_export(tmp_path: Path):
     finally:
         await client.aclose()
         await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_about_export_range(tmp_path):
+    client, engine, _ = await create_test_context(tmp_path, lambda: make_admin_user("admin"))
+    try:
+        # Создаём три записи за разные даты
+        for iso_date in ("2026-04-01", "2026-04-15", "2026-04-22"):
+            r = await client.put(
+                "/api/about",
+                json={"progress_date": iso_date, "title": f"Запись {iso_date}", "content": f"- Строка за {iso_date}"},
+            )
+            assert r.status_code == 200
+
+        # Экспорт всех записей
+        all_resp = await client.get("/api/about/export-range")
+        assert all_resp.status_code == 200
+        assert all_resp.headers["content-type"].startswith(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        assert len(all_resp.content) > 0
+
+        # Экспорт за подпериод — должны попасть две записи
+        sub_resp = await client.get("/api/about/export-range?date_from=2026-04-10&date_to=2026-04-22")
+        assert sub_resp.status_code == 200
+        assert len(sub_resp.content) > 0
+
+        # Период без записей — 404
+        empty_resp = await client.get("/api/about/export-range?date_from=2025-01-01&date_to=2025-01-31")
+        assert empty_resp.status_code == 404
+    finally:
+        await client.aclose()
+        await engine.dispose()

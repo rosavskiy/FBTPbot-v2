@@ -5,277 +5,179 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>О программе — Фармбазис Админ</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/bot_config.css">
     <link rel="stylesheet" href="/static/admin_common.css">
     <script src="/static/admin_nav.js"></script>
     <style>
-        :root {
-            --accent: #0f766e;
-            --accent-dark: #115e59;
-            --accent-soft: rgba(15, 118, 110, 0.12);
-            --gray-100: #f3f4f6;
-            --gray-200: #e5e7eb;
-            --gray-300: #d1d5db;
-            --gray-400: #9ca3af;
-            --gray-500: #6b7280;
-            --gray-600: #4b5563;
-            --gray-700: #374151;
-            --gray-800: #1f2937;
-            --gray-900: #111827;
-            --gray-950: #08111f;
-            --danger: #dc2626;
-            --success: #16a34a;
-            --radius: 16px;
-            --radius-sm: 10px;
-            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        body { overflow: hidden; }
+        .header-subtitle {
+            font-size: 12px;
+            color: var(--gray-500);
+            margin-top: 2px;
         }
-        * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            font-family: var(--font-sans);
-            color: var(--gray-200);
-            background:
-                radial-gradient(circle at top left, rgba(15,118,110,0.18), transparent 32%),
-                radial-gradient(circle at top right, rgba(14,165,233,0.16), transparent 24%),
-                linear-gradient(180deg, #07111d 0%, #0b1320 100%);
-        }
-        .page {
-            max-width: 1380px;
-            margin: 0 auto;
-            padding: 28px 20px 40px;
-        }
-        .hero {
+        .about-sidebar-header {
             display: flex;
-            justify-content: space-between;
-            gap: 24px;
-            align-items: flex-start;
-            margin-bottom: 24px;
-        }
-        .hero-card {
-            flex: 1;
-            background: rgba(17, 24, 39, 0.86);
-            border: 1px solid rgba(148, 163, 184, 0.16);
-            border-radius: 22px;
-            padding: 24px;
-            backdrop-filter: blur(12px);
-        }
-        .hero-title {
-            margin: 0;
-            font-size: 28px;
-            font-weight: 700;
-            color: #f8fafc;
-        }
-        .hero-subtitle {
-            margin: 10px 0 0;
-            color: var(--gray-400);
-            font-size: 14px;
-            line-height: 1.6;
-            max-width: 760px;
-        }
-        .hero-actions {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-top: 20px;
-        }
-        .btn {
-            border: none;
-            border-radius: var(--radius-sm);
-            padding: 10px 16px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            font-family: var(--font-sans);
-            transition: transform .15s ease, opacity .15s ease, background .15s ease;
-        }
-        .btn:hover { transform: translateY(-1px); }
-        .btn-primary { background: var(--accent); color: white; }
-        .btn-primary:hover { background: var(--accent-dark); }
-        .btn-secondary {
-            background: rgba(148, 163, 184, 0.12);
-            color: var(--gray-200);
-            border: 1px solid rgba(148, 163, 184, 0.18);
-        }
-        .btn-danger { background: rgba(220, 38, 38, 0.16); color: #fecaca; border: 1px solid rgba(220,38,38,0.24); }
-        .hero-stats {
-            min-width: 280px;
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            flex-direction: column;
             gap: 12px;
         }
-        .stat {
-            background: rgba(7, 14, 24, 0.8);
-            border: 1px solid rgba(148, 163, 184, 0.14);
-            border-radius: 18px;
-            padding: 16px;
-        }
-        .stat-value { font-size: 26px; font-weight: 700; color: white; }
-        .stat-label { font-size: 12px; color: var(--gray-400); margin-top: 6px; }
-        .workspace {
-            display: grid;
-            grid-template-columns: 360px minmax(0, 1fr);
-            gap: 20px;
-        }
-        .panel {
-            background: rgba(17, 24, 39, 0.88);
-            border: 1px solid rgba(148, 163, 184, 0.16);
-            border-radius: 20px;
-            backdrop-filter: blur(12px);
-            overflow: hidden;
-        }
-        .panel-header {
-            padding: 18px 20px;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-        }
-        .panel-title {
-            margin: 0;
-            font-size: 16px;
-            font-weight: 700;
-            color: white;
-        }
-        .panel-subtitle {
-            margin: 6px 0 0;
-            font-size: 12px;
-            color: var(--gray-400);
-        }
-        .filters {
+        .about-filter-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px;
-            padding: 16px 20px;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+            gap: 8px;
         }
-        .field-label {
-            display: block;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            color: var(--gray-500);
-            text-transform: uppercase;
-            margin-bottom: 6px;
-        }
-        input[type="date"], input[type="text"], textarea {
-            width: 100%;
-            border: 1px solid rgba(148, 163, 184, 0.16);
-            border-radius: 12px;
-            background: rgba(2, 6, 23, 0.54);
-            color: var(--gray-100);
-            font-size: 14px;
-            font-family: var(--font-sans);
-            padding: 11px 13px;
-            outline: none;
-        }
-        input[type="date"]:focus, input[type="text"]:focus, textarea:focus {
-            border-color: rgba(45, 212, 191, 0.45);
-            box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
-        }
-        textarea {
-            min-height: 260px;
-            resize: vertical;
-            line-height: 1.55;
-        }
-        .filter-actions {
-            grid-column: 1 / -1;
+        .about-sidebar-actions {
             display: flex;
-            gap: 10px;
+            gap: 8px;
+            flex-wrap: wrap;
         }
-        .notes-list {
-            max-height: 720px;
-            overflow: auto;
+        .about-sidebar-actions .btn { flex: 1; justify-content: center; }
+        .sidebar-item {
+            margin-bottom: 8px;
+            padding: 12px;
         }
-        .note-row {
-            padding: 16px 20px;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-            cursor: pointer;
-            transition: background .15s ease, border-color .15s ease;
+        .sidebar-item .title-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 4px;
         }
-        .note-row:hover { background: rgba(15, 118, 110, 0.08); }
-        .note-row.active {
-            background: linear-gradient(90deg, rgba(15,118,110,0.22), rgba(15,118,110,0.06));
-            border-left: 3px solid #2dd4bf;
-            padding-left: 17px;
+        .sidebar-item .date-badge {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--gray-400);
+            padding: 3px 8px;
+            border-radius: 9999px;
+            background: var(--gray-800);
         }
-        .note-date { font-size: 15px; font-weight: 700; color: white; }
-        .note-title {
-            margin-top: 8px;
-            font-size: 13px;
-            color: var(--gray-300);
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+        .sidebar-item.active .date-badge {
+            color: var(--accent-light);
+            background: rgba(99,102,241,0.16);
         }
-        .note-preview {
-            margin-top: 8px;
+        .sidebar-item .preview {
             font-size: 12px;
-            line-height: 1.5;
+            line-height: 1.45;
             color: var(--gray-500);
+            margin-top: 6px;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
         }
-        .note-meta { margin-top: 10px; font-size: 11px; color: var(--gray-500); }
-        .empty {
-            padding: 28px 20px;
-            color: var(--gray-500);
-            font-size: 13px;
-            text-align: center;
-        }
-        .editor {
+        .main-grid {
             display: grid;
-            grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
-            min-height: 720px;
+            grid-template-columns: minmax(0, 1fr) 360px;
+            gap: 16px;
+            margin-bottom: 16px;
         }
-        .editor-main {
-            padding: 22px;
-            border-right: 1px solid rgba(148, 163, 184, 0.12);
-        }
-        .editor-preview {
-            padding: 22px;
-            background: linear-gradient(180deg, rgba(8,17,31,0.42), rgba(8,17,31,0.08));
-        }
-        .editor-actions {
+        .about-hero {
             display: flex;
-            gap: 10px;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 20px;
+        }
+        .about-hero-copy h2 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--gray-100);
+            margin-bottom: 10px;
+            letter-spacing: -0.02em;
+        }
+        .about-hero-copy p {
+            max-width: 720px;
+            color: var(--gray-400);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .about-hero-actions {
+            display: flex;
+            gap: 8px;
             flex-wrap: wrap;
             margin-top: 16px;
         }
-        .meta-bar {
+        .about-stats {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .about-stat-card {
+            background: var(--gray-900);
+            border: 1px solid var(--gray-800);
+            border-radius: var(--radius);
+            padding: 18px;
+        }
+        .about-stat-value {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--gray-100);
+            line-height: 1.2;
+        }
+        .about-stat-label {
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .editor-shell {
+            display: grid;
+            grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+            gap: 16px;
+            align-items: start;
+        }
+        .editor-panel,
+        .preview-panel {
+            background: var(--gray-950);
+            border: 1px solid var(--gray-800);
+            border-radius: var(--radius-sm);
+            padding: 16px;
+        }
+        .editor-panel textarea.form-input {
+            min-height: 320px;
+        }
+        .editor-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+        .editor-meta {
             display: flex;
             justify-content: space-between;
             gap: 12px;
-            margin-top: 14px;
+            margin-top: 12px;
             color: var(--gray-500);
             font-size: 12px;
         }
         .preview-sheet {
-            min-height: 100%;
-            border-radius: 18px;
-            background: rgba(255, 255, 255, 0.96);
-            color: #111827;
-            padding: 28px;
-            box-shadow: 0 18px 40px rgba(0,0,0,0.18);
+            background: var(--gray-900);
+            border: 1px solid var(--gray-800);
+            border-radius: var(--radius);
+            padding: 22px;
+            min-height: 520px;
         }
         .preview-overline {
             font-size: 11px;
-            letter-spacing: 0.18em;
+            font-weight: 600;
+            letter-spacing: 0.12em;
             text-transform: uppercase;
-            color: #0f766e;
-            font-weight: 700;
+            color: var(--accent-light);
         }
         .preview-date {
             margin: 10px 0 0;
-            font-size: 28px;
+            font-size: 32px;
             font-weight: 700;
+            color: var(--gray-100);
         }
         .preview-title {
-            margin: 12px 0 0;
-            font-size: 16px;
+            margin: 14px 0 0;
+            font-size: 18px;
             font-weight: 600;
-            color: #1f2937;
+            color: var(--gray-100);
         }
         .preview-content {
-            margin-top: 22px;
-            color: #374151;
+            margin-top: 18px;
+            color: var(--gray-300);
             line-height: 1.7;
             font-size: 14px;
         }
@@ -284,127 +186,199 @@
             padding-left: 20px;
         }
         .preview-content p {
-            margin: 0 0 12px;
+            margin: 0 0 10px;
         }
         .toast {
             position: fixed;
-            right: 20px;
-            bottom: 20px;
+            right: 24px;
+            bottom: 24px;
             padding: 12px 16px;
-            border-radius: 12px;
+            border-radius: var(--radius-sm);
             color: white;
             font-size: 13px;
             font-weight: 600;
             display: none;
             z-index: 1000;
+            box-shadow: 0 8px 32px var(--shadow-modal);
         }
         .toast.show { display: block; }
-        .toast.success { background: rgba(22,163,74,0.92); }
-        .toast.error { background: rgba(220,38,38,0.92); }
-        @media (max-width: 1120px) {
-            .workspace, .editor { grid-template-columns: 1fr; }
-            .editor-main { border-right: none; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
-            .hero { flex-direction: column; }
-            .hero-stats { width: 100%; }
+        .toast.success { background: var(--success); }
+        .toast.error { background: var(--danger); }
+        /* Range-export modal (reuses confirm-overlay/confirm-dialog from bot_config.css) */
+        .range-export-form { display: flex; flex-direction: column; gap: 12px; }
+        .empty-note-list {
+            padding: 18px 12px;
+            color: var(--gray-500);
+            font-size: 13px;
+            text-align: center;
+        }
+        @media (max-width: 1280px) {
+            .main-grid,
+            .editor-shell {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 900px) {
+            .layout { flex-direction: column; }
+            .sidebar {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid var(--gray-800);
+                max-height: 420px;
+            }
+            .main { padding: 16px; }
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+            .header .actions {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+            .about-sidebar-actions .btn,
+            .header .actions .btn {
+                flex: 1 1 auto;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="page">
-        <div class="hero">
-            <div class="hero-card">
-                <h1 class="hero-title">О программе</h1>
-                <p class="hero-subtitle">
-                    Ручной журнал прогресса доработок. Здесь администратор может вести историю изменений,
-                    фиксировать сделанное по датам, обновлять записи и выгружать их в файл.
-                </p>
-                <div class="hero-actions">
-                    <button class="btn btn-primary" onclick="startNewNote()">Новая запись</button>
-                    <button class="btn btn-secondary" onclick="loadNotes()">Обновить список</button>
+    <div class="about-app">
+        <div class="header">
+            <div class="header-left">
+                <img src="/static/farmbazis-logo.png" alt="Фармбазис" class="header-icon">
+                <div>
+                    <h1>О программе</h1>
+                    <div class="header-subtitle">Журнал прогресса доработок и изменений по датам</div>
                 </div>
             </div>
-            <div class="hero-stats">
-                <div class="stat">
-                    <div class="stat-value" id="statTotal">0</div>
-                    <div class="stat-label">Всего записей</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" id="statMonth">0</div>
-                    <div class="stat-label">Записей в месяце</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" id="statLastDate">—</div>
-                    <div class="stat-label">Последняя дата</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" id="statAuthor">—</div>
-                    <div class="stat-label">Последний редактор</div>
-                </div>
+            <div class="actions">
+                <button class="btn btn-secondary" onclick="loadNotes()"><span class="ico ico-refresh"></span> Обновить список</button>
+                <button class="btn btn-secondary" onclick="exportNote()" id="headerExportBtn"><span class="ico ico-upload"></span> Экспорт DOCX</button>
+                <button class="btn btn-secondary" onclick="openRangeExportModal()"><span class="ico ico-file-text"></span> Экспорт за период</button>
+                <button class="btn btn-primary" onclick="startNewNote()"><span class="ico ico-plus"></span> Новая запись</button>
             </div>
         </div>
 
-        <div class="workspace">
-            <section class="panel">
-                <div class="panel-header">
-                    <h2 class="panel-title">История записей</h2>
-                    <p class="panel-subtitle">Фильтр по датам и быстрый доступ к сохранённым заметкам.</p>
-                </div>
-                <div class="filters">
+        <div class="layout">
+            <aside class="sidebar">
+                <div class="sidebar-header about-sidebar-header">
                     <div>
-                        <label class="field-label" for="filterDateFrom">Дата с</label>
-                        <input type="date" id="filterDateFrom">
+                        <div class="form-label">Фильтр истории</div>
+                        <div class="about-filter-grid">
+                            <input type="date" class="form-input" id="filterDateFrom" placeholder="Дата с">
+                            <input type="date" class="form-input" id="filterDateTo" placeholder="Дата по">
+                        </div>
                     </div>
-                    <div>
-                        <label class="field-label" for="filterDateTo">Дата по</label>
-                        <input type="date" id="filterDateTo">
-                    </div>
-                    <div class="filter-actions">
-                        <button class="btn btn-primary" onclick="applyFilters()">Применить</button>
-                        <button class="btn btn-secondary" onclick="resetFilters()">Сбросить</button>
+                    <div class="about-sidebar-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="applyFilters()">Применить</button>
+                        <button class="btn btn-secondary btn-sm" onclick="resetFilters()">Сбросить</button>
                     </div>
                 </div>
-                <div class="notes-list" id="notesList"></div>
-            </section>
+                <div class="sidebar-list" id="notesList"></div>
+                <div class="sidebar-footer">
+                    <button class="btn btn-primary" style="width:100%" onclick="startNewNote()"><span class="ico ico-plus"></span> Добавить запись</button>
+                </div>
+            </aside>
 
-            <section class="panel">
-                <div class="panel-header">
-                    <h2 class="panel-title">Редактор записи</h2>
-                    <p class="panel-subtitle">Одна дата соответствует одной записи. Повторное сохранение обновляет существующий текст.</p>
-                </div>
-                <div class="editor">
-                    <div class="editor-main">
-                        <div>
-                            <label class="field-label" for="noteDate">Дата</label>
-                            <input type="date" id="noteDate">
-                        </div>
-                        <div style="margin-top:14px;">
-                            <label class="field-label" for="noteTitle">Заголовок</label>
-                            <input type="text" id="noteTitle" maxlength="255" placeholder="Например: доработки AI-консоли">
-                        </div>
-                        <div style="margin-top:14px;">
-                            <label class="field-label" for="noteContent">Содержимое</label>
-                            <textarea id="noteContent" placeholder="- Добавили новую настройку&#10;- Исправили поведение эскалации&#10;&#10;Можно писать и обычными абзацами."></textarea>
-                        </div>
-                        <div class="editor-actions">
-                            <button class="btn btn-primary" onclick="saveNote()">Сохранить</button>
-                            <button class="btn btn-secondary" onclick="exportNote()" id="exportBtn">Экспорт DOCX</button>
-                            <button class="btn btn-danger" onclick="deleteNote()" id="deleteBtn">Удалить</button>
-                        </div>
-                        <div class="meta-bar">
-                            <div id="noteCreatedMeta">Создано: —</div>
-                            <div id="noteUpdatedMeta">Обновлено: —</div>
+            <main class="main">
+                <div class="main-grid">
+                    <div class="card">
+                        <div class="about-hero">
+                            <div class="about-hero-copy">
+                                <h2>О программе</h2>
+                                <p>
+                                    Ручной журнал прогресса доработок. Страница оформлена в том же стиле, что и AI-консоль,
+                                    поддерживает светлую и тёмную темы и позволяет вести историю изменений с быстрым просмотром,
+                                    правкой и экспортом в DOCX.
+                                </p>
+                                <div class="about-hero-actions">
+                                    <button class="btn btn-primary" onclick="startNewNote()"><span class="ico ico-plus"></span> Новая запись</button>
+                                    <button class="btn btn-secondary" onclick="loadNotes()"><span class="ico ico-refresh"></span> Обновить список</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="editor-preview">
-                        <div class="preview-sheet">
-                            <div class="preview-overline">О программе</div>
-                            <div class="preview-date" id="previewDate">—</div>
-                            <div class="preview-title" id="previewTitle">Без заголовка</div>
-                            <div class="preview-content" id="previewContent"></div>
+
+                    <div class="about-stats">
+                        <div class="about-stat-card">
+                            <div class="about-stat-value" id="statTotal">0</div>
+                            <div class="about-stat-label">Всего записей</div>
+                        </div>
+                        <div class="about-stat-card">
+                            <div class="about-stat-value" id="statMonth">0</div>
+                            <div class="about-stat-label">Записей в месяце</div>
+                        </div>
+                        <div class="about-stat-card">
+                            <div class="about-stat-value" id="statLastDate">—</div>
+                            <div class="about-stat-label">Последняя дата</div>
+                        </div>
+                        <div class="about-stat-card">
+                            <div class="about-stat-value" id="statAuthor">—</div>
+                            <div class="about-stat-label">Последний редактор</div>
                         </div>
                     </div>
                 </div>
-            </section>
+
+                <section class="card">
+                    <div class="card-title"><span class="ico ico-file-text"></span> Редактор записи</div>
+                    <div class="editor-shell">
+                        <div class="editor-panel">
+                            <div class="form-row">
+                                <label class="form-label" for="noteDate">Дата</label>
+                                <input type="date" class="form-input" id="noteDate">
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label" for="noteTitle">Заголовок</label>
+                                <input type="text" class="form-input" id="noteTitle" maxlength="255" placeholder="Например: доработки AI-консоли">
+                            </div>
+                            <div class="form-row">
+                                <label class="form-label" for="noteContent">Содержимое</label>
+                                <textarea class="form-input" id="noteContent" placeholder="- Добавили новую настройку&#10;- Исправили поведение эскалации&#10;&#10;Можно писать и обычными абзацами."></textarea>
+                            </div>
+                            <div class="editor-actions">
+                                <button class="btn btn-primary" onclick="saveNote()"><span class="ico ico-save"></span> Сохранить</button>
+                                <button class="btn btn-secondary" onclick="exportNote()" id="exportBtn"><span class="ico ico-upload"></span> Экспорт DOCX</button>
+                                <button class="btn btn-danger" onclick="deleteNote()" id="deleteBtn"><span class="ico ico-trash"></span> Удалить</button>
+                            </div>
+                            <div class="editor-meta">
+                                <div id="noteCreatedMeta">Создано: —</div>
+                                <div id="noteUpdatedMeta">Обновлено: —</div>
+                            </div>
+                        </div>
+                        <div class="preview-panel">
+                            <div class="preview-sheet">
+                                <div class="preview-overline">О программе</div>
+                                <div class="preview-date" id="previewDate">—</div>
+                                <div class="preview-title" id="previewTitle">Без заголовка</div>
+                                <div class="preview-content" id="previewContent"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- Period export modal -->
+    <div class="confirm-overlay" id="rangeExportOverlay" onclick="if(event.target===this)closeRangeExportModal()">
+        <div class="confirm-dialog">
+            <div class="confirm-dialog__title"><span class="ico ico-file-text"></span> Экспорт за период</div>
+            <div class="range-export-form">
+                <div class="form-row">
+                    <label class="form-label" for="rangeFrom">Дата с (необязательно)</label>
+                    <input type="date" class="form-input" id="rangeFrom">
+                </div>
+                <div class="form-row">
+                    <label class="form-label" for="rangeTo">Дата по (необязательно)</label>
+                    <input type="date" class="form-input" id="rangeTo">
+                </div>
+            </div>
+            <div class="confirm-dialog__actions" style="margin-top:20px">
+                <button class="btn btn-secondary" onclick="closeRangeExportModal()">Отмена</button>
+                <button class="btn btn-primary" onclick="doExportRange()"><span class="ico ico-upload"></span> Экспорт</button>
+            </div>
         </div>
     </div>
 
@@ -428,7 +402,7 @@
         const user = AdminNav.init({ currentPage: 'about' });
         if (!user) return;
         if (AdminNav.isViewer()) {
-            document.querySelector('.page').innerHTML = '<div class="panel"><div class="empty">Доступ к странице «О программе» есть только у администратора и суперадминистратора.</div></div>';
+            document.querySelector('.about-app').innerHTML = '<div class="main" style="padding:24px"><div class="card"><div class="empty-note-list">Доступ к странице «О программе» есть только у администратора и суперадминистратора.</div></div></div>';
             return;
         }
         document.getElementById('noteContent').addEventListener('input', renderPreview);
@@ -514,6 +488,7 @@
         document.getElementById('noteTitle').value = note?.title || '';
         document.getElementById('noteContent').value = note?.content || '';
         document.getElementById('exportBtn').disabled = !note;
+        document.getElementById('headerExportBtn').disabled = !note;
         document.getElementById('deleteBtn').disabled = !note;
         updateMeta(note);
         renderPreview();
@@ -521,7 +496,7 @@
     }
 
     function highlightActive() {
-        document.querySelectorAll('.note-row').forEach((node) => {
+        document.querySelectorAll('.sidebar-item').forEach((node) => {
             node.classList.toggle('active', Number(node.dataset.id) === currentNoteId);
         });
     }
@@ -529,18 +504,20 @@
     function renderNotesList() {
         const list = document.getElementById('notesList');
         if (!notes.length) {
-            list.innerHTML = '<div class="empty">Записей пока нет. Начните с новой даты или сохраните текущий черновик.</div>';
+            list.innerHTML = '<div class="empty-note-list">Записей пока нет. Начните с новой даты или сохраните текущий черновик.</div>';
             fillForm(null);
             updateStats();
             return;
         }
 
         list.innerHTML = notes.map((note) => `
-            <div class="note-row ${note.id === currentNoteId ? 'active' : ''}" data-id="${note.id}" onclick="openNote(${note.id})">
-                <div class="note-date">${esc(formatRuDate(note.progress_date))}</div>
-                <div class="note-title">${esc(note.title || 'Без заголовка')}</div>
-                <div class="note-preview">${esc(note.content_preview || 'Пустая запись')}</div>
-                <div class="note-meta">Последнее изменение: ${esc(note.updated_by || '—')}</div>
+            <div class="sidebar-item ${note.id === currentNoteId ? 'active' : ''}" data-id="${note.id}" onclick="openNote(${note.id})">
+                <div class="title-row">
+                    <div class="name">${esc(note.title || 'Без заголовка')}</div>
+                    <div class="date-badge">${esc(formatRuDate(note.progress_date))}</div>
+                </div>
+                <div class="meta">Последнее изменение: ${esc(note.updated_by || '—')}</div>
+                <div class="preview">${esc(note.content_preview || 'Пустая запись')}</div>
             </div>
         `).join('');
 
@@ -612,6 +589,7 @@
         document.getElementById('noteTitle').value = '';
         document.getElementById('noteContent').value = '';
         document.getElementById('exportBtn').disabled = true;
+        document.getElementById('headerExportBtn').disabled = true;
         document.getElementById('deleteBtn').disabled = true;
         updateMeta(null);
         highlightActive();
@@ -671,6 +649,44 @@
             link.click();
             link.remove();
             URL.revokeObjectURL(url);
+        } catch (error) {
+            showToast(error.message, true);
+        }
+    }
+
+    function openRangeExportModal() {
+        // Подставить текущие значения фильтра автоматически
+        document.getElementById('rangeFrom').value = document.getElementById('filterDateFrom').value;
+        document.getElementById('rangeTo').value = document.getElementById('filterDateTo').value;
+        document.getElementById('rangeExportOverlay').classList.add('open');
+    }
+
+    function closeRangeExportModal() {
+        document.getElementById('rangeExportOverlay').classList.remove('open');
+    }
+
+    async function doExportRange() {
+        const from = document.getElementById('rangeFrom').value;
+        const to = document.getElementById('rangeTo').value;
+        const params = new URLSearchParams();
+        if (from) params.set('date_from', from);
+        if (to) params.set('date_to', to);
+        const qs = params.size ? `?${params.toString()}` : '';
+        try {
+            const response = await api(`/export-range${qs}`);
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const fromPart = from || 'all';
+            const toPart = to || 'all';
+            link.download = `about_period_${fromPart}_${toPart}.docx`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            closeRangeExportModal();
+            showToast('Файл выгружен.');
         } catch (error) {
             showToast(error.message, true);
         }

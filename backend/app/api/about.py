@@ -119,6 +119,38 @@ def _build_export_docx(note: ProgressNote) -> io.BytesIO:
     return buffer
 
 
+def _build_export_range_docx(
+    notes: list[ProgressNote],
+    date_from: date | None,
+    date_to: date | None,
+) -> io.BytesIO:
+    document = Document()
+    document.add_heading("О программе — экспорт за период", level=1)
+
+    parts: list[str] = []
+    if date_from:
+        parts.append(f"с {date_from.strftime('%d.%m.%Y')}")
+    if date_to:
+        parts.append(f"по {date_to.strftime('%d.%m.%Y')}")
+    if parts:
+        document.add_paragraph(" ".join(parts))
+    document.add_paragraph(f"Записей в выгрузке: {len(notes)}")
+
+    for note in notes:
+        document.add_heading(note.progress_date.strftime("%d.%m.%Y"), level=2)
+        if note.title:
+            p = document.add_paragraph()
+            p.add_run(note.title).bold = True
+        _append_content(document, note.content)
+        if note.updated_by:
+            document.add_paragraph(f"Редактор: {note.updated_by}")
+
+    buffer = io.BytesIO()
+    document.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
 @router.get("", response_model=ProgressNotesListResponse)
 async def list_progress_notes(
     date_from: date | None = Query(None),
@@ -144,6 +176,46 @@ async def list_progress_notes(
     return ProgressNotesListResponse(
         total=total_result.scalar() or 0,
         items=[_to_summary(item) for item in items],
+    )
+
+
+@router.get("/export-range")
+async def export_progress_notes_range(
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    user: AdminUser = _editor,
+    db: AsyncSession = Depends(get_admin_db),
+):
+    q = select(ProgressNote).order_by(ProgressNote.progress_date)
+    if date_from is not None:
+        q = q.where(ProgressNote.progress_date >= date_from)
+    if date_to is not None:
+        q = q.where(ProgressNote.progress_date <= date_to)
+
+    result = await db.execute(q)
+    notes = list(result.scalars().all())
+
+    if not notes:
+        raise HTTPException(status_code=404, detail="Записей за указанный период не найдено")
+
+    await log_action(
+        db,
+        user_id=user.id,
+        username=user.username,
+        action="export_range",
+        entity_type="progress_note",
+        entity_id="range",
+        entity_name=f"{date_from or '*'}..{date_to or '*'}",
+    )
+
+    from_str = date_from.isoformat() if date_from else "all"
+    to_str = date_to.isoformat() if date_to else "all"
+    filename = f"about_{from_str}_{to_str}.docx"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(
+        _build_export_range_docx(notes, date_from, date_to),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers=headers,
     )
 
 
