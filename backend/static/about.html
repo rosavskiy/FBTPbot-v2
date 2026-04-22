@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>О программе — Фармбазис Админ</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/admin_common.css">
+    <script src="/static/admin_nav.js"></script>
+    <style>
+        :root {
+            --accent: #0f766e;
+            --accent-dark: #115e59;
+            --accent-soft: rgba(15, 118, 110, 0.12);
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            --gray-950: #08111f;
+            --danger: #dc2626;
+            --success: #16a34a;
+            --radius: 16px;
+            --radius-sm: 10px;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: var(--font-sans);
+            color: var(--gray-200);
+            background:
+                radial-gradient(circle at top left, rgba(15,118,110,0.18), transparent 32%),
+                radial-gradient(circle at top right, rgba(14,165,233,0.16), transparent 24%),
+                linear-gradient(180deg, #07111d 0%, #0b1320 100%);
+        }
+        .page {
+            max-width: 1380px;
+            margin: 0 auto;
+            padding: 28px 20px 40px;
+        }
+        .hero {
+            display: flex;
+            justify-content: space-between;
+            gap: 24px;
+            align-items: flex-start;
+            margin-bottom: 24px;
+        }
+        .hero-card {
+            flex: 1;
+            background: rgba(17, 24, 39, 0.86);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 22px;
+            padding: 24px;
+            backdrop-filter: blur(12px);
+        }
+        .hero-title {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+        .hero-subtitle {
+            margin: 10px 0 0;
+            color: var(--gray-400);
+            font-size: 14px;
+            line-height: 1.6;
+            max-width: 760px;
+        }
+        .hero-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+        .btn {
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 10px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: var(--font-sans);
+            transition: transform .15s ease, opacity .15s ease, background .15s ease;
+        }
+        .btn:hover { transform: translateY(-1px); }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent-dark); }
+        .btn-secondary {
+            background: rgba(148, 163, 184, 0.12);
+            color: var(--gray-200);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+        }
+        .btn-danger { background: rgba(220, 38, 38, 0.16); color: #fecaca; border: 1px solid rgba(220,38,38,0.24); }
+        .hero-stats {
+            min-width: 280px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .stat {
+            background: rgba(7, 14, 24, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            border-radius: 18px;
+            padding: 16px;
+        }
+        .stat-value { font-size: 26px; font-weight: 700; color: white; }
+        .stat-label { font-size: 12px; color: var(--gray-400); margin-top: 6px; }
+        .workspace {
+            display: grid;
+            grid-template-columns: 360px minmax(0, 1fr);
+            gap: 20px;
+        }
+        .panel {
+            background: rgba(17, 24, 39, 0.88);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 20px;
+            backdrop-filter: blur(12px);
+            overflow: hidden;
+        }
+        .panel-header {
+            padding: 18px 20px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+        }
+        .panel-title {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 700;
+            color: white;
+        }
+        .panel-subtitle {
+            margin: 6px 0 0;
+            font-size: 12px;
+            color: var(--gray-400);
+        }
+        .filters {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+        }
+        .field-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        input[type="date"], input[type="text"], textarea {
+            width: 100%;
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 12px;
+            background: rgba(2, 6, 23, 0.54);
+            color: var(--gray-100);
+            font-size: 14px;
+            font-family: var(--font-sans);
+            padding: 11px 13px;
+            outline: none;
+        }
+        input[type="date"]:focus, input[type="text"]:focus, textarea:focus {
+            border-color: rgba(45, 212, 191, 0.45);
+            box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+        }
+        textarea {
+            min-height: 260px;
+            resize: vertical;
+            line-height: 1.55;
+        }
+        .filter-actions {
+            grid-column: 1 / -1;
+            display: flex;
+            gap: 10px;
+        }
+        .notes-list {
+            max-height: 720px;
+            overflow: auto;
+        }
+        .note-row {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            cursor: pointer;
+            transition: background .15s ease, border-color .15s ease;
+        }
+        .note-row:hover { background: rgba(15, 118, 110, 0.08); }
+        .note-row.active {
+            background: linear-gradient(90deg, rgba(15,118,110,0.22), rgba(15,118,110,0.06));
+            border-left: 3px solid #2dd4bf;
+            padding-left: 17px;
+        }
+        .note-date { font-size: 15px; font-weight: 700; color: white; }
+        .note-title {
+            margin-top: 8px;
+            font-size: 13px;
+            color: var(--gray-300);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .note-preview {
+            margin-top: 8px;
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--gray-500);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .note-meta { margin-top: 10px; font-size: 11px; color: var(--gray-500); }
+        .empty {
+            padding: 28px 20px;
+            color: var(--gray-500);
+            font-size: 13px;
+            text-align: center;
+        }
+        .editor {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+            min-height: 720px;
+        }
+        .editor-main {
+            padding: 22px;
+            border-right: 1px solid rgba(148, 163, 184, 0.12);
+        }
+        .editor-preview {
+            padding: 22px;
+            background: linear-gradient(180deg, rgba(8,17,31,0.42), rgba(8,17,31,0.08));
+        }
+        .editor-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+        .meta-bar {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 14px;
+            color: var(--gray-500);
+            font-size: 12px;
+        }
+        .preview-sheet {
+            min-height: 100%;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.96);
+            color: #111827;
+            padding: 28px;
+            box-shadow: 0 18px 40px rgba(0,0,0,0.18);
+        }
+        .preview-overline {
+            font-size: 11px;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: #0f766e;
+            font-weight: 700;
+        }
+        .preview-date {
+            margin: 10px 0 0;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        .preview-title {
+            margin: 12px 0 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .preview-content {
+            margin-top: 22px;
+            color: #374151;
+            line-height: 1.7;
+            font-size: 14px;
+        }
+        .preview-content ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .preview-content p {
+            margin: 0 0 12px;
+        }
+        .toast {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            display: none;
+            z-index: 1000;
+        }
+        .toast.show { display: block; }
+        .toast.success { background: rgba(22,163,74,0.92); }
+        .toast.error { background: rgba(220,38,38,0.92); }
+        @media (max-width: 1120px) {
+            .workspace, .editor { grid-template-columns: 1fr; }
+            .editor-main { border-right: none; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+            .hero { flex-direction: column; }
+            .hero-stats { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="hero">
+            <div class="hero-card">
+                <h1 class="hero-title">О программе</h1>
+                <p class="hero-subtitle">
+                    Ручной журнал прогресса доработок. Здесь администратор может вести историю изменений,
+                    фиксировать сделанное по датам, обновлять записи и выгружать их в файл.
+                </p>
+                <div class="hero-actions">
+                    <button class="btn btn-primary" onclick="startNewNote()">Новая запись</button>
+                    <button class="btn btn-secondary" onclick="loadNotes()">Обновить список</button>
+                </div>
+            </div>
+            <div class="hero-stats">
+                <div class="stat">
+                    <div class="stat-value" id="statTotal">0</div>
+                    <div class="stat-label">Всего записей</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="statMonth">0</div>
+                    <div class="stat-label">Записей в месяце</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="statLastDate">—</div>
+                    <div class="stat-label">Последняя дата</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="statAuthor">—</div>
+                    <div class="stat-label">Последний редактор</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="workspace">
+            <section class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">История записей</h2>
+                    <p class="panel-subtitle">Фильтр по датам и быстрый доступ к сохранённым заметкам.</p>
+                </div>
+                <div class="filters">
+                    <div>
+                        <label class="field-label" for="filterDateFrom">Дата с</label>
+                        <input type="date" id="filterDateFrom">
+                    </div>
+                    <div>
+                        <label class="field-label" for="filterDateTo">Дата по</label>
+                        <input type="date" id="filterDateTo">
+                    </div>
+                    <div class="filter-actions">
+                        <button class="btn btn-primary" onclick="applyFilters()">Применить</button>
+                        <button class="btn btn-secondary" onclick="resetFilters()">Сбросить</button>
+                    </div>
+                </div>
+                <div class="notes-list" id="notesList"></div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">Редактор записи</h2>
+                    <p class="panel-subtitle">Одна дата соответствует одной записи. Повторное сохранение обновляет существующий текст.</p>
+                </div>
+                <div class="editor">
+                    <div class="editor-main">
+                        <div>
+                            <label class="field-label" for="noteDate">Дата</label>
+                            <input type="date" id="noteDate">
+                        </div>
+                        <div style="margin-top:14px;">
+                            <label class="field-label" for="noteTitle">Заголовок</label>
+                            <input type="text" id="noteTitle" maxlength="255" placeholder="Например: доработки AI-консоли">
+                        </div>
+                        <div style="margin-top:14px;">
+                            <label class="field-label" for="noteContent">Содержимое</label>
+                            <textarea id="noteContent" placeholder="- Добавили новую настройку&#10;- Исправили поведение эскалации&#10;&#10;Можно писать и обычными абзацами."></textarea>
+                        </div>
+                        <div class="editor-actions">
+                            <button class="btn btn-primary" onclick="saveNote()">Сохранить</button>
+                            <button class="btn btn-secondary" onclick="exportNote()" id="exportBtn">Экспорт DOCX</button>
+                            <button class="btn btn-danger" onclick="deleteNote()" id="deleteBtn">Удалить</button>
+                        </div>
+                        <div class="meta-bar">
+                            <div id="noteCreatedMeta">Создано: —</div>
+                            <div id="noteUpdatedMeta">Обновлено: —</div>
+                        </div>
+                    </div>
+                    <div class="editor-preview">
+                        <div class="preview-sheet">
+                            <div class="preview-overline">О программе</div>
+                            <div class="preview-date" id="previewDate">—</div>
+                            <div class="preview-title" id="previewTitle">Без заголовка</div>
+                            <div class="preview-content" id="previewContent"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+    const API = '/api/about';
+    let notes = [];
+    let currentNoteId = null;
+    let currentNote = null;
+
+    const _origFetch = window.fetch.bind(window);
+    window.fetch = (url, opts = {}) => {
+        if (typeof url === 'string' && url.startsWith('/api/')) {
+            return AdminNav.authFetch(url, opts);
+        }
+        return _origFetch(url, opts);
+    };
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        const user = AdminNav.init({ currentPage: 'about' });
+        if (!user) return;
+        if (AdminNav.isViewer()) {
+            document.querySelector('.page').innerHTML = '<div class="panel"><div class="empty">Доступ к странице «О программе» есть только у администратора и суперадминистратора.</div></div>';
+            return;
+        }
+        document.getElementById('noteContent').addEventListener('input', renderPreview);
+        document.getElementById('noteTitle').addEventListener('input', renderPreview);
+        document.getElementById('noteDate').addEventListener('input', renderPreview);
+        startNewNote();
+        await loadNotes();
+    });
+
+    function formatInputDate(value = new Date()) {
+        const local = new Date(value.getTime() - value.getTimezoneOffset() * 60000);
+        return local.toISOString().slice(0, 10);
+    }
+
+    function formatRuDate(value) {
+        if (!value) return '—';
+        const [year, month, day] = value.split('-');
+        if (!year || !month || !day) return value;
+        return `${day}.${month}.${year}`;
+    }
+
+    function formatDateTime(value) {
+        if (!value) return '—';
+        return new Date(value).toLocaleString('ru');
+    }
+
+    function esc(text) {
+        const node = document.createElement('div');
+        node.textContent = text || '';
+        return node.innerHTML;
+    }
+
+    function parseContentToHtml(content) {
+        const lines = String(content || '').split('\n');
+        let html = '';
+        let inList = false;
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) {
+                if (inList) {
+                    html += '</ul>';
+                    inList = false;
+                }
+                continue;
+            }
+
+            if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
+                if (!inList) {
+                    html += '<ul>';
+                    inList = true;
+                }
+                html += `<li>${esc(trimmed.slice(2).trim())}</li>`;
+                continue;
+            }
+
+            if (inList) {
+                html += '</ul>';
+                inList = false;
+            }
+            html += `<p>${esc(trimmed)}</p>`;
+        }
+
+        if (inList) html += '</ul>';
+        return html || '<p>Запись пока пуста.</p>';
+    }
+
+    function renderPreview() {
+        document.getElementById('previewDate').textContent = formatRuDate(document.getElementById('noteDate').value);
+        document.getElementById('previewTitle').textContent = document.getElementById('noteTitle').value.trim() || 'Без заголовка';
+        document.getElementById('previewContent').innerHTML = parseContentToHtml(document.getElementById('noteContent').value);
+    }
+
+    function updateMeta(note) {
+        document.getElementById('noteCreatedMeta').textContent = `Создано: ${note ? formatDateTime(note.created_at) : '—'}`;
+        document.getElementById('noteUpdatedMeta').textContent = `Обновлено: ${note ? formatDateTime(note.updated_at) : '—'}`;
+    }
+
+    function fillForm(note) {
+        currentNote = note;
+        currentNoteId = note ? note.id : null;
+        document.getElementById('noteDate').value = note ? note.progress_date : formatInputDate();
+        document.getElementById('noteTitle').value = note?.title || '';
+        document.getElementById('noteContent').value = note?.content || '';
+        document.getElementById('exportBtn').disabled = !note;
+        document.getElementById('deleteBtn').disabled = !note;
+        updateMeta(note);
+        renderPreview();
+        highlightActive();
+    }
+
+    function highlightActive() {
+        document.querySelectorAll('.note-row').forEach((node) => {
+            node.classList.toggle('active', Number(node.dataset.id) === currentNoteId);
+        });
+    }
+
+    function renderNotesList() {
+        const list = document.getElementById('notesList');
+        if (!notes.length) {
+            list.innerHTML = '<div class="empty">Записей пока нет. Начните с новой даты или сохраните текущий черновик.</div>';
+            fillForm(null);
+            updateStats();
+            return;
+        }
+
+        list.innerHTML = notes.map((note) => `
+            <div class="note-row ${note.id === currentNoteId ? 'active' : ''}" data-id="${note.id}" onclick="openNote(${note.id})">
+                <div class="note-date">${esc(formatRuDate(note.progress_date))}</div>
+                <div class="note-title">${esc(note.title || 'Без заголовка')}</div>
+                <div class="note-preview">${esc(note.content_preview || 'Пустая запись')}</div>
+                <div class="note-meta">Последнее изменение: ${esc(note.updated_by || '—')}</div>
+            </div>
+        `).join('');
+
+        updateStats();
+    }
+
+    function updateStats() {
+        document.getElementById('statTotal').textContent = String(notes.length);
+        const monthPrefix = formatInputDate().slice(0, 7);
+        document.getElementById('statMonth').textContent = String(notes.filter((note) => note.progress_date.startsWith(monthPrefix)).length);
+        document.getElementById('statLastDate').textContent = notes[0] ? formatRuDate(notes[0].progress_date) : '—';
+        document.getElementById('statAuthor').textContent = notes[0]?.updated_by || '—';
+    }
+
+    async function api(path = '', options = {}) {
+        const response = await fetch(API + path, options);
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(err.detail || `HTTP ${response.status}`);
+        }
+        return response;
+    }
+
+    async function loadNotes() {
+        const params = new URLSearchParams();
+        const dateFrom = document.getElementById('filterDateFrom').value;
+        const dateTo = document.getElementById('filterDateTo').value;
+        if (dateFrom) params.set('date_from', dateFrom);
+        if (dateTo) params.set('date_to', dateTo);
+
+        try {
+            const response = await api(params.size ? `?${params.toString()}` : '');
+            const data = await response.json();
+            notes = data.items || [];
+            renderNotesList();
+
+            if (currentNoteId) {
+                const match = notes.find((note) => note.id === currentNoteId);
+                if (match) {
+                    await openNote(currentNoteId, true);
+                    return;
+                }
+            }
+
+            if (notes.length) {
+                await openNote(notes[0].id, true);
+            } else {
+                startNewNote();
+            }
+        } catch (error) {
+            showToast(error.message, true);
+        }
+    }
+
+    async function openNote(noteId, silent = false) {
+        try {
+            const response = await api(`/${noteId}`);
+            const note = await response.json();
+            fillForm(note);
+        } catch (error) {
+            if (!silent) showToast(error.message, true);
+        }
+    }
+
+    function startNewNote() {
+        currentNote = null;
+        currentNoteId = null;
+        document.getElementById('noteDate').value = formatInputDate();
+        document.getElementById('noteTitle').value = '';
+        document.getElementById('noteContent').value = '';
+        document.getElementById('exportBtn').disabled = true;
+        document.getElementById('deleteBtn').disabled = true;
+        updateMeta(null);
+        highlightActive();
+        renderPreview();
+    }
+
+    async function saveNote() {
+        const payload = {
+            progress_date: document.getElementById('noteDate').value,
+            title: document.getElementById('noteTitle').value.trim() || null,
+            content: document.getElementById('noteContent').value,
+        };
+
+        if (!payload.progress_date) {
+            showToast('Укажите дату записи.', true);
+            return;
+        }
+
+        try {
+            const response = await api('', {
+                method: 'PUT',
+                body: JSON.stringify(payload),
+            });
+            const note = await response.json();
+            fillForm(note);
+            await loadNotes();
+            showToast('Запись сохранена.');
+        } catch (error) {
+            showToast(error.message, true);
+        }
+    }
+
+    async function deleteNote() {
+        if (!currentNoteId) return;
+        if (!confirm('Удалить выбранную запись?')) return;
+
+        try {
+            await api(`/${currentNoteId}`, { method: 'DELETE' });
+            showToast('Запись удалена.');
+            startNewNote();
+            await loadNotes();
+        } catch (error) {
+            showToast(error.message, true);
+        }
+    }
+
+    async function exportNote() {
+        if (!currentNoteId) return;
+        try {
+            const response = await api(`/${currentNoteId}/export`);
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `about_${document.getElementById('noteDate').value || 'note'}.docx`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            showToast(error.message, true);
+        }
+    }
+
+    function applyFilters() {
+        loadNotes();
+    }
+
+    function resetFilters() {
+        document.getElementById('filterDateFrom').value = '';
+        document.getElementById('filterDateTo').value = '';
+        loadNotes();
+    }
+
+    function showToast(message, isError = false) {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.className = `toast show ${isError ? 'error' : 'success'}`;
+        window.clearTimeout(showToast._timer);
+        showToast._timer = window.setTimeout(() => {
+            toast.className = 'toast';
+        }, 2800);
+    }
+    </script>
+</body>
+</html>

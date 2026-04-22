@@ -15,6 +15,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Column,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -134,6 +135,21 @@ class AuditLog(Base):
     details = Column(Text, nullable=True)
 
     user = relationship("AdminUser", back_populates="audit_actions")
+
+
+class ProgressNote(Base):
+    """Ежедневная запись журнала доработок на странице «О программе»."""
+
+    __tablename__ = "progress_notes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    progress_date = Column(Date, unique=True, nullable=False, index=True)
+    title = Column(String(255), nullable=True)
+    content = Column(Text, nullable=False, default="")
+    created_by = Column(String(100), nullable=True)
+    updated_by = Column(String(100), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ))
+    updated_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ), onupdate=lambda: datetime.now(SARATOV_TZ))
 
 
 # Async engine и session

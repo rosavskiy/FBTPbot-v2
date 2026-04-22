@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.about import router as about_router
 from app.api.admin_auth import ensure_superadmin
 from app.api.admin_auth import router as admin_router
 from app.api.bot_config import router as bot_config_router
@@ -102,6 +103,7 @@ app.include_router(escalation_router)
 app.include_router(operator_router)
 app.include_router(kb_admin_router)
 app.include_router(bot_config_router)
+app.include_router(about_router)
 app.include_router(images_router)
 app.include_router(admin_router)
 app.include_router(reason_builder_router)
@@ -182,6 +184,15 @@ async def admin_audit_page():
     html_path = Path(__file__).resolve().parent.parent / "static" / "admin_audit.html"
     if not html_path.exists():
         return {"error": "admin_audit.html не найден"}
+    return FileResponse(html_path, media_type="text/html")
+
+
+@app.get("/about", tags=["about"])
+async def about_page():
+    """Страница «О программе» с журналом доработок."""
+    html_path = Path(__file__).resolve().parent.parent / "static" / "about.html"
+    if not html_path.exists():
+        return {"error": "about.html не найден"}
     return FileResponse(html_path, media_type="text/html")
 
 
