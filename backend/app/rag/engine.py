@@ -543,6 +543,7 @@ class RAGEngine:
         # Debug trace accumulator
         llm_used_for_classify = False
         llm_used_for_generate = False
+        l1_marker_weights: dict = {}
 
         # ── L0: Глобальная эскалация (до классификации) ──
         l0_check = self._check_global_escalation(question)
@@ -613,6 +614,7 @@ class RAGEngine:
             ]
         else:
             l1 = classify_reason(question)
+            l1_marker_weights = l1.marker_weights
 
             l1_candidates_data = [
                 {
@@ -722,7 +724,7 @@ class RAGEngine:
                         confidence_reason="L1.1: score ниже per-reason порога",
                         llm_involvement="classification_only" if llm_used_for_classify else "none",
                         start_time=_start,
-                        marker_weights=getattr(l1, "marker_weights", {}),
+                        marker_weights=l1_marker_weights,
                     )
                 return resp
 
@@ -754,7 +756,7 @@ class RAGEngine:
                             confidence_reason="L1.1: обязательный маркер не найден",
                             llm_involvement="classification_only" if llm_used_for_classify else "none",
                             start_time=_start,
-                            marker_weights=getattr(l1, "marker_weights", {}),
+                            marker_weights=l1_marker_weights,
                         )
                         trace["marker_clarification_check"] = marker_clarification_check
                         resp.debug_trace = trace
