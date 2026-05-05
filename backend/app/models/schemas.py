@@ -113,7 +113,9 @@ class DebugTrace(BaseModel):
     llm_temperature: float | None = Field(None, description="Использованная температура")
     llm_extractor_used: bool = Field(False, description="Сработал ли LLM extractor до L1")
     llm_extractor_original_question: str | None = Field(None, description="Исходный вопрос до LLM extractor")
-    llm_extractor_normalized_question: str | None = Field(None, description="Нормализованный вопрос после LLM extractor")
+    llm_extractor_normalized_question: str | None = Field(
+        None, description="Нормализованный вопрос после LLM extractor"
+    )
     confidence_parsed: float | None = Field(None, description="Распарсенный confidence")
     confidence_reason: str | None = Field(None, description="Причина confidence")
     routing_decision: str | None = Field(None, description="Итоговое решение маршрутизации ответа")
