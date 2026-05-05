@@ -12,6 +12,7 @@ Embeddings: Yandex Embeddings (для ChromaDB fallback)
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import time as _time
@@ -70,6 +71,19 @@ LLM_CLASSIFY_PROMPT = """Пользователь обратился с вопр
 
 Ответь ТОЛЬКО номером выбранной причины (1, 2, 3...) и кратким обоснованием в формате:
 {{"choice": <номер>, "reason": "<обоснование>"}}
+"""
+
+LLM_EXTRACT_PROMPT = """Пользователь написал шумный вопрос в техподдержку. Нормализуй его для машинной классификации причины обращения.
+
+ИСХОДНЫЙ ВОПРОС:
+{question}
+
+ПРАВИЛА:
+1. Удали приветствия, вводные слова, повторы и разговорный мусор.
+2. Сохрани ключевую проблему, документ, код ошибки, товар и важные числа.
+3. Не придумывай новые детали и не меняй смысл.
+4. Верни только JSON в формате:
+{{"normalized_question": "<короткая нормализованная формулировка>"}}
 """
 
 FULL_CONTEXT_SYSTEM_PROMPT = """Ты — ИИ-ассистент техподдержки ООО «Фармбазис» (ПО для аптек).
@@ -133,6 +147,11 @@ class AnswerRoutingDecision:
     decision: str
     prompt: str = ""
     prompt_source: str = ""
+
+
+@dataclass(frozen=True)
+class QuestionExtractionResult:
+    normalized_question: str
 
 
 class YandexGPTClient:
@@ -471,6 +490,19 @@ class RAGEngine:
         }
 
     @staticmethod
+    def _attach_llm_extractor_trace(
+        trace: dict,
+        *,
+        used: bool,
+        original_question: str | None,
+        normalized_question: str | None,
+    ) -> dict:
+        trace["llm_extractor_used"] = used
+        trace["llm_extractor_original_question"] = original_question if used else None
+        trace["llm_extractor_normalized_question"] = normalized_question if used else None
+        return trace
+
+    @staticmethod
     def _extract_document_number(question: str) -> str | None:
         text = re.sub(r"\s+", " ", question).strip()
 
@@ -487,6 +519,96 @@ class RAGEngine:
             return explicit_match.group(1)
 
         return None
+
+    @staticmethod
+    def _is_noisy_question(question: str) -> bool:
+        text = re.sub(r"\s+", " ", question).strip()
+        words = re.findall(r"[A-Za-zА-Яа-яЁё0-9-]+", text)
+        numeric_chunks = re.findall(r"\d+[A-Za-zА-Яа-яЁё-]*", text)
+        punctuation_noise = re.findall(r"[^\w\s]{2,}", text, re.UNICODE)
+
+        return (
+            len(text) >= 100
+            or len(words) >= 16
+            or len(numeric_chunks) >= 2
+            or sum(len(chunk) for chunk in numeric_chunks) >= 10
+            or bool(punctuation_noise)
+        )
+
+    @classmethod
+    def _should_try_llm_question_extractor(cls, question: str, l1: L1Result) -> bool:
+        if l1.reason is not None and l1.is_confident:
+            return False
+
+        if l1.method in {"none", "below_threshold"}:
+            return cls._is_noisy_question(question)
+
+        if not l1.is_confident and l1.needs_clarification:
+            return cls._is_noisy_question(question)
+
+        return False
+
+    @staticmethod
+    def _is_better_l1_result(candidate: L1Result, current: L1Result) -> bool:
+        candidate_score = candidate.winning_candidate.score if candidate.winning_candidate else 0.0
+        current_score = current.winning_candidate.score if current.winning_candidate else 0.0
+
+        if current.reason is None and candidate.reason is not None:
+            return True
+
+        if not current.is_confident and candidate.reason is not None and candidate.is_confident:
+            return True
+
+        if current.method in {"none", "below_threshold"} and candidate.reason is not None:
+            return True
+
+        return candidate_score > current_score
+
+    async def _llm_extract_question_signal(self, question: str) -> QuestionExtractionResult | None:
+        prompt = LLM_EXTRACT_PROMPT.format(question=question)
+        messages = [
+            {"role": "system", "text": "Ты извлекаешь суть вопроса техподдержки для классификатора."},
+            {"role": "user", "text": prompt},
+        ]
+
+        try:
+            await self._ensure_llm_client()
+            response = await self.llm.complete(messages, temperature=0.0, max_tokens=150)
+            json_match = re.search(r'\{.*?"normalized_question".*?\}', response, re.DOTALL)
+            if not json_match:
+                return None
+
+            payload = json.loads(json_match.group(0))
+            normalized_question = str(payload.get("normalized_question") or "").strip()
+            if not normalized_question:
+                return None
+
+            return QuestionExtractionResult(normalized_question=normalized_question)
+        except Exception as e:
+            logger.warning(f"LLM question extraction failed: {e}")
+            return None
+
+    async def _maybe_normalize_question_for_l1(self, question: str, l1: L1Result) -> tuple[str, L1Result, bool]:
+        if not self._should_try_llm_question_extractor(question, l1):
+            return question, l1, False
+
+        extracted = await self._llm_extract_question_signal(question)
+        if extracted is None:
+            return question, l1, False
+
+        normalized_question = re.sub(r"\s+", " ", extracted.normalized_question).strip()
+        if not normalized_question:
+            return question, l1, False
+
+        if normalized_question.lower() == re.sub(r"\s+", " ", question).strip().lower():
+            return question, l1, False
+
+        normalized_l1 = classify_reason(normalized_question)
+        if not self._is_better_l1_result(normalized_l1, l1):
+            return question, l1, False
+
+        logger.info("[ENGINE] L1 extractor normalized query: %s -> %s", question, normalized_question)
+        return normalized_question, normalized_l1, True
 
     @staticmethod
     def _build_answer_refinement_prompt(
@@ -636,6 +758,19 @@ class RAGEngine:
         llm_used_for_classify = False
         llm_used_for_generate = False
         l1_marker_weights: dict = {}
+        llm_extractor_used = False
+        llm_extractor_original_question: str | None = None
+        llm_extractor_normalized_question: str | None = None
+
+        def _finalize_response(resp: RAGResponse) -> RAGResponse:
+            if debug and resp.debug_trace is not None:
+                self._attach_llm_extractor_trace(
+                    resp.debug_trace,
+                    used=llm_extractor_used,
+                    original_question=llm_extractor_original_question,
+                    normalized_question=llm_extractor_normalized_question,
+                )
+            return resp
 
         # ── L0: Глобальная эскалация (до классификации) ──
         l0_check = self._check_global_escalation(question)
@@ -675,7 +810,7 @@ class RAGEngine:
                     "llm_involvement": "none",
                     "processing_time_ms": int(_total * 1000),
                 }
-            return resp
+            return _finalize_response(resp)
 
         # ── L1: Определение причины обращения ──
         if reason_id:
@@ -705,7 +840,15 @@ class RAGEngine:
                 }
             ]
         else:
+            l1_question = question
             l1 = classify_reason(question)
+
+            l1_question, l1, llm_extractor_used = await self._maybe_normalize_question_for_l1(question, l1)
+            if llm_extractor_used:
+                llm_used_for_classify = True
+                llm_extractor_original_question = question
+                llm_extractor_normalized_question = l1_question
+
             l1_marker_weights = l1.marker_weights
 
             l1_candidates_data = [
@@ -763,11 +906,11 @@ class RAGEngine:
                         "llm_involvement": "none",
                         "processing_time_ms": int((_time.time() - _start) * 1000),
                     }
-                return resp
+                return _finalize_response(resp)
 
             # Если неоднозначно — пробуем LLM-классификацию
             if not l1.is_confident and l1.needs_clarification:
-                l1 = await self._llm_classify_reason(question, l1)
+                l1 = await self._llm_classify_reason(l1_question, l1)
                 llm_used_for_classify = True
 
             if l1.reason is None:
@@ -818,7 +961,7 @@ class RAGEngine:
                         start_time=_start,
                         marker_weights=l1_marker_weights,
                     )
-                return resp
+                return _finalize_response(resp)
 
             # Проверка обязательных маркеров
             if cls_rules.required_markers and l1_winning:
@@ -852,7 +995,7 @@ class RAGEngine:
                         )
                         trace["marker_clarification_check"] = marker_clarification_check
                         resp.debug_trace = trace
-                    return resp
+                    return _finalize_response(resp)
 
         # ── L1.5: Проверка правил 100%-эскалации ──
         escalation_check = self._check_forced_escalation(question, reason)
@@ -893,7 +1036,7 @@ class RAGEngine:
                     "llm_involvement": "classification_only" if llm_used_for_classify else "none",
                     "processing_time_ms": int(_total * 1000),
                 }
-            return resp
+            return _finalize_response(resp)
 
         # ── Full-Context LLM / Standard L2→L3 branching ──
         if reason.full_context_llm.enabled:
@@ -937,7 +1080,7 @@ class RAGEngine:
                         "llm_involvement": "classification_only" if llm_used_for_classify else "none",
                         "processing_time_ms": int(_total * 1000),
                     }
-                return resp
+                return _finalize_response(resp)
 
             # Собираем полный контекст из всей БЗ причины
             full_context = self._build_full_context(reason)
@@ -979,7 +1122,7 @@ class RAGEngine:
                         "llm_involvement": "classification_only" if llm_used_for_classify else "none",
                         "processing_time_ms": int(_total * 1000),
                     }
-                return resp
+                return _finalize_response(resp)
 
             # Определяем провайдер: per-reason override или глобальный
             fc_settings = reason.full_context_llm
@@ -1093,7 +1236,7 @@ class RAGEngine:
                         ),
                         "processing_time_ms": int(_total * 1000),
                     }
-                return resp
+                return _finalize_response(resp)
 
             if routing_decision is not None and routing_decision.decision == "escalation":
                 _total = _time.time() - _start
@@ -1141,7 +1284,7 @@ class RAGEngine:
                         ),
                         "processing_time_ms": int(_total * 1000),
                     }
-                return resp
+                return _finalize_response(resp)
 
             needs_escalation = confidence < settings.rag_confidence_threshold if routing_decision is None else False
             if not needs_escalation:
@@ -1198,7 +1341,7 @@ class RAGEngine:
                     "processing_time_ms": int(_total * 1000),
                 }
 
-            return resp
+            return _finalize_response(resp)
 
         # ── L2: Определение тематического раздела ──
         l2 = classify_section(question, reason)
@@ -1239,7 +1382,7 @@ class RAGEngine:
                     "llm_involvement": "classification_only" if llm_used_for_classify else "none",
                     "processing_time_ms": int(_total * 1000),
                 }
-            return resp
+            return _finalize_response(resp)
 
         # ── L3: Генерация ответа через выбранный LLM ──
         context = self._build_reason_context(reason, l2, question)
@@ -1281,7 +1424,7 @@ class RAGEngine:
                     "llm_involvement": "classification_only" if llm_used_for_classify else "none",
                     "processing_time_ms": int(_total * 1000),
                 }
-            return resp
+            return _finalize_response(resp)
 
         messages = [
             {"role": "system", "text": SYSTEM_PROMPT},
@@ -1382,7 +1525,7 @@ class RAGEngine:
                     "llm_involvement": ("classification+generation" if llm_used_for_classify else "generation"),
                     "processing_time_ms": int(_total * 1000),
                 }
-            return resp
+            return _finalize_response(resp)
 
         if routing_decision is not None and routing_decision.decision == "escalation":
             _total = _time.time() - _start
@@ -1423,7 +1566,7 @@ class RAGEngine:
                     "llm_involvement": ("classification+generation" if llm_used_for_classify else "generation"),
                     "processing_time_ms": int(_total * 1000),
                 }
-            return resp
+            return _finalize_response(resp)
 
         needs_escalation = confidence < settings.rag_confidence_threshold if routing_decision is None else False
         if not needs_escalation:
@@ -1487,7 +1630,7 @@ class RAGEngine:
                 "processing_time_ms": int(_total * 1000),
             }
 
-        return resp
+        return _finalize_response(resp)
 
     async def _llm_classify_reason(self, question: str, l1: L1Result) -> L1Result:
         """LLM-классификация причины обращения при неоднозначности."""

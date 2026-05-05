@@ -2059,6 +2059,17 @@ async function sendDebugMessage() {
             traceHtml += `<h4>Confidence</h4>`;
             traceHtml += `<div>Значение: <b>${t.confidence_parsed?.toFixed(2) ?? '—'}</b> | Причина: ${t.confidence_reason || '—'}</div>`;
 
+            if (t.llm_extractor_used) {
+                traceHtml += `<h4>L1 prepass — LLM extractor</h4>`;
+                traceHtml += `<div>Extractor сработал до marker-классификации.</div>`;
+                if (t.llm_extractor_original_question) {
+                    traceHtml += `<div style="margin-top:6px;"><b>Исходный вопрос:</b><br>${escapeHtml(t.llm_extractor_original_question)}</div>`;
+                }
+                if (t.llm_extractor_normalized_question) {
+                    traceHtml += `<div style="margin-top:6px;"><b>Нормализованный вопрос:</b><br>${escapeHtml(t.llm_extractor_normalized_question)}</div>`;
+                }
+            }
+
             if (t.routing_decision) {
                 traceHtml += `<h4>L3 — Маршрутизация ответа</h4>`;
                 traceHtml += `<div>Решение: <b>${t.routing_decision}</b>`;
