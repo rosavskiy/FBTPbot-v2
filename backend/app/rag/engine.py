@@ -1355,9 +1355,7 @@ class RAGEngine:
                     "clarification_kind": "answer_refinement",
                     "clarification_attempt": refinement_attempt + 1,
                     "previous_confidence": confidence,
-                    "llm_involvement": (
-                        "classification+generation" if llm_used_for_classify else "generation"
-                    ),
+                    "llm_involvement": ("classification+generation" if llm_used_for_classify else "generation"),
                     "processing_time_ms": int(_total * 1000),
                 }
             return resp
@@ -1398,9 +1396,7 @@ class RAGEngine:
                     "clarification_kind": "answer_refinement",
                     "clarification_attempt": refinement_attempt,
                     "previous_confidence": confidence,
-                    "llm_involvement": (
-                        "classification+generation" if llm_used_for_classify else "generation"
-                    ),
+                    "llm_involvement": ("classification+generation" if llm_used_for_classify else "generation"),
                     "processing_time_ms": int(_total * 1000),
                 }
             return resp
