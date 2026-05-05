@@ -34,12 +34,15 @@ from app.database.reason_store import (
 )
 from app.llm_settings import (
     apply_llm_settings_snapshot,
+    get_chat_routing_policy_settings,
     get_active_llm_display,
     get_classification_settings,
     get_llm_settings_snapshot,
+    save_chat_routing_policy_settings,
     save_classification_settings,
     save_runtime_llm_settings,
 )
+from app.models.schemas import ChatRoutingPolicy
 from app.models.reason_schemas import ContactReason
 
 logger = logging.getLogger(__name__)
@@ -529,6 +532,28 @@ async def update_cls_settings(
         details=str(payload.model_dump()),
     )
     return ClassificationSettingsResponse(**get_classification_settings())
+
+
+@router.get("/chat-routing-policy", response_model=ChatRoutingPolicy)
+async def get_chat_routing_policy(user: AdminUser = _any_admin):
+    return ChatRoutingPolicy(**get_chat_routing_policy_settings())
+
+
+@router.put("/chat-routing-policy", response_model=ChatRoutingPolicy)
+async def update_chat_routing_policy(
+    payload: ChatRoutingPolicy, user: AdminUser = _editor, db: AsyncSession = Depends(get_admin_db)
+):
+    data = save_chat_routing_policy_settings(payload.model_dump())
+    logger.info("Chat routing policy updated: %s", data)
+    await log_action(
+        db,
+        user_id=user.id,
+        username=user.username,
+        action="settings_change",
+        entity_type="chat_routing_policy",
+        details=str(data),
+    )
+    return ChatRoutingPolicy(**data)
 
 
 # ── Global Escalation (L0) ──

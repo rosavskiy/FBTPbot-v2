@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { api, ChatResponse, FileData, SuggestedTopic, toDataUri } from '../api/client'
+import { api, ChatResponse, ChatRoutingPolicy, FileData, SuggestedTopic, toDataUri } from '../api/client'
 import ReactMarkdown from 'react-markdown'
 import './ChatPage.css'
 
@@ -27,6 +27,7 @@ export function ChatPage() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [routingPolicy, setRoutingPolicy] = useState<ChatRoutingPolicy | null>(null)
   const [showEscalation, setShowEscalation] = useState(false)
   const [escalationSent, setEscalationSent] = useState(false)
   const [contactInfo, setContactInfo] = useState('')
@@ -41,6 +42,20 @@ export function ChatPage() {
     scrollToBottom()
   }, [messages, scrollToBottom])
 
+  const loadRoutingPolicy = useCallback(async (): Promise<ChatRoutingPolicy | null> => {
+    try {
+      const policy = await api.getChatRoutingPolicy()
+      setRoutingPolicy(policy)
+      return policy
+    } catch {
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadRoutingPolicy()
+  }, [loadRoutingPolicy])
+
   const sendMessage = async () => {
     const trimmed = input.trim()
     if (!trimmed || loading) return
@@ -51,9 +66,11 @@ export function ChatPage() {
     setLoading(true)
 
     try {
+      const activeRoutingPolicy = routingPolicy ?? await loadRoutingPolicy()
       const response: ChatResponse = await api.sendMessage(
         trimmed,
-        sessionId || undefined
+        sessionId || undefined,
+        activeRoutingPolicy || undefined,
       )
 
       if (!sessionId) {
@@ -148,7 +165,8 @@ export function ChatPage() {
     setLoading(true)
 
     try {
-      const response: ChatResponse = await api.sendMessage(text, sessionId || undefined)
+      const activeRoutingPolicy = routingPolicy ?? await loadRoutingPolicy()
+      const response: ChatResponse = await api.sendMessage(text, sessionId || undefined, activeRoutingPolicy || undefined)
       if (!sessionId) setSessionId(response.session_id)
       setActiveLlmLabel(response.show_llm_in_chat ? response.llm_label || null : null)
 

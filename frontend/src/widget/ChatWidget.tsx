@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { api, ChatResponse, FileData, SuggestedTopic, toDataUri } from '../api/client'
+import { api, ChatResponse, ChatRoutingPolicy, FileData, SuggestedTopic, toDataUri } from '../api/client'
 import ReactMarkdown from 'react-markdown'
 import './ChatWidget.css'
 
@@ -25,6 +25,7 @@ export function ChatWidget() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [routingPolicy, setRoutingPolicy] = useState<ChatRoutingPolicy | null>(null)
   const [unread, setUnread] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -39,6 +40,20 @@ export function ChatWidget() {
     }
   }, [messages, isOpen, scrollToBottom])
 
+  const loadRoutingPolicy = useCallback(async (): Promise<ChatRoutingPolicy | null> => {
+    try {
+      const policy = await api.getChatRoutingPolicy()
+      setRoutingPolicy(policy)
+      return policy
+    } catch {
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadRoutingPolicy()
+  }, [loadRoutingPolicy])
+
   const sendMessage = async () => {
     const trimmed = input.trim()
     if (!trimmed || loading) return
@@ -48,7 +63,8 @@ export function ChatWidget() {
     setLoading(true)
 
     try {
-      const response: ChatResponse = await api.sendMessage(trimmed, sessionId || undefined)
+      const activeRoutingPolicy = routingPolicy ?? await loadRoutingPolicy()
+      const response: ChatResponse = await api.sendMessage(trimmed, sessionId || undefined, activeRoutingPolicy || undefined)
 
       if (!sessionId) setSessionId(response.session_id)
       setActiveLlmLabel(response.show_llm_in_chat ? response.llm_label || null : null)
@@ -112,7 +128,8 @@ export function ChatWidget() {
     setLoading(true)
 
     try {
-      const response: ChatResponse = await api.sendMessage(text, sessionId || undefined)
+      const activeRoutingPolicy = routingPolicy ?? await loadRoutingPolicy()
+      const response: ChatResponse = await api.sendMessage(text, sessionId || undefined, activeRoutingPolicy || undefined)
       if (!sessionId) setSessionId(response.session_id)
       setActiveLlmLabel(response.show_llm_in_chat ? response.llm_label || null : null)
 

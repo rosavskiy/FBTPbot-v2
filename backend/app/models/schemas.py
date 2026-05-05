@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # === Уровни уверенности ===
 
@@ -53,10 +53,37 @@ class ChatMessage(BaseModel):
     timestamp: datetime | None = None
 
 
+class ChatRoutingPolicy(BaseModel):
+    enabled: bool = Field(False, description="Включить routing policy для mid-confidence ответов")
+    answer_threshold: float = Field(0.9, ge=0.0, le=1.0, description="Порог финального ответа")
+    clarification_min_confidence: float = Field(
+        0.55,
+        ge=0.0,
+        le=1.0,
+        description="Нижняя граница confidence для уточняющего вопроса",
+    )
+    clarification_max_confidence: float = Field(
+        0.89,
+        ge=0.0,
+        le=1.0,
+        description="Верхняя граница confidence для уточняющего вопроса",
+    )
+    max_refinement_attempts: int = Field(1, ge=0, le=3, description="Максимум post-answer уточнений")
+
+    @model_validator(mode="after")
+    def _validate_thresholds(self) -> ChatRoutingPolicy:
+        if self.clarification_min_confidence > self.clarification_max_confidence:
+            raise ValueError("clarification_min_confidence must be <= clarification_max_confidence")
+        if self.answer_threshold <= self.clarification_max_confidence:
+            raise ValueError("answer_threshold must be > clarification_max_confidence")
+        return self
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000, description="Сообщение пользователя")
     session_id: str | None = Field(None, description="ID сессии (для продолжения диалога)")
     debug: bool = Field(False, description="Включить debug-трейсинг pipeline")
+    routing_policy: ChatRoutingPolicy | None = Field(None, description="Политика маршрутизации mid-confidence ответов")
 
 
 class SuggestedTopicSchema(BaseModel):
@@ -86,6 +113,10 @@ class DebugTrace(BaseModel):
     llm_temperature: float | None = Field(None, description="Использованная температура")
     confidence_parsed: float | None = Field(None, description="Распарсенный confidence")
     confidence_reason: str | None = Field(None, description="Причина confidence")
+    routing_decision: str | None = Field(None, description="Итоговое решение маршрутизации ответа")
+    clarification_kind: str | None = Field(None, description="Вид уточнения")
+    clarification_attempt: int | None = Field(None, description="Номер попытки уточнения")
+    previous_confidence: float | None = Field(None, description="Confidence до маршрутизации clarification")
     llm_involvement: str = Field(
         "none", description="Степень участия LLM: none / classification_only / generation / classification+generation"
     )
@@ -118,6 +149,7 @@ class ChatResponse(BaseModel):
     has_files: bool = Field(False, description="Есть ли вложения (изображения, документы)")
     files: list[FileData] = Field(default_factory=list, description="Вложения в формате base64 data URI")
     response_type: str = Field("answer", description="Тип ответа: answer | clarification")
+    clarification_kind: str | None = Field(None, description="Вид уточнения, если response_type=clarification")
     suggested_topics: list[SuggestedTopicSchema] | None = Field(
         None, description="Предложенные темы для уточнения (при response_type=clarification)"
     )

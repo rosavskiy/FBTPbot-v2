@@ -21,6 +21,7 @@
         <button class="btn btn-secondary editor-only" onclick="openLlmSettings()"><span class="ico ico-settings"></span> Настройка LLM</button>
         <button class="btn btn-secondary editor-only" onclick="openGlobalEscalation()" title="Глобальные правила эскалации L0 (до классификации)"><span class="ico ico-settings"></span> L0</button>
         <button class="btn btn-secondary editor-only" onclick="openClassificationSettings()" title="Настройки классификации L1 (веса маркеров, пороги)"><span class="ico ico-settings"></span> L1</button>
+        <button class="btn btn-secondary editor-only" onclick="openChatRoutingPolicy()" title="Правила маршрутизации ответа по confidence после генерации"><span class="ico ico-settings"></span> L3</button>
         <a href="/api/bot-config/template" class="btn btn-secondary" style="text-decoration:none"><span class="ico ico-file-text"></span> Скачать шаблон</a>
         <input type="file" id="importFileInput" accept=".docx" style="display:none" onchange="importDocx(this)">
         <button class="btn btn-success editor-only" onclick="document.getElementById('importFileInput').click()"><span class="ico ico-download"></span> Импорт .docx</button>
@@ -461,6 +462,75 @@
     </div>
 </div>
 
+<!-- Chat Routing Policy (L3) Modal -->
+<div class="modal-overlay" id="chatRoutingModal">
+    <div class="modal" style="max-width:560px">
+        <div class="modal-header">
+            <h2><span class="ico ico-settings"></span> Маршрутизация ответов по confidence (L3)</h2>
+            <button class="btn btn-sm btn-danger btn-close" onclick="closeChatRoutingPolicy()"></button>
+        </div>
+        <div class="modal-body" style="padding:16px; overflow-y:auto; max-height:70vh;">
+            <div style="font-size:13px; color:var(--gray-400); margin-bottom:12px; line-height:1.5;">
+                Политика применяется во встроенных web/widget клиентах и в debug-чате этой страницы.
+                Telegram в этот контур пока не входит.
+            </div>
+            <div class="form-row">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <label class="toggle">
+                        <input type="checkbox" id="chatRoutingEnabled" onchange="updateChatRoutingPolicySummary()">
+                        <span class="slider"></span>
+                    </label>
+                    <span style="font-size:13px; color:var(--gray-300)">Включено</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-label" title="Если confidence выше этого порога — пользователь получает финальный ответ.">
+                    Финальный ответ от confidence выше
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="range" id="chatAnswerThreshold" min="0.50" max="1" step="0.01" value="0.90" style="flex:1;"
+                        oninput="document.getElementById('chatAnswerThresholdVal').textContent=parseFloat(this.value).toFixed(2); updateChatRoutingPolicySummary()">
+                    <span id="chatAnswerThresholdVal" style="min-width:35px; font-family:var(--font-mono); font-size:13px;">0.90</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-label" title="Если confidence попадает в этот диапазон — бот задаёт уточняющий вопрос.">
+                    Нижняя граница окна уточнения
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="range" id="chatClarificationMin" min="0" max="1" step="0.01" value="0.55" style="flex:1;"
+                        oninput="document.getElementById('chatClarificationMinVal').textContent=parseFloat(this.value).toFixed(2); updateChatRoutingPolicySummary()">
+                    <span id="chatClarificationMinVal" style="min-width:35px; font-family:var(--font-mono); font-size:13px;">0.55</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-label" title="До этой границы ответ переходит в зону уточнения, а выше неё — к порогу финального ответа.">
+                    Верхняя граница окна уточнения
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="range" id="chatClarificationMax" min="0" max="0.99" step="0.01" value="0.89" style="flex:1;"
+                        oninput="document.getElementById('chatClarificationMaxVal').textContent=parseFloat(this.value).toFixed(2); updateChatRoutingPolicySummary()">
+                    <span id="chatClarificationMaxVal" style="min-width:35px; font-family:var(--font-mono); font-size:13px;">0.89</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-label">Максимум уточняющих вопросов</div>
+                <select class="form-input" id="chatMaxRefinementAttempts" style="max-width:120px;" onchange="updateChatRoutingPolicySummary()">
+                    <option value="0">0</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                </select>
+            </div>
+            <div id="chatRoutingSummary" style="font-size:13px; color:var(--gray-400); background:rgba(62,121,247,0.08); border:1px solid rgba(62,121,247,0.18); border-radius:10px; padding:12px 14px;"></div>
+            <div style="margin-top:16px; display:flex; gap:8px;">
+                <button class="btn btn-primary" onclick="saveChatRoutingPolicy()"><span class="ico ico-save"></span> Сохранить</button>
+                <button class="btn btn-secondary" onclick="closeChatRoutingPolicy()">Отмена</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- File Picker Modal -->
 <div class="modal-overlay" id="imagePickerModal">
     <div class="modal" style="max-width:600px; height:auto; max-height:80vh;">
@@ -498,6 +568,7 @@ let currentReasonId = null;
 let currentReason = null;
 let isNewReason = false;
 let sidebarCollapsed = {};  // folder path → collapsed state
+let chatRoutingPolicy = null;
 
 // ── Init ──
 document.addEventListener('DOMContentLoaded', () => {
@@ -511,7 +582,7 @@ async function initPage() {
     if (AdminNav.isViewer()) {
         document.querySelectorAll('.editor-only').forEach(el => el.style.display = 'none');
     }
-    await Promise.all([loadReasons(), loadLlmSettings(), loadClassificationSettings(), loadGlobalEscalation(), loadImages()]);
+    await Promise.all([loadReasons(), loadLlmSettings(), loadClassificationSettings(), loadChatRoutingPolicy(), loadGlobalEscalation(), loadImages()]);
 
     // Open reason from URL hash (e.g. #reason_some_id)
     const hash = location.hash;
@@ -1066,6 +1137,89 @@ async function saveClassificationSettings() {
         if (!r.ok) throw new Error(data.detail || 'Ошибка сохранения');
         notify('Настройки классификации сохранены', 'success');
         closeClassificationSettings();
+    } catch (e) {
+        notify(e.message, 'error');
+    }
+}
+
+// ── Chat Routing Policy (L3) ──
+function openChatRoutingPolicy() {
+    document.getElementById('chatRoutingModal').classList.add('open');
+}
+
+function closeChatRoutingPolicy() {
+    document.getElementById('chatRoutingModal').classList.remove('open');
+}
+
+function updateChatRoutingPolicySummary() {
+    const enabled = document.getElementById('chatRoutingEnabled').checked;
+    const answerThreshold = parseFloat(document.getElementById('chatAnswerThreshold').value);
+    const clarificationMin = parseFloat(document.getElementById('chatClarificationMin').value);
+    const clarificationMax = parseFloat(document.getElementById('chatClarificationMax').value);
+    const maxAttempts = parseInt(document.getElementById('chatMaxRefinementAttempts').value, 10);
+    const summary = document.getElementById('chatRoutingSummary');
+
+    if (!enabled) {
+        summary.innerHTML = 'Политика выключена. Встроенные web/widget клиенты и debug-чат не будут включать answer refinement routing в запрос.';
+        return;
+    }
+
+    summary.innerHTML = `Ниже <b>${clarificationMin.toFixed(2)}</b> → эскалация. ` +
+        `От <b>${clarificationMin.toFixed(2)}</b> до <b>${clarificationMax.toFixed(2)}</b> → уточняющий вопрос ` +
+        `(максимум: <b>${maxAttempts}</b>). ` +
+        `Выше <b>${answerThreshold.toFixed(2)}</b> → финальный ответ.`;
+}
+
+async function loadChatRoutingPolicy() {
+    try {
+        const r = await fetch(`${API}/chat-routing-policy`);
+        if (!r.ok) throw new Error('Не удалось загрузить routing policy');
+        const data = await r.json();
+        chatRoutingPolicy = data;
+        document.getElementById('chatRoutingEnabled').checked = Boolean(data.enabled);
+        document.getElementById('chatAnswerThreshold').value = data.answer_threshold ?? 0.9;
+        document.getElementById('chatAnswerThresholdVal').textContent = (data.answer_threshold ?? 0.9).toFixed(2);
+        document.getElementById('chatClarificationMin').value = data.clarification_min_confidence ?? 0.55;
+        document.getElementById('chatClarificationMinVal').textContent = (data.clarification_min_confidence ?? 0.55).toFixed(2);
+        document.getElementById('chatClarificationMax').value = data.clarification_max_confidence ?? 0.89;
+        document.getElementById('chatClarificationMaxVal').textContent = (data.clarification_max_confidence ?? 0.89).toFixed(2);
+        document.getElementById('chatMaxRefinementAttempts').value = String(data.max_refinement_attempts ?? 1);
+        updateChatRoutingPolicySummary();
+    } catch (e) {
+        console.warn('Failed to load chat routing policy:', e);
+    }
+}
+
+async function saveChatRoutingPolicy() {
+    const payload = {
+        enabled: document.getElementById('chatRoutingEnabled').checked,
+        answer_threshold: parseFloat(document.getElementById('chatAnswerThreshold').value),
+        clarification_min_confidence: parseFloat(document.getElementById('chatClarificationMin').value),
+        clarification_max_confidence: parseFloat(document.getElementById('chatClarificationMax').value),
+        max_refinement_attempts: parseInt(document.getElementById('chatMaxRefinementAttempts').value, 10),
+    };
+
+    if (payload.clarification_min_confidence > payload.clarification_max_confidence) {
+        notify('Нижняя граница окна уточнения должна быть меньше или равна верхней', 'error');
+        return;
+    }
+    if (payload.answer_threshold <= payload.clarification_max_confidence) {
+        notify('Порог финального ответа должен быть выше верхней границы окна уточнения', 'error');
+        return;
+    }
+
+    try {
+        const r = await fetch(`${API}/chat-routing-policy`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'Ошибка сохранения');
+        chatRoutingPolicy = data;
+        updateChatRoutingPolicySummary();
+        notify('Маршрутизация ответов сохранена', 'success');
+        closeChatRoutingPolicy();
     } catch (e) {
         notify(e.message, 'error');
     }
@@ -1799,6 +1953,7 @@ async function sendDebugMessage() {
     try {
         const payload = { message: msg, debug: true };
         if (debugSessionId) payload.session_id = debugSessionId;
+        if (chatRoutingPolicy) payload.routing_policy = chatRoutingPolicy;
 
         const r = await fetch('/api/chat', {
             method: 'POST',
@@ -1829,6 +1984,7 @@ async function sendDebugMessage() {
         `;
         if (data.detected_reason) metaHtml += `<span><span class="ico ico-pin"></span> ${data.detected_reason}</span>`;
         if (data.thematic_section) metaHtml += `<span><span class="ico ico-folder-open"></span> ${data.thematic_section}</span>`;
+        if (data.response_type === 'clarification') metaHtml += `<span><span class="ico ico-help-circle"></span> Уточнение${data.clarification_kind ? `: ${data.clarification_kind}` : ''}</span>`;
         if (data.needs_escalation) metaHtml += `<span style="color:#fca5a5"><span class="ico ico-alert-tri"></span> Эскалация</span>`;
 
         let traceHtml = '';
@@ -1902,6 +2058,15 @@ async function sendDebugMessage() {
 
             traceHtml += `<h4>Confidence</h4>`;
             traceHtml += `<div>Значение: <b>${t.confidence_parsed?.toFixed(2) ?? '—'}</b> | Причина: ${t.confidence_reason || '—'}</div>`;
+
+            if (t.routing_decision) {
+                traceHtml += `<h4>L3 — Маршрутизация ответа</h4>`;
+                traceHtml += `<div>Решение: <b>${t.routing_decision}</b>`;
+                if (t.clarification_kind) traceHtml += ` | Вид уточнения: <b>${t.clarification_kind}</b>`;
+                if (t.clarification_attempt != null) traceHtml += ` | Попытка: <b>${t.clarification_attempt}</b>`;
+                if (t.previous_confidence != null) traceHtml += ` | Confidence до маршрутизации: <b>${t.previous_confidence.toFixed(2)}</b>`;
+                traceHtml += `</div>`;
+            }
 
             traceHtml += `<div style="margin-top:8px; color:var(--gray-500)"><span class="ico ico-timer"></span> Время обработки: ${t.processing_time_ms} мс</div>`;
         }

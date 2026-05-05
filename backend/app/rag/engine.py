@@ -25,6 +25,7 @@ from app.classifier.section_classifier import L2Result, classify_section
 from app.config import settings
 from app.llm_settings import get_classification_settings, get_llm_settings_snapshot
 from app.models.reason_schemas import ClassificationRules, ContactReason
+from app.models.schemas import ChatRoutingPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -120,10 +121,18 @@ class RAGResponse:
     detected_reason_name: str = ""
     thematic_section: str = ""
     classification_method: str = ""
+    clarification_kind: str = ""
     # Для уточнения — список кандидатов [{reason_id, reason_name, score}]
     clarification_candidates: list[dict] = field(default_factory=list)
     # Debug trace (заполняется только при debug=True)
     debug_trace: dict | None = None
+
+
+@dataclass(frozen=True)
+class AnswerRoutingDecision:
+    decision: str
+    prompt: str = ""
+    prompt_source: str = ""
 
 
 class YandexGPTClient:
@@ -461,6 +470,63 @@ class RAGEngine:
             "processing_time_ms": int((_time.time() - start_time) * 1000),
         }
 
+    @staticmethod
+    def _build_answer_refinement_prompt(
+        question: str,
+        reason: ContactReason,
+        section_title: str | None = None,
+    ) -> tuple[str, str]:
+        text_lower = re.sub(r"\s+", " ", question.lower().strip())
+
+        if any(token in text_lower for token in ("ошиб", "код", "ккм", "касс", "чек", "маркиров", "честн", "чз")):
+            return (
+                "Уточните, пожалуйста, точный текст или код ошибки, который вы видите на экране.",
+                "rule:error_text",
+            )
+
+        if any(token in text_lower for token in ("наклад", "документ", "приход", "расход", "поставщик")):
+            return (
+                "Уточните, пожалуйста, номер документа и что именно с ним происходит.",
+                "rule:document_number",
+            )
+
+        if any(token in text_lower for token in ("товар", "карточк", "категор", "грлс", "жнв")):
+            return (
+                "Уточните, пожалуйста, название товара и текст сообщения системы.",
+                "rule:item_details",
+            )
+
+        target = section_title or reason.name
+        return (
+            f"Уточните, пожалуйста, одну ключевую деталь по теме «{target}»: код ошибки, номер документа или текст сообщения системы.",
+            "fallback:generic",
+        )
+
+    def _resolve_answer_routing(
+        self,
+        *,
+        question: str,
+        reason: ContactReason,
+        section_title: str | None,
+        confidence: float,
+        routing_policy: ChatRoutingPolicy | None,
+        refinement_attempt: int,
+    ) -> AnswerRoutingDecision | None:
+        if routing_policy is None or not routing_policy.enabled:
+            return None
+
+        if confidence >= routing_policy.answer_threshold:
+            return AnswerRoutingDecision(decision="answer")
+
+        if (
+            routing_policy.clarification_min_confidence <= confidence <= routing_policy.clarification_max_confidence
+            and refinement_attempt < routing_policy.max_refinement_attempts
+        ):
+            prompt, prompt_source = self._build_answer_refinement_prompt(question, reason, section_title)
+            return AnswerRoutingDecision(decision="clarification", prompt=prompt, prompt_source=prompt_source)
+
+        return AnswerRoutingDecision(decision="escalation")
+
     def _check_forced_escalation(self, question: str, reason: ContactReason) -> dict:
         """Проверка правил 100%-эскалации (L1.5).
 
@@ -524,6 +590,8 @@ class RAGEngine:
         question: str,
         chat_history: list[dict] | None = None,
         reason_id: str | None = None,
+        routing_policy: ChatRoutingPolicy | None = None,
+        refinement_attempt: int = 0,
         debug: bool = False,
     ) -> RAGResponse:
         """Основной метод: полный pipeline L1→L2→L3.
@@ -945,7 +1013,113 @@ class RAGEngine:
             clean_answer = _strip_markdown(clean_answer)
             clean_answer = _truncate_to_bytes(clean_answer, MAX_ANSWER_BYTES)
 
-            needs_escalation = confidence < settings.rag_confidence_threshold
+            routing_decision = self._resolve_answer_routing(
+                question=question,
+                reason=reason,
+                section_title="Full-Context",
+                confidence=confidence,
+                routing_policy=routing_policy,
+                refinement_attempt=refinement_attempt,
+            )
+
+            if routing_decision is not None and routing_decision.decision == "clarification":
+                _total = _time.time() - _start
+                resp = RAGResponse(
+                    answer=routing_decision.prompt,
+                    confidence=confidence,
+                    confidence_reason=conf_reason,
+                    needs_escalation=False,
+                    detected_reason=reason.id,
+                    detected_reason_name=reason.name,
+                    thematic_section="Full-Context",
+                    classification_method="answer_refinement",
+                    clarification_kind="answer_refinement",
+                )
+                if debug:
+                    prompt_text = "\n\n".join(f"[{m['role']}]\n{m.get('text', m.get('content', ''))}" for m in messages)
+                    resp.debug_trace = {
+                        "l1_method": l1_method,
+                        "l1_confident": l1_confident,
+                        "l1_reason": reason.name,
+                        "l1_reason_id": reason.id,
+                        "l1_candidates": l1_candidates_data,
+                        "escalation_check": escalation_check,
+                        "full_context_mode": True,
+                        "full_context_provider": fc_provider_name,
+                        "full_context_chars": full_context_chars,
+                        "l2_method": "skipped",
+                        "l2_section": None,
+                        "l2_best_qa_score": None,
+                        "l2_best_example_score": None,
+                        "l2_best_complaint_score": None,
+                        "llm_prompt": prompt_text,
+                        "llm_raw_response": raw_answer,
+                        "llm_provider": fc_provider_name,
+                        "llm_temperature": llm_temp,
+                        "confidence_parsed": confidence,
+                        "confidence_reason": conf_reason,
+                        "routing_decision": "clarification",
+                        "clarification_kind": "answer_refinement",
+                        "clarification_attempt": refinement_attempt + 1,
+                        "previous_confidence": confidence,
+                        "llm_involvement": (
+                            "classification+full_context_generation"
+                            if llm_used_for_classify
+                            else "full_context_generation"
+                        ),
+                        "processing_time_ms": int(_total * 1000),
+                    }
+                return resp
+
+            if routing_decision is not None and routing_decision.decision == "escalation":
+                _total = _time.time() - _start
+                resp = RAGResponse(
+                    answer="По данному вопросу недостаточно уверенности для автоматического ответа. Передаю ваше обращение оператору.",
+                    confidence=confidence,
+                    confidence_reason=conf_reason,
+                    needs_escalation=True,
+                    detected_reason=reason.id,
+                    detected_reason_name=reason.name,
+                    thematic_section="Full-Context",
+                    classification_method="answer_refinement_escalation",
+                )
+                if debug:
+                    prompt_text = "\n\n".join(f"[{m['role']}]\n{m.get('text', m.get('content', ''))}" for m in messages)
+                    resp.debug_trace = {
+                        "l1_method": l1_method,
+                        "l1_confident": l1_confident,
+                        "l1_reason": reason.name,
+                        "l1_reason_id": reason.id,
+                        "l1_candidates": l1_candidates_data,
+                        "escalation_check": escalation_check,
+                        "full_context_mode": True,
+                        "full_context_provider": fc_provider_name,
+                        "full_context_chars": full_context_chars,
+                        "l2_method": "skipped",
+                        "l2_section": None,
+                        "l2_best_qa_score": None,
+                        "l2_best_example_score": None,
+                        "l2_best_complaint_score": None,
+                        "llm_prompt": prompt_text,
+                        "llm_raw_response": raw_answer,
+                        "llm_provider": fc_provider_name,
+                        "llm_temperature": llm_temp,
+                        "confidence_parsed": confidence,
+                        "confidence_reason": conf_reason,
+                        "routing_decision": "escalation",
+                        "clarification_kind": "answer_refinement",
+                        "clarification_attempt": refinement_attempt,
+                        "previous_confidence": confidence,
+                        "llm_involvement": (
+                            "classification+full_context_generation"
+                            if llm_used_for_classify
+                            else "full_context_generation"
+                        ),
+                        "processing_time_ms": int(_total * 1000),
+                    }
+                return resp
+
+            needs_escalation = confidence < settings.rag_confidence_threshold if routing_decision is None else False
             if not needs_escalation:
                 clean_answer = _strip_operator_footer(clean_answer)
 
@@ -993,6 +1167,9 @@ class RAGEngine:
                     "llm_temperature": llm_temp,
                     "confidence_parsed": confidence,
                     "confidence_reason": conf_reason,
+                    "routing_decision": routing_decision.decision if routing_decision is not None else None,
+                    "clarification_attempt": refinement_attempt if routing_decision is not None else None,
+                    "previous_confidence": confidence if routing_decision is not None else None,
                     "llm_involvement": llm_involvement,
                     "processing_time_ms": int(_total * 1000),
                 }
@@ -1132,7 +1309,103 @@ class RAGEngine:
         clean_answer = _strip_markdown(clean_answer)
         clean_answer = _truncate_to_bytes(clean_answer, MAX_ANSWER_BYTES)
 
-        needs_escalation = confidence < settings.rag_confidence_threshold
+        routing_decision = self._resolve_answer_routing(
+            question=question,
+            reason=reason,
+            section_title=section_title,
+            confidence=confidence,
+            routing_policy=routing_policy,
+            refinement_attempt=refinement_attempt,
+        )
+
+        if routing_decision is not None and routing_decision.decision == "clarification":
+            _total = _time.time() - _start
+            resp = RAGResponse(
+                answer=routing_decision.prompt,
+                confidence=confidence,
+                confidence_reason=conf_reason,
+                needs_escalation=False,
+                detected_reason=reason.id,
+                detected_reason_name=reason.name,
+                thematic_section=section_title,
+                classification_method="answer_refinement",
+                clarification_kind="answer_refinement",
+            )
+            if debug:
+                prompt_text = "\n\n".join(f"[{m['role']}]\n{m.get('text', m.get('content', ''))}" for m in messages)
+                resp.debug_trace = {
+                    "l1_method": l1_method,
+                    "l1_confident": l1_confident,
+                    "l1_reason": reason.name,
+                    "l1_reason_id": reason.id,
+                    "l1_candidates": l1_candidates_data,
+                    "escalation_check": escalation_check,
+                    "l2_method": l2.method,
+                    "l2_section": l2.section.title if l2.section else None,
+                    "l2_best_qa_score": l2.best_qa_score,
+                    "l2_best_example_score": l2.best_example_score,
+                    "l2_best_complaint_score": l2.best_complaint_score,
+                    "llm_prompt": prompt_text,
+                    "llm_raw_response": raw_answer,
+                    "llm_provider": llm_provider_name,
+                    "llm_temperature": llm_temp,
+                    "confidence_parsed": confidence,
+                    "confidence_reason": conf_reason,
+                    "routing_decision": "clarification",
+                    "clarification_kind": "answer_refinement",
+                    "clarification_attempt": refinement_attempt + 1,
+                    "previous_confidence": confidence,
+                    "llm_involvement": (
+                        "classification+generation" if llm_used_for_classify else "generation"
+                    ),
+                    "processing_time_ms": int(_total * 1000),
+                }
+            return resp
+
+        if routing_decision is not None and routing_decision.decision == "escalation":
+            _total = _time.time() - _start
+            resp = RAGResponse(
+                answer="По данному вопросу недостаточно уверенности для автоматического ответа. Передаю ваше обращение оператору.",
+                confidence=confidence,
+                confidence_reason=conf_reason,
+                needs_escalation=True,
+                detected_reason=reason.id,
+                detected_reason_name=reason.name,
+                thematic_section=section_title,
+                classification_method="answer_refinement_escalation",
+            )
+            if debug:
+                prompt_text = "\n\n".join(f"[{m['role']}]\n{m.get('text', m.get('content', ''))}" for m in messages)
+                resp.debug_trace = {
+                    "l1_method": l1_method,
+                    "l1_confident": l1_confident,
+                    "l1_reason": reason.name,
+                    "l1_reason_id": reason.id,
+                    "l1_candidates": l1_candidates_data,
+                    "escalation_check": escalation_check,
+                    "l2_method": l2.method,
+                    "l2_section": l2.section.title if l2.section else None,
+                    "l2_best_qa_score": l2.best_qa_score,
+                    "l2_best_example_score": l2.best_example_score,
+                    "l2_best_complaint_score": l2.best_complaint_score,
+                    "llm_prompt": prompt_text,
+                    "llm_raw_response": raw_answer,
+                    "llm_provider": llm_provider_name,
+                    "llm_temperature": llm_temp,
+                    "confidence_parsed": confidence,
+                    "confidence_reason": conf_reason,
+                    "routing_decision": "escalation",
+                    "clarification_kind": "answer_refinement",
+                    "clarification_attempt": refinement_attempt,
+                    "previous_confidence": confidence,
+                    "llm_involvement": (
+                        "classification+generation" if llm_used_for_classify else "generation"
+                    ),
+                    "processing_time_ms": int(_total * 1000),
+                }
+            return resp
+
+        needs_escalation = confidence < settings.rag_confidence_threshold if routing_decision is None else False
         if not needs_escalation:
             clean_answer = _strip_operator_footer(clean_answer)
 
@@ -1187,6 +1460,9 @@ class RAGEngine:
                 "llm_temperature": llm_temp,
                 "confidence_parsed": confidence,
                 "confidence_reason": conf_reason,
+                "routing_decision": routing_decision.decision if routing_decision is not None else None,
+                "clarification_attempt": refinement_attempt if routing_decision is not None else None,
+                "previous_confidence": confidence if routing_decision is not None else None,
                 "llm_involvement": llm_involvement,
                 "processing_time_ms": int(_total * 1000),
             }

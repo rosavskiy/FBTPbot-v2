@@ -23,12 +23,22 @@ class MarkerClarificationRAGStub:
     def __init__(self):
         self.calls: list[dict] = []
 
-    async def ask(self, question: str, chat_history=None, reason_id: str | None = None, debug: bool = False):
+    async def ask(
+        self,
+        question: str,
+        chat_history=None,
+        reason_id: str | None = None,
+        routing_policy=None,
+        refinement_attempt: int = 0,
+        debug: bool = False,
+    ):
         self.calls.append(
             {
                 "question": question,
                 "chat_history": chat_history or [],
                 "reason_id": reason_id,
+                "routing_policy": routing_policy,
+                "refinement_attempt": refinement_attempt,
                 "debug": debug,
             }
         )
@@ -58,12 +68,22 @@ class ReasonSelectionRAGStub:
     def __init__(self):
         self.calls: list[dict] = []
 
-    async def ask(self, question: str, chat_history=None, reason_id: str | None = None, debug: bool = False):
+    async def ask(
+        self,
+        question: str,
+        chat_history=None,
+        reason_id: str | None = None,
+        routing_policy=None,
+        refinement_attempt: int = 0,
+        debug: bool = False,
+    ):
         self.calls.append(
             {
                 "question": question,
                 "chat_history": chat_history or [],
                 "reason_id": reason_id,
+                "routing_policy": routing_policy,
+                "refinement_attempt": refinement_attempt,
                 "debug": debug,
             }
         )
@@ -83,6 +103,54 @@ class ReasonSelectionRAGStub:
         return RAGResponse(
             answer="Откройте журнал накладных и проверьте последнюю синхронизацию.",
             confidence=0.88,
+            needs_escalation=False,
+            detected_reason="invoice_issue",
+            detected_reason_name="Проблема с накладной",
+            thematic_section="Накладные",
+            classification_method="L1:forced/L2:section_match",
+        )
+
+
+class AnswerRefinementRAGStub:
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    async def ask(
+        self,
+        question: str,
+        chat_history=None,
+        reason_id: str | None = None,
+        routing_policy=None,
+        refinement_attempt: int = 0,
+        debug: bool = False,
+    ):
+        self.calls.append(
+            {
+                "question": question,
+                "chat_history": chat_history or [],
+                "reason_id": reason_id,
+                "routing_policy": routing_policy,
+                "refinement_attempt": refinement_attempt,
+                "debug": debug,
+            }
+        )
+
+        if len(self.calls) == 1:
+            return RAGResponse(
+                answer="Уточните, пожалуйста, номер документа и что именно с ним происходит.",
+                confidence=0.72,
+                confidence_reason="Средняя уверенность по теме документа",
+                needs_escalation=False,
+                detected_reason="invoice_issue",
+                detected_reason_name="Проблема с накладной",
+                thematic_section="Накладные",
+                classification_method="answer_refinement",
+                clarification_kind="answer_refinement",
+            )
+
+        return RAGResponse(
+            answer="Проверьте документ 12345 в журнале обмена и перезапустите синхронизацию.",
+            confidence=0.93,
             needs_escalation=False,
             detected_reason="invoice_issue",
             detected_reason_name="Проблема с накладной",
@@ -191,6 +259,70 @@ async def test_reason_selection_uses_original_query_on_numeric_choice(tmp_path: 
         assert len(rag_stub.calls) == 2
         assert rag_stub.calls[1]["reason_id"] == "invoice_issue"
         assert rag_stub.calls[1]["question"] == "Проблема с документом"
+
+        await asyncio.sleep(0)
+
+        async with session_factory() as session:
+            pending = await session.scalar(
+                select(PendingClarification).where(PendingClarification.session_id == session_id)
+            )
+            assert pending is None
+    finally:
+        await client.aclose()
+        await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_answer_refinement_uses_pending_policy_and_same_session(tmp_path: Path):
+    client, engine, session_factory, rag_stub = await create_test_context(tmp_path, AnswerRefinementRAGStub())
+    try:
+        first_response = await client.post(
+            "/api/chat",
+            json={
+                "message": "Проблема с накладной",
+                "routing_policy": {
+                    "enabled": True,
+                    "answer_threshold": 0.9,
+                    "clarification_min_confidence": 0.55,
+                    "clarification_max_confidence": 0.89,
+                    "max_refinement_attempts": 1,
+                },
+            },
+        )
+        assert first_response.status_code == 200
+
+        first_data = first_response.json()
+        assert first_data["response_type"] == "clarification"
+        assert first_data["clarification_kind"] == "answer_refinement"
+        session_id = first_data["session_id"]
+
+        async with session_factory() as session:
+            pending = await session.scalar(
+                select(PendingClarification).where(PendingClarification.session_id == session_id)
+            )
+            assert pending is not None
+            assert pending.clarification_type == "answer_refinement"
+            assert pending.fixed_reason_id == "invoice_issue"
+            assert pending.payload_json is not None
+            assert "answer_threshold" in pending.payload_json
+
+        second_response = await client.post(
+            "/api/chat",
+            json={"message": "Документ 12345 не проводится", "session_id": session_id},
+        )
+        assert second_response.status_code == 200
+
+        second_data = second_response.json()
+        assert second_data["response_type"] == "answer"
+        assert second_data["detected_reason"] == "Проблема с накладной"
+
+        assert len(rag_stub.calls) == 2
+        assert rag_stub.calls[1]["reason_id"] == "invoice_issue"
+        assert rag_stub.calls[1]["routing_policy"] is not None
+        assert rag_stub.calls[1]["routing_policy"].enabled is True
+        assert rag_stub.calls[1]["refinement_attempt"] == 1
+        assert "Проблема с накладной" in rag_stub.calls[1]["question"]
+        assert "12345" in rag_stub.calls[1]["question"]
 
         await asyncio.sleep(0)
 

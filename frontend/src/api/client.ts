@@ -17,6 +17,14 @@ export interface FileData {
   ext: string
 }
 
+export interface ChatRoutingPolicy {
+  enabled: boolean
+  answer_threshold: number
+  clarification_min_confidence: number
+  clarification_max_confidence: number
+  max_refinement_attempts: number
+}
+
 const EXT_TO_MIME: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -43,6 +51,7 @@ export interface ChatResponse {
   has_files: boolean
   files: FileData[]
   response_type: 'answer' | 'clarification'
+  clarification_kind?: string | null
   suggested_topics: SuggestedTopic[] | null
   llm_provider?: string | null
   llm_model?: string | null
@@ -92,15 +101,22 @@ class ApiClient {
 
   // === Чат ===
 
-  async sendMessage(message: string, sessionId?: string): Promise<ChatResponse> {
+  async sendMessage(message: string, sessionId?: string, routingPolicy?: ChatRoutingPolicy | null): Promise<ChatResponse> {
     const res = await fetch(`${this.baseUrl}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message,
         session_id: sessionId || null,
+        routing_policy: routingPolicy || null,
       }),
     })
+    if (!res.ok) throw new Error(`API error: ${res.status}`)
+    return res.json()
+  }
+
+  async getChatRoutingPolicy(): Promise<ChatRoutingPolicy> {
+    const res = await fetch(`${this.baseUrl}/chat/routing-policy`)
     if (!res.ok) throw new Error(`API error: ${res.status}`)
     return res.json()
   }

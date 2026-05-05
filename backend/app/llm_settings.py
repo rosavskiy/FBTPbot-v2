@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from app.config import settings
+from app.models.schemas import ChatRoutingPolicy
 
 LLM_SETTING_KEYS = (
     "llm_provider",
@@ -33,6 +34,22 @@ CLASSIFICATION_DEFAULTS: dict[str, float] = {
     "l1_weight_numeric_tag": 5.0,
     "l1_weight_noun": 2.0,
     "l1_weight_verb": 1.0,
+}
+
+CHAT_ROUTING_SETTING_KEYS = (
+    "chat_routing_enabled",
+    "chat_answer_threshold",
+    "chat_clarification_min_confidence",
+    "chat_clarification_max_confidence",
+    "chat_max_refinement_attempts",
+)
+
+CHAT_ROUTING_DEFAULTS: dict[str, bool | float | int] = {
+    "enabled": False,
+    "answer_threshold": 0.9,
+    "clarification_min_confidence": 0.55,
+    "clarification_max_confidence": 0.89,
+    "max_refinement_attempts": 1,
 }
 
 
@@ -181,3 +198,70 @@ def save_classification_settings(data: dict[str, float]) -> None:
             existing[key] = data[key]
 
     runtime_path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def get_chat_routing_policy_settings() -> dict[str, bool | float | int]:
+    result = dict(CHAT_ROUTING_DEFAULTS)
+
+    runtime_path = get_runtime_llm_settings_path()
+    if runtime_path.exists():
+        try:
+            payload = json.loads(runtime_path.read_text(encoding="utf-8"))
+        except Exception:
+            payload = {}
+
+        enabled_raw = payload.get("chat_routing_enabled")
+        if isinstance(enabled_raw, bool):
+            result["enabled"] = enabled_raw
+        elif isinstance(enabled_raw, str):
+            result["enabled"] = enabled_raw.strip().lower() in {"1", "true", "yes", "on"}
+
+        for key, payload_key in (
+            ("answer_threshold", "chat_answer_threshold"),
+            ("clarification_min_confidence", "chat_clarification_min_confidence"),
+            ("clarification_max_confidence", "chat_clarification_max_confidence"),
+        ):
+            raw = payload.get(payload_key)
+            if raw is not None:
+                try:
+                    result[key] = float(raw)
+                except (ValueError, TypeError):
+                    pass
+
+        attempts_raw = payload.get("chat_max_refinement_attempts")
+        if attempts_raw is not None:
+            try:
+                result["max_refinement_attempts"] = int(attempts_raw)
+            except (ValueError, TypeError):
+                pass
+
+    policy = ChatRoutingPolicy.model_validate(result)
+    return policy.model_dump()
+
+
+def save_chat_routing_policy_settings(data: Mapping[str, object]) -> dict[str, bool | float | int]:
+    runtime_path = get_runtime_llm_settings_path()
+    runtime_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing: dict = {}
+    if runtime_path.exists():
+        try:
+            existing = json.loads(runtime_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = {}
+
+    policy = ChatRoutingPolicy.model_validate(dict(data))
+    policy_data = policy.model_dump()
+
+    existing.update(
+        {
+            "chat_routing_enabled": policy_data["enabled"],
+            "chat_answer_threshold": policy_data["answer_threshold"],
+            "chat_clarification_min_confidence": policy_data["clarification_min_confidence"],
+            "chat_clarification_max_confidence": policy_data["clarification_max_confidence"],
+            "chat_max_refinement_attempts": policy_data["max_refinement_attempts"],
+        }
+    )
+
+    runtime_path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
+    return policy_data

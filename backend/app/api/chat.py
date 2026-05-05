@@ -9,14 +9,16 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, Request
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import get_db
 from app.database.service import DatabaseService
-from app.llm_settings import get_active_llm_display
+from app.llm_settings import get_active_llm_display, get_chat_routing_policy_settings
 from app.models.schemas import (
     ChatRequest,
     ChatResponse,
+    ChatRoutingPolicy,
     DebugTrace,
     FileData,
     compute_confidence_label,
@@ -27,6 +29,11 @@ from app.sheets.gsheet_logger import get_gsheet_logger
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+
+@router.get("/routing-policy", response_model=ChatRoutingPolicy)
+async def get_chat_routing_policy_defaults():
+    return ChatRoutingPolicy(**get_chat_routing_policy_settings())
 
 
 def _build_suggested_topics(candidates: list[dict]) -> list[dict] | None:
@@ -44,7 +51,7 @@ def _build_suggested_topics(candidates: list[dict]) -> list[dict] | None:
 
 
 def _resolve_response_type(classification_method: str) -> str:
-    if classification_method in {"clarification", "marker_clarification"}:
+    if classification_method in {"clarification", "marker_clarification", "answer_refinement"}:
         return "clarification"
     return "answer"
 
@@ -61,6 +68,24 @@ def _load_pending_payload(raw_payload: str | None) -> dict | list | None:
     except json.JSONDecodeError:
         logger.warning("Не удалось распарсить payload pending clarification")
         return None
+
+
+def _resolve_routing_policy(
+    request_policy: ChatRoutingPolicy | None,
+    pending_payload: dict | list | None,
+) -> ChatRoutingPolicy | None:
+    if request_policy is not None:
+        return request_policy
+
+    if isinstance(pending_payload, dict):
+        raw_policy = pending_payload.get("routing_policy")
+        if isinstance(raw_policy, dict):
+            try:
+                return ChatRoutingPolicy.model_validate(raw_policy)
+            except ValidationError:
+                logger.warning("Не удалось распарсить routing_policy из pending clarification")
+
+    return None
 
 
 @router.post("", response_model=ChatResponse)
@@ -109,10 +134,13 @@ async def send_message(
     question_for_engine = request.message
     reason_id_override: str | None = None
     pending_used = False
+    routing_policy = request.routing_policy
+    refinement_attempt = 0
 
     if pending is not None:
         pending_payload = _load_pending_payload(pending.payload_json)
         pending_used = True
+        routing_policy = _resolve_routing_policy(request.routing_policy, pending_payload)
 
         if pending.clarification_type == "reason_selection":
             if request.message.strip().isdigit() and isinstance(pending_payload, list):
@@ -128,12 +156,18 @@ async def send_message(
         elif pending.clarification_type == "reason_details":
             question_for_engine = _combine_query(pending.original_query, request.message)
             reason_id_override = pending.fixed_reason_id
+        elif pending.clarification_type == "answer_refinement":
+            question_for_engine = _combine_query(pending.original_query, request.message)
+            reason_id_override = pending.fixed_reason_id
+            refinement_attempt = pending.attempts
 
     # ── Основной pipeline: L1→L2→L3 ──
     rag_response = await rag_engine.ask(
         question=question_for_engine,
         chat_history=chat_history,
         reason_id=reason_id_override,
+        routing_policy=routing_policy,
+        refinement_attempt=refinement_attempt,
         debug=request.debug,
     )
 
@@ -159,6 +193,26 @@ async def send_message(
                 fixed_reason_id=rag_response.detected_reason,
                 fixed_reason_name=rag_response.detected_reason_name,
                 attempts=(pending.attempts + 1) if pending else 1,
+            )
+        elif rag_response.classification_method == "answer_refinement" and rag_response.detected_reason:
+            attempts = 1
+            if pending and pending.clarification_type == "answer_refinement":
+                attempts = pending.attempts + 1
+            await db_service.upsert_pending_clarification(
+                session_id=session.id,
+                clarification_type="answer_refinement",
+                original_query=question_for_engine,
+                prompt=rag_response.answer,
+                fixed_reason_id=rag_response.detected_reason,
+                fixed_reason_name=rag_response.detected_reason_name,
+                payload={
+                    "routing_policy": routing_policy.model_dump() if routing_policy is not None else None,
+                    "previous_confidence": rag_response.confidence,
+                    "previous_confidence_reason": rag_response.confidence_reason,
+                    "thematic_section": rag_response.thematic_section,
+                    "clarification_kind": rag_response.clarification_kind or "answer_refinement",
+                },
+                attempts=attempts,
             )
         else:
             await db_service.clear_pending_clarification(session.id)
@@ -210,6 +264,7 @@ async def send_message(
         has_files=bool(rag_response.files),
         files=[FileData(code=f["code"], data_uri=f["data_uri"], ext=f.get("ext", "")) for f in rag_response.files],
         response_type=response_type,
+        clarification_kind=rag_response.clarification_kind or None,
         suggested_topics=suggested_topics,
         detected_reason=rag_response.detected_reason_name,
         thematic_section=rag_response.thematic_section,
