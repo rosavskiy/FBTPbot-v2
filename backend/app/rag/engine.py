@@ -471,6 +471,24 @@ class RAGEngine:
         }
 
     @staticmethod
+    def _extract_document_number(question: str) -> str | None:
+        text = re.sub(r"\s+", " ", question).strip()
+
+        contextual_match = re.search(
+            r"(?:накладн\w*|документ\w*|приходн\w*|расходн\w*)\s*(?:№|#|номер)?\s*([A-Za-zА-Яа-я0-9-]{5,})",
+            text,
+            re.IGNORECASE,
+        )
+        if contextual_match:
+            return contextual_match.group(1)
+
+        explicit_match = re.search(r"(?:№|#)\s*([A-Za-zА-Яа-я0-9-]{5,})", text, re.IGNORECASE)
+        if explicit_match:
+            return explicit_match.group(1)
+
+        return None
+
+    @staticmethod
     def _build_answer_refinement_prompt(
         question: str,
         reason: ContactReason,
@@ -485,6 +503,12 @@ class RAGEngine:
             )
 
         if any(token in text_lower for token in ("наклад", "документ", "приход", "расход", "поставщик")):
+            document_number = RAGEngine._extract_document_number(question)
+            if document_number:
+                return (
+                    f"Уточните, пожалуйста, что именно происходит с документом №{document_number}: не проводится, не приходит или в нём неверные данные?",
+                    "rule:document_status",
+                )
             return (
                 "Уточните, пожалуйста, номер документа и что именно с ним происходит.",
                 "rule:document_number",
@@ -496,7 +520,7 @@ class RAGEngine:
                 "rule:item_details",
             )
 
-        target = section_title or reason.name
+        target = reason.name if not section_title or section_title == "Full-Context" else section_title
         return (
             f"Уточните, пожалуйста, одну ключевую деталь по теме «{target}»: код ошибки, номер документа или текст сообщения системы.",
             "fallback:generic",
