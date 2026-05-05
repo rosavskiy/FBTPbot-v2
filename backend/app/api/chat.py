@@ -5,6 +5,7 @@ API эндпоинты чата v2 — L1→L2→L3 pipeline.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 
 from fastapi import APIRouter, Depends, Request
@@ -26,6 +27,40 @@ from app.sheets.gsheet_logger import get_gsheet_logger
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+
+def _build_suggested_topics(candidates: list[dict]) -> list[dict] | None:
+    if not candidates:
+        return None
+    return [
+        {
+            "title": item.get("reason_name", ""),
+            "article_id": item.get("reason_id", ""),
+            "score": item.get("score", 0.0),
+            "snippet": "",
+        }
+        for item in candidates
+    ]
+
+
+def _resolve_response_type(classification_method: str) -> str:
+    if classification_method in {"clarification", "marker_clarification"}:
+        return "clarification"
+    return "answer"
+
+
+def _combine_query(original_query: str, followup: str) -> str:
+    return f"{original_query}\n\nДополнительная информация от пользователя:\n{followup}".strip()
+
+
+def _load_pending_payload(raw_payload: str | None) -> dict | list | None:
+    if not raw_payload:
+        return None
+    try:
+        return json.loads(raw_payload)
+    except json.JSONDecodeError:
+        logger.warning("Не удалось распарсить payload pending clarification")
+        return None
 
 
 @router.post("", response_model=ChatResponse)
@@ -58,6 +93,8 @@ async def send_message(
             user_agent=http_request.headers.get("user-agent"),
         )
 
+    pending = await db_service.get_pending_clarification(session.id)
+
     # Сохраняем сообщение пользователя
     await db_service.add_message(
         session_id=session.id,
@@ -69,12 +106,64 @@ async def send_message(
     history_messages = await db_service.get_chat_history(session.id, limit=10)
     chat_history = [{"role": msg.role, "content": msg.content} for msg in history_messages[:-1]]
 
+    question_for_engine = request.message
+    reason_id_override: str | None = None
+    pending_used = False
+
+    if pending is not None:
+        pending_payload = _load_pending_payload(pending.payload_json)
+        pending_used = True
+
+        if pending.clarification_type == "reason_selection":
+            if request.message.strip().isdigit() and isinstance(pending_payload, list):
+                choice_idx = int(request.message.strip()) - 1
+                if 0 <= choice_idx < len(pending_payload):
+                    selected = pending_payload[choice_idx]
+                    question_for_engine = pending.original_query
+                    reason_id_override = selected.get("reason_id") or None
+                else:
+                    question_for_engine = _combine_query(pending.original_query, request.message)
+            else:
+                question_for_engine = _combine_query(pending.original_query, request.message)
+        elif pending.clarification_type == "reason_details":
+            question_for_engine = _combine_query(pending.original_query, request.message)
+            reason_id_override = pending.fixed_reason_id
+
     # ── Основной pipeline: L1→L2→L3 ──
     rag_response = await rag_engine.ask(
-        question=request.message,
+        question=question_for_engine,
         chat_history=chat_history,
+        reason_id=reason_id_override,
         debug=request.debug,
     )
+
+    response_type = _resolve_response_type(rag_response.classification_method)
+    suggested_topics = _build_suggested_topics(rag_response.clarification_candidates)
+
+    if response_type == "clarification":
+        if rag_response.classification_method == "clarification" and rag_response.clarification_candidates:
+            await db_service.upsert_pending_clarification(
+                session_id=session.id,
+                clarification_type="reason_selection",
+                original_query=question_for_engine,
+                prompt=rag_response.answer,
+                payload=rag_response.clarification_candidates,
+                attempts=(pending.attempts + 1) if pending else 1,
+            )
+        elif rag_response.classification_method == "marker_clarification" and rag_response.detected_reason:
+            await db_service.upsert_pending_clarification(
+                session_id=session.id,
+                clarification_type="reason_details",
+                original_query=question_for_engine,
+                prompt=rag_response.answer,
+                fixed_reason_id=rag_response.detected_reason,
+                fixed_reason_name=rag_response.detected_reason_name,
+                attempts=(pending.attempts + 1) if pending else 1,
+            )
+        else:
+            await db_service.clear_pending_clarification(session.id)
+    elif pending_used:
+        await db_service.clear_pending_clarification(session.id)
 
     # Сохраняем ответ бота
     await db_service.add_message(
@@ -92,7 +181,7 @@ async def send_message(
     # Логируем в Google Sheets (fire-and-forget)
     asyncio.ensure_future(
         get_gsheet_logger().log(
-            question=request.message,
+            question=question_for_engine if pending_used else request.message,
             answer=rag_response.answer,
             session_id=session.id,
             confidence=rag_response.confidence,
@@ -102,7 +191,7 @@ async def send_message(
             source_articles=rag_response.source_articles,
             detected_reason=rag_response.detected_reason_name,
             thematic_section=rag_response.thematic_section,
-            response_type="answer",
+            response_type=response_type,
             youtube_links=rag_response.youtube_links,
             has_files=bool(rag_response.files),
             is_debug=request.debug,
@@ -120,7 +209,8 @@ async def send_message(
         youtube_links=rag_response.youtube_links,
         has_files=bool(rag_response.files),
         files=[FileData(code=f["code"], data_uri=f["data_uri"], ext=f.get("ext", "")) for f in rag_response.files],
-        response_type="answer",
+        response_type=response_type,
+        suggested_topics=suggested_topics,
         detected_reason=rag_response.detected_reason_name,
         thematic_section=rag_response.thematic_section,
         llm_provider=str(llm_display["provider"]),

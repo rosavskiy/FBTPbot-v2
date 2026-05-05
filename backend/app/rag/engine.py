@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from app.api.images import resolve_file_codes
-from app.classifier.reason_classifier import ClassificationCandidate, L1Result, classify_reason
+from app.classifier.reason_classifier import ClassificationCandidate, L1Result, classify_reason, score_reason_candidate
 from app.classifier.section_classifier import L2Result, classify_section
 from app.config import settings
 from app.llm_settings import get_classification_settings, get_llm_settings_snapshot
@@ -599,8 +599,18 @@ class RAGEngine:
                 )
             l1_method = "forced"
             l1_confident = True
-            l1_candidates_data: list[dict] = []
-            l1_winning: ClassificationCandidate | None = None
+            l1_winning = score_reason_candidate(question, reason)
+            l1_candidates_data = [
+                {
+                    "reason_id": l1_winning.reason.id,
+                    "reason_name": l1_winning.reason.name,
+                    "score": l1_winning.score,
+                    "phrase_matches": l1_winning.phrase_matches,
+                    "numeric_matches": l1_winning.numeric_matches,
+                    "noun_matches": l1_winning.noun_matches,
+                    "verb_matches": l1_winning.verb_matches,
+                }
+            ]
         else:
             l1 = classify_reason(question)
 
@@ -679,11 +689,15 @@ class RAGEngine:
         # ── L1.1: Per-reason порог баллов ──
         cls_rules = reason.classification_rules
         marker_clarification_check: dict | None = None
-        if cls_rules.enabled and l1_method != "forced":
+        if cls_rules.enabled:
             winning_score = l1_winning.score if l1_winning else 0.0
 
             # Per-reason min_score_threshold (если задан, иначе — глобальный уже проверен в L1)
-            if cls_rules.min_score_threshold is not None and winning_score < cls_rules.min_score_threshold:
+            if (
+                l1_method != "forced"
+                and cls_rules.min_score_threshold is not None
+                and winning_score < cls_rules.min_score_threshold
+            ):
                 _total = _time.time() - _start
                 logger.info(
                     f"[ENGINE] L1.1=per_reason_threshold | score={winning_score:.1f} "

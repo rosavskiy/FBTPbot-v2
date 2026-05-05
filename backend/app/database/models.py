@@ -45,6 +45,12 @@ class ChatSession(Base):
 
     messages = relationship("ChatMessageDB", back_populates="session", order_by="ChatMessageDB.created_at")
     escalations = relationship("Escalation", back_populates="session")
+    pending_clarification = relationship(
+        "PendingClarification",
+        back_populates="session",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class ChatMessageDB(Base):
@@ -59,6 +65,23 @@ class ChatMessageDB(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ))
 
     session = relationship("ChatSession", back_populates="messages")
+
+
+class PendingClarification(Base):
+    __tablename__ = "pending_clarifications"
+
+    session_id = Column(String(36), ForeignKey("chat_sessions.id"), primary_key=True)
+    clarification_type = Column(String(50), nullable=False)
+    original_query = Column(Text, nullable=False)
+    prompt = Column(Text, nullable=True)
+    fixed_reason_id = Column(String(255), nullable=True)
+    fixed_reason_name = Column(String(255), nullable=True)
+    payload_json = Column(Text, nullable=True)
+    attempts = Column(Integer, default=0)
+    created_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ))
+    expires_at = Column(DateTime, nullable=False)
+
+    session = relationship("ChatSession", back_populates="pending_clarification")
 
 
 class Escalation(Base):

@@ -182,6 +182,42 @@ def _check_verbs(user_verbs: set[str], reason: ContactReason) -> list[str]:
     return matches
 
 
+def _build_candidate(
+    query: str,
+    reason: ContactReason,
+    text_normalized: str,
+    user_nouns: set[str],
+    user_verbs: set[str],
+    weights: dict[str, float],
+) -> ClassificationCandidate:
+    candidate = ClassificationCandidate(reason=reason)
+
+    candidate.phrase_matches = _check_phrase_masks(text_normalized, reason)
+    if candidate.phrase_matches:
+        candidate.score += weights["phrase_mask"] * len(candidate.phrase_matches)
+
+    candidate.numeric_matches = _check_numeric_tags(query, reason)
+    if candidate.numeric_matches:
+        candidate.score += weights["numeric_tag"] * len(candidate.numeric_matches)
+
+    candidate.noun_matches = _check_nouns(user_nouns, reason)
+    if candidate.noun_matches:
+        candidate.score += weights["noun"] * len(candidate.noun_matches)
+
+    candidate.verb_matches = _check_verbs(user_verbs, reason)
+    if candidate.verb_matches:
+        candidate.score += weights["verb"] * len(candidate.verb_matches)
+
+    return candidate
+
+
+def score_reason_candidate(query: str, reason: ContactReason) -> ClassificationCandidate:
+    """Посчитать совпадения для одной заранее выбранной причины."""
+    text_normalized = _normalize_text(query)
+    user_nouns, user_verbs = _extract_lemmas(query)
+    return _build_candidate(query, reason, text_normalized, user_nouns, user_verbs, _get_weights())
+
+
 def classify_reason(query: str) -> L1Result:
     """Основной метод L1-классификации.
 
@@ -204,27 +240,7 @@ def classify_reason(query: str) -> L1Result:
     candidates: list[ClassificationCandidate] = []
 
     for reason in reasons:
-        candidate = ClassificationCandidate(reason=reason)
-
-        # 1. Фразовые маски (высший приоритет)
-        candidate.phrase_matches = _check_phrase_masks(text_normalized, reason)
-        if candidate.phrase_matches:
-            candidate.score += weights["phrase_mask"] * len(candidate.phrase_matches)
-
-        # 2. Числовые теги
-        candidate.numeric_matches = _check_numeric_tags(query, reason)
-        if candidate.numeric_matches:
-            candidate.score += weights["numeric_tag"] * len(candidate.numeric_matches)
-
-        # 3. Существительные
-        candidate.noun_matches = _check_nouns(user_nouns, reason)
-        if candidate.noun_matches:
-            candidate.score += weights["noun"] * len(candidate.noun_matches)
-
-        # 4. Глаголы
-        candidate.verb_matches = _check_verbs(user_verbs, reason)
-        if candidate.verb_matches:
-            candidate.score += weights["verb"] * len(candidate.verb_matches)
+        candidate = _build_candidate(query, reason, text_normalized, user_nouns, user_verbs, weights)
 
         if candidate.score > 0:
             candidates.append(candidate)

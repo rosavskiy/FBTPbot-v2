@@ -10,7 +10,7 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import OperationalError
@@ -23,12 +23,24 @@ from app.database.models import (
     ChatSession,
     Escalation,
     Feedback,
+    PendingClarification,
 )
 
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_DELAY = 0.5  # секунд
+CLARIFICATION_TTL_MINUTES = 15
+
+
+def _now_saratov() -> datetime:
+    return datetime.now(SARATOV_TZ)
+
+
+def _normalize_saratov_dt(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=SARATOV_TZ)
+    return value.astimezone(SARATOV_TZ)
 
 
 class DatabaseService:
@@ -99,6 +111,71 @@ class DatabaseService:
         messages = list(result.scalars().all())
         messages.reverse()  # Хронологический порядок
         return messages
+
+    async def get_pending_clarification(self, session_id: str) -> PendingClarification | None:
+        result = await self.session.execute(
+            select(PendingClarification).where(PendingClarification.session_id == session_id)
+        )
+        pending = result.scalar_one_or_none()
+        if pending is None:
+            return None
+
+        if _normalize_saratov_dt(pending.expires_at) <= _now_saratov():
+            await self.session.delete(pending)
+            await self._commit_with_retry()
+            return None
+
+        return pending
+
+    async def upsert_pending_clarification(
+        self,
+        session_id: str,
+        clarification_type: str,
+        original_query: str,
+        prompt: str = "",
+        fixed_reason_id: str | None = None,
+        fixed_reason_name: str | None = None,
+        payload: dict | list | None = None,
+        attempts: int = 0,
+        ttl_minutes: int = CLARIFICATION_TTL_MINUTES,
+    ) -> PendingClarification:
+        pending = await self.get_pending_clarification(session_id)
+        expires_at = _now_saratov() + timedelta(minutes=ttl_minutes)
+        payload_json = json.dumps(payload, ensure_ascii=False) if payload is not None else None
+
+        if pending is None:
+            pending = PendingClarification(
+                session_id=session_id,
+                clarification_type=clarification_type,
+                original_query=original_query,
+                prompt=prompt,
+                fixed_reason_id=fixed_reason_id,
+                fixed_reason_name=fixed_reason_name,
+                payload_json=payload_json,
+                attempts=attempts,
+                expires_at=expires_at,
+            )
+            self.session.add(pending)
+        else:
+            pending.clarification_type = clarification_type
+            pending.original_query = original_query
+            pending.prompt = prompt
+            pending.fixed_reason_id = fixed_reason_id
+            pending.fixed_reason_name = fixed_reason_name
+            pending.payload_json = payload_json
+            pending.attempts = attempts
+            pending.created_at = _now_saratov()
+            pending.expires_at = expires_at
+
+        await self._commit_with_retry()
+        return pending
+
+    async def clear_pending_clarification(self, session_id: str) -> None:
+        pending = await self.get_pending_clarification(session_id)
+        if pending is None:
+            return
+        await self.session.delete(pending)
+        await self._commit_with_retry()
 
     # === Эскалации ===
 

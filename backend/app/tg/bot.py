@@ -120,6 +120,27 @@ def _build_reason_keyboard(candidates: list[dict]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
+def _combine_query(original_query: str, followup: str) -> str:
+    return f"{original_query}\n\nДополнительная информация от пользователя:\n{followup}".strip()
+
+
+def _save_reason_selection_ctx(user_id: int, original_query: str, candidates: list[dict]) -> None:
+    _clarification_ctx[user_id] = {
+        "type": "reason_selection",
+        "original_query": original_query,
+        "candidates": candidates,
+    }
+
+
+def _save_reason_details_ctx(user_id: int, original_query: str, reason_id: str, reason_name: str) -> None:
+    _clarification_ctx[user_id] = {
+        "type": "reason_details",
+        "original_query": original_query,
+        "reason_id": reason_id,
+        "reason_name": reason_name,
+    }
+
+
 _IMAGE_EXTS = {"png", "jpg", "jpeg", "gif", "webp"}
 
 
@@ -192,59 +213,95 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_history = _get_history(user_id)[:-1]
 
     rag = get_rag_engine()
-
-    # ── Проверяем, не выбирает ли пользователь номер из предложенных причин ──
     ctx = _clarification_ctx.get(user_id)
-    if ctx and text.strip().isdigit():
-        idx = int(text.strip()) - 1
-        candidates = ctx.get("candidates", [])
-        if 0 <= idx < len(candidates):
-            reason_id = candidates[idx]["reason_id"]
-            original_query = ctx.get("original_query", text)
-            _clarification_ctx.pop(user_id, None)
 
-            try:
-                rag_response = await rag.ask(
-                    question=original_query,
-                    chat_history=chat_history,
-                    reason_id=reason_id,
-                )
-            except Exception as e:
-                logger.error(f"[TG] RAG error: {e}", exc_info=True)
-                await update.message.reply_text("😔 Ошибка обработки.", parse_mode=ParseMode.HTML)
-                return
+    if ctx:
+        question_for_rag = text
+        reason_id: str | None = None
 
-            reply = _format_answer(
-                answer=rag_response.answer,
-                confidence=rag_response.confidence,
-                needs_escalation=rag_response.needs_escalation,
-                detected_reason_name=rag_response.detected_reason_name,
+        if ctx.get("type") == "reason_selection":
+            candidates = ctx.get("candidates", [])
+            if text.strip().isdigit():
+                idx = int(text.strip()) - 1
+                if 0 <= idx < len(candidates):
+                    chosen = candidates[idx]
+                    question_for_rag = ctx.get("original_query", text)
+                    reason_id = chosen.get("reason_id")
+                else:
+                    question_for_rag = _combine_query(ctx.get("original_query", text), text)
+            else:
+                question_for_rag = _combine_query(ctx.get("original_query", text), text)
+        elif ctx.get("type") == "reason_details":
+            question_for_rag = _combine_query(ctx.get("original_query", text), text)
+            reason_id = ctx.get("reason_id")
+
+        _clarification_ctx.pop(user_id, None)
+
+        try:
+            rag_response = await rag.ask(
+                question=question_for_rag,
+                chat_history=chat_history,
+                reason_id=reason_id,
             )
+        except Exception as e:
+            logger.error(f"[TG] RAG error: {e}", exc_info=True)
+            await update.message.reply_text("😔 Ошибка обработки.", parse_mode=ParseMode.HTML)
+            return
+
+        if rag_response.classification_method == "clarification" and rag_response.clarification_candidates:
+            candidates = rag_response.clarification_candidates
+            _save_reason_selection_ctx(user_id, question_for_rag, candidates)
             _add_to_history(user_id, "assistant", rag_response.answer)
-            await update.message.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
-            # Отправка файлов отдельными сообщениями
-            if rag_response.files:
-                await _send_files(update.message, rag_response.files)
-
-            # Логируем в Google Sheets
-            await get_gsheet_logger().log(
-                question=original_query,
-                answer=rag_response.answer,
-                session_id=f"tg_{user_id}",
-                confidence=rag_response.confidence,
-                needs_escalation=rag_response.needs_escalation,
-                detected_reason=rag_response.detected_reason_name,
-                thematic_section=rag_response.thematic_section,
-                source_articles=rag_response.source_articles,
-                youtube_links=rag_response.youtube_links,
-                has_files=bool(rag_response.files),
-                response_type="tg_clarification",
+            keyboard = _build_reason_keyboard(candidates)
+            await update.message.reply_text(
+                f"🔍 {_escape(rag_response.answer)}",
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard,
             )
             return
 
-    # Сбросить контекст уточнения при новом вопросе
-    _clarification_ctx.pop(user_id, None)
+        if rag_response.classification_method == "marker_clarification" and rag_response.detected_reason:
+            _save_reason_details_ctx(
+                user_id,
+                question_for_rag,
+                rag_response.detected_reason,
+                rag_response.detected_reason_name,
+            )
+            _add_to_history(user_id, "assistant", rag_response.answer)
+            await update.message.reply_text(
+                f"🔍 {_escape(rag_response.answer)}",
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
+            return
+
+        reply = _format_answer(
+            answer=rag_response.answer,
+            confidence=rag_response.confidence,
+            needs_escalation=rag_response.needs_escalation,
+            detected_reason_name=rag_response.detected_reason_name,
+        )
+        _add_to_history(user_id, "assistant", rag_response.answer)
+        await update.message.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+        if rag_response.files:
+            await _send_files(update.message, rag_response.files)
+
+        await get_gsheet_logger().log(
+            question=question_for_rag,
+            answer=rag_response.answer,
+            session_id=f"tg_{user_id}",
+            confidence=rag_response.confidence,
+            needs_escalation=rag_response.needs_escalation,
+            detected_reason=rag_response.detected_reason_name,
+            thematic_section=rag_response.thematic_section,
+            source_articles=rag_response.source_articles,
+            youtube_links=rag_response.youtube_links,
+            has_files=bool(rag_response.files),
+            response_type="tg_clarification",
+        )
+        return
 
     # ── Стандартный путь: ask → L1→L2→L3 ──
     try:
@@ -257,10 +314,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── Режим уточнения ──
     if rag_response.classification_method == "clarification" and rag_response.clarification_candidates:
         candidates = rag_response.clarification_candidates
-        _clarification_ctx[user_id] = {
-            "original_query": text,
-            "candidates": candidates,
-        }
+        _save_reason_selection_ctx(user_id, text, candidates)
 
         logger.info(f"[TG] CLARIFICATION|candidates={len(candidates)}|user={username}")
         _add_to_history(user_id, "assistant", rag_response.answer)
@@ -270,6 +324,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🔍 {_escape(rag_response.answer)}",
             parse_mode=ParseMode.HTML,
             reply_markup=keyboard,
+        )
+        return
+
+    if rag_response.classification_method == "marker_clarification" and rag_response.detected_reason:
+        _save_reason_details_ctx(
+            user_id,
+            text,
+            rag_response.detected_reason,
+            rag_response.detected_reason_name,
+        )
+        _add_to_history(user_id, "assistant", rag_response.answer)
+        await update.message.reply_text(
+            f"🔍 {_escape(rag_response.answer)}",
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
         )
         return
 
@@ -370,6 +439,29 @@ async def handle_reason_callback(update: Update, context: ContextTypes.DEFAULT_T
         needs_escalation=rag_response.needs_escalation,
         detected_reason_name=rag_response.detected_reason_name,
     )
+
+    if rag_response.classification_method == "marker_clarification" and rag_response.detected_reason:
+        _save_reason_details_ctx(
+            user_id,
+            original_query,
+            rag_response.detected_reason,
+            rag_response.detected_reason_name,
+        )
+        _add_to_history(user_id, "assistant", rag_response.answer)
+        try:
+            await query.edit_message_text(
+                f"🔍 {_escape(rag_response.answer)}",
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
+        except Exception:
+            await query.message.reply_text(
+                f"🔍 {_escape(rag_response.answer)}",
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
+        return
+
     _add_to_history(user_id, "assistant", rag_response.answer)
 
     try:
