@@ -47,3 +47,6 @@ Thumbs.db
 # Temp
 temp/
 FBTPbot-v2.code-workspace
+
+# Local legal drafts
+legal/
