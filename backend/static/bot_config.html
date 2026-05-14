@@ -1985,6 +1985,7 @@ async function sendDebugMessage() {
         if (data.detected_reason) metaHtml += `<span><span class="ico ico-pin"></span> ${data.detected_reason}</span>`;
         if (data.thematic_section) metaHtml += `<span><span class="ico ico-folder-open"></span> ${data.thematic_section}</span>`;
         if (data.response_type === 'clarification') metaHtml += `<span><span class="ico ico-help-circle"></span> Уточнение${data.clarification_kind ? `: ${data.clarification_kind}` : ''}</span>`;
+        if (data.response_type === 'resolved') metaHtml += `<span><span class="ico ico-check-circle"></span> Вопрос решён</span>`;
         if (data.needs_escalation) metaHtml += `<span style="color:#fca5a5"><span class="ico ico-alert-tri"></span> Эскалация</span>`;
 
         let traceHtml = '';

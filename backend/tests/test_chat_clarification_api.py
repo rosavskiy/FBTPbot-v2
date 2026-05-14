@@ -159,6 +159,41 @@ class AnswerRefinementRAGStub:
         )
 
 
+class StandardAnswerRAGStub:
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    async def ask(
+        self,
+        question: str,
+        chat_history=None,
+        reason_id: str | None = None,
+        routing_policy=None,
+        refinement_attempt: int = 0,
+        debug: bool = False,
+    ):
+        self.calls.append(
+            {
+                "question": question,
+                "chat_history": chat_history or [],
+                "reason_id": reason_id,
+                "routing_policy": routing_policy,
+                "refinement_attempt": refinement_attempt,
+                "debug": debug,
+            }
+        )
+
+        return RAGResponse(
+            answer=f"Стандартный ответ #{len(self.calls)}.",
+            confidence=0.91,
+            needs_escalation=False,
+            detected_reason="invoice_issue",
+            detected_reason_name="Проблема с накладной",
+            thematic_section="Накладные",
+            classification_method="L1:forced/L2:section_match",
+        )
+
+
 async def create_test_context(tmp_path: Path, rag_stub):
     db_path = tmp_path / "chat_clarification_test.db"
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}", future=True)
@@ -331,6 +366,115 @@ async def test_answer_refinement_uses_pending_policy_and_same_session(tmp_path: 
                 select(PendingClarification).where(PendingClarification.session_id == session_id)
             )
             assert pending is None
+    finally:
+        await client.aclose()
+        await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_resolved_followup_short_circuits_rag(tmp_path: Path):
+    client, engine, session_factory, rag_stub = await create_test_context(tmp_path, StandardAnswerRAGStub())
+    try:
+        first_response = await client.post("/api/chat", json={"message": "Не проводится накладная"})
+        assert first_response.status_code == 200
+        first_data = first_response.json()
+        session_id = first_data["session_id"]
+
+        second_response = await client.post(
+            "/api/chat",
+            json={"message": "Спасибо, помогли", "session_id": session_id},
+        )
+        assert second_response.status_code == 200
+
+        second_data = second_response.json()
+        assert second_data["response_type"] == "resolved"
+        assert second_data["answer"] == "Рад, что помог! Если появятся новые вопросы, обращайтесь."
+        assert second_data["needs_escalation"] is False
+        assert len(rag_stub.calls) == 1
+
+        await asyncio.sleep(0)
+
+        async with session_factory() as session:
+            pending = await session.scalar(
+                select(PendingClarification).where(PendingClarification.session_id == session_id)
+            )
+            assert pending is None
+    finally:
+        await client.aclose()
+        await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_resolved_followup_clears_pending_clarification(tmp_path: Path):
+    client, engine, session_factory, rag_stub = await create_test_context(tmp_path, MarkerClarificationRAGStub())
+    try:
+        first_response = await client.post("/api/chat", json={"message": "Не проводится накладная"})
+        assert first_response.status_code == 200
+        first_data = first_response.json()
+        session_id = first_data["session_id"]
+
+        async with session_factory() as session:
+            pending = await session.scalar(
+                select(PendingClarification).where(PendingClarification.session_id == session_id)
+            )
+            assert pending is not None
+
+        second_response = await client.post(
+            "/api/chat",
+            json={"message": "Все получилось, можно закрывать", "session_id": session_id},
+        )
+        assert second_response.status_code == 200
+
+        second_data = second_response.json()
+        assert second_data["response_type"] == "resolved"
+        assert len(rag_stub.calls) == 1
+
+        await asyncio.sleep(0)
+
+        async with session_factory() as session:
+            pending = await session.scalar(
+                select(PendingClarification).where(PendingClarification.session_id == session_id)
+            )
+            assert pending is None
+    finally:
+        await client.aclose()
+        await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_negative_gratitude_followup_does_not_resolve(tmp_path: Path):
+    client, engine, session_factory, rag_stub = await create_test_context(tmp_path, StandardAnswerRAGStub())
+    try:
+        first_response = await client.post("/api/chat", json={"message": "Не проводится накладная"})
+        assert first_response.status_code == 200
+        session_id = first_response.json()["session_id"]
+
+        second_response = await client.post(
+            "/api/chat",
+            json={"message": "Спасибо, но не помогло", "session_id": session_id},
+        )
+        assert second_response.status_code == 200
+
+        second_data = second_response.json()
+        assert second_data["response_type"] == "answer"
+        assert second_data["answer"] == "Стандартный ответ #2."
+        assert len(rag_stub.calls) == 2
+    finally:
+        await client.aclose()
+        await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_first_message_gratitude_does_not_resolve_without_history(tmp_path: Path):
+    client, engine, _, rag_stub = await create_test_context(tmp_path, StandardAnswerRAGStub())
+    try:
+        response = await client.post("/api/chat", json={"message": "Спасибо"})
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["response_type"] == "answer"
+        assert data["answer"] == "Стандартный ответ #1."
+        assert len(rag_stub.calls) == 1
     finally:
         await client.aclose()
         await engine.dispose()

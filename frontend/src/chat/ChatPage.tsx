@@ -12,7 +12,7 @@ interface Message {
   files?: FileData[]
   sourceArticles?: string[]
   suggestedTopics?: SuggestedTopic[]
-  responseType?: 'answer' | 'clarification'
+  responseType?: 'answer' | 'clarification' | 'resolved'
 }
 
 export function ChatPage() {

@@ -10,7 +10,7 @@ interface Message {
   files?: FileData[]
   needsEscalation?: boolean
   suggestedTopics?: SuggestedTopic[]
-  responseType?: 'answer' | 'clarification'
+  responseType?: 'answer' | 'clarification' | 'resolved'
 }
 
 export function ChatWidget() {

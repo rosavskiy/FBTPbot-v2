@@ -50,7 +50,7 @@ export interface ChatResponse {
   youtube_links: string[]
   has_files: boolean
   files: FileData[]
-  response_type: 'answer' | 'clarification'
+  response_type: 'answer' | 'clarification' | 'resolved'
   clarification_kind?: string | null
   suggested_topics: SuggestedTopic[] | null
   llm_provider?: string | null

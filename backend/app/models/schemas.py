@@ -153,7 +153,7 @@ class ChatResponse(BaseModel):
     youtube_links: list[str] = Field(default_factory=list, description="YouTube ссылки")
     has_files: bool = Field(False, description="Есть ли вложения (изображения, документы)")
     files: list[FileData] = Field(default_factory=list, description="Вложения в формате base64 data URI")
-    response_type: str = Field("answer", description="Тип ответа: answer | clarification")
+    response_type: str = Field("answer", description="Тип ответа: answer | clarification | resolved")
     clarification_kind: str | None = Field(None, description="Вид уточнения, если response_type=clarification")
     suggested_topics: list[SuggestedTopicSchema] | None = Field(
         None, description="Предложенные темы для уточнения (при response_type=clarification)"
