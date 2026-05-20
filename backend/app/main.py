@@ -1,5 +1,5 @@
 """
-Фармбазис ИИ-Техподдержка — главный модуль FastAPI.
+Главный модуль FastAPI системы технической поддержки.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle: инициализация при старте, очистка при остановке."""
-    logger.info("🚀 Инициализация Фармбазис ИИ-Техподдержки...")
+    logger.info("🚀 Инициализация системы технической поддержки...")
 
     # Создаём директории
     Path("./data").mkdir(exist_ok=True)
@@ -80,9 +80,10 @@ async def lifespan(app: FastAPI):
 
 # Создание приложения
 app = FastAPI(
-    title="Фармбазис ИИ-Техподдержка",
+    title="Система технической поддержки",
     description=(
-        "Модуль интеллектуальной техподдержки для ООО «Фармбазис». " "RAG-система на основе руководства пользователя."
+        "Платформа для обработки обращений пользователей, классификации запросов "
+        "и эскалации сложных случаев оператору."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -134,7 +135,7 @@ async def health_check():
 
     return HealthResponse(
         status="ok",
-        version="2.0.0",
+        version="1.0.0",
         knowledge_base_ready=reasons_count > 0,
         total_articles=reasons_count,
         total_chunks=0,

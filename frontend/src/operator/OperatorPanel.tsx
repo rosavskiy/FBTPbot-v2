@@ -87,7 +87,7 @@ export function OperatorPanel() {
     return (
       <div className="op-login">
         <div className="op-login-card">
-          <h1>💊 Фармбазис — Панель ТП</h1>
+          <h1>Панель оператора поддержки</h1>
           <form onSubmit={handleLogin}>
             <input
               type="text"

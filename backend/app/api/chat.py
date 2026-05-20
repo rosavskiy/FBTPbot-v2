@@ -1,5 +1,5 @@
 """
-API эндпоинты чата v2 — L1→L2→L3 pipeline.
+API эндпоинты чата 1.0.0 — L1→L2→L3 pipeline.
 """
 
 from __future__ import annotations
@@ -159,7 +159,7 @@ async def send_message(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Отправка сообщения в чат техподдержки v2.
+    Отправка сообщения в чат техподдержки 1.0.0.
 
     Pipeline:
     1. L1 — определение причины обращения по маркерам

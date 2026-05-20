@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    logger.info("=== Индексация базы знаний Фармбазис ===")
+    logger.info("=== Индексация базы знаний Финлоджик ===")
 
     indexer = get_indexer()
     total_chunks = indexer.index_instructions()

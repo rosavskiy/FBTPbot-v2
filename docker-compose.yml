@@ -1,6 +1,6 @@
 services:
   backend:
-    image: fbtpbot-backend:latest
+    image: support-backend:1.0.0
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
 
   tg-bot:
-    image: fbtpbot-backend:latest
+    image: support-backend:1.0.0
     environment:
       - TZ=Europe/Saratov
     env_file:

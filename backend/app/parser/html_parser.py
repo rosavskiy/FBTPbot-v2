@@ -1,5 +1,5 @@
 """
-Парсер HTML-инструкций Фармбазис.
+Парсер HTML-инструкций Финлоджик.
 
 Извлекает из HTML-файлов:
 - Заголовок статьи
@@ -46,7 +46,7 @@ class ParsedInstruction:
 
 
 class InstructionParser:
-    """Парсер HTML-инструкций Фармбазис."""
+    """Парсер HTML-инструкций Финлоджик."""
 
     # Паттерн для поиска YouTube ссылок
     YT_PATTERN = re.compile(r"https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w\-]+")

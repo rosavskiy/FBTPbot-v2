@@ -177,7 +177,7 @@ export function ChatWidget() {
             <div className="widget-header-left">
               <div className="widget-header-icon">Ф</div>
               <div className="widget-header-meta">
-                <span>Техподдержка Фармбазис</span>
+                <span>Техническая поддержка</span>
                 {activeLlmLabel && <span className="widget-llm-badge">{activeLlmLabel}</span>}
               </div>
             </div>

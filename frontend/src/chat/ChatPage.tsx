@@ -21,7 +21,7 @@ export function ChatPage() {
     {
       role: 'assistant',
       content:
-        'Здравствуйте! Я ИИ-ассистент техподдержки Фармбазис. Задайте вопрос по работе с программой.',
+        'Здравствуйте! Я ИИ-ассистент технической поддержки. Задайте вопрос по работе с программой.',
     },
   ])
   const [input, setInput] = useState('')
@@ -202,7 +202,7 @@ export function ChatPage() {
         <div className="chat-header-logo">
           <div className="chat-header-icon">Ф</div>
           <div>
-            <h1>Фармбазис — Техподдержка</h1>
+            <h1>Техническая поддержка</h1>
             <span className="chat-header-subtitle">
               <span className="chat-header-status" />
               ИИ-ассистент онлайн
