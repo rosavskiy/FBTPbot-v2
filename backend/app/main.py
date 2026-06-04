@@ -23,6 +23,7 @@ from app.api.images import router as images_router
 from app.api.kb_admin import router as kb_admin_router
 from app.api.operator import router as operator_router
 from app.api.reason_builder import router as reason_builder_router
+from app.api.status import router as status_router
 from app.config import settings
 from app.database.models import init_db
 from app.database.reason_store import load_reasons
@@ -108,6 +109,7 @@ app.include_router(about_router)
 app.include_router(images_router)
 app.include_router(admin_router)
 app.include_router(reason_builder_router)
+app.include_router(status_router)
 
 # Статические файлы (изображения из инструкций)
 images_dir = Path(settings.chroma_persist_dir).parent / "images"
@@ -203,4 +205,13 @@ async def reason_builder_page():
     html_path = Path(__file__).resolve().parent.parent / "static" / "reason_builder.html"
     if not html_path.exists():
         return {"error": "reason_builder.html не найден"}
+    return FileResponse(html_path, media_type="text/html")
+
+
+@app.get("/admin-status", tags=["admin"])
+async def admin_status_page():
+    """Страница мониторинга состояния бота в режиме реального времени."""
+    html_path = Path(__file__).resolve().parent.parent / "static" / "admin_status.html"
+    if not html_path.exists():
+        return {"error": "admin_status.html не найден"}
     return FileResponse(html_path, media_type="text/html")

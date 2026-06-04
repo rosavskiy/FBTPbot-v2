@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     google_sheets_spreadsheet_id: str = ""
     google_sheets_worksheet: str = "QnA"
 
+    # TG bot monitoring
+    tg_heartbeat_path: str = "./data/tg_heartbeat.json"
+
     # CORS
     cors_origins: str = '["http://localhost:3000","http://localhost:5173"]'
 

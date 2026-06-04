@@ -1,23 +1,12 @@
-"""
-Telegram-бот технической поддержки 1.0.0.
-
-Работает как отдельный процесс внутри Docker-контейнера backend.
-Использует RAG engine с 3-уровневой классификацией:
-  L1 → причина обращения (маркеры + LLM)
-  L2 → тематический раздел
-  L3 → генерация ответа (YandexGPT)
-
-Поддерживает:
-  - Уточняющие кнопки при неоднозначной классификации
-  - Эскалацию на оператора
-"""
-
 from __future__ import annotations
 
+import asyncio
 import html
+import json
 import logging
 import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 from telegram import (
@@ -36,6 +25,8 @@ from telegram.ext import (
 )
 
 from app.config import settings
+from app.database.models import async_session
+from app.database.service import DatabaseService
 from app.rag.engine import get_rag_engine
 from app.sheets.gsheet_logger import get_gsheet_logger
 
@@ -82,6 +73,57 @@ def _add_to_history(user_id: int, role: str, content: str):
 def _clear_history(user_id: int):
     _chat_histories.pop(user_id, None)
     _clarification_ctx.pop(user_id, None)
+
+
+# ═══════════════════════════════════════════════════
+#  Мониторинг: heartbeat + запись в БД
+# ═══════════════════════════════════════════════════
+
+
+async def _heartbeat_loop() -> None:
+    """Записывает timestamp раз в 30 сек — признак жизни бота для дашборда."""
+    heartbeat_path = Path(settings.tg_heartbeat_path)
+    heartbeat_path.parent.mkdir(parents=True, exist_ok=True)
+    while True:
+        try:
+            heartbeat_path.write_text(
+                json.dumps({"ts": datetime.now(UTC).isoformat(), "alive": True}),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            logger.warning("[TG] Heartbeat write failed: %s", exc)
+        await asyncio.sleep(30)
+
+
+async def _on_post_init(app: Application) -> None:  # noqa: ARG001
+    """Запускает фоновые задачи после инициализации PTB Application."""
+    asyncio.create_task(_heartbeat_loop())
+
+
+async def _db_write_tg(
+    user_id: int,
+    question: str,
+    answer: str,
+    confidence: float | None = None,
+    detected_reason: str | None = None,
+) -> None:
+    """Асинхронная fire-and-forget запись TG Q&A в БД для мониторинга."""
+    try:
+        session_id = f"tg_{user_id}"
+        async with async_session() as db:
+            svc = DatabaseService(db)
+            await svc.get_or_create_tg_session(session_id)
+            await svc.add_message(session_id=session_id, role="user", content=question, source="tg")
+            await svc.add_message(
+                session_id=session_id,
+                role="assistant",
+                content=answer,
+                confidence=confidence,
+                source="tg",
+                detected_reason=detected_reason or None,
+            )
+    except Exception as exc:
+        logger.warning("[TG] DB write failed: %s", exc)
 
 
 def _escape(text: str) -> str:
@@ -288,6 +330,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if rag_response.files:
             await _send_files(update.message, rag_response.files)
 
+        asyncio.ensure_future(
+            _db_write_tg(
+                user_id,
+                question_for_rag,
+                rag_response.answer,
+                rag_response.confidence,
+                rag_response.detected_reason_name,
+            )
+        )
         await get_gsheet_logger().log(
             question=question_for_rag,
             answer=rag_response.answer,
@@ -358,7 +409,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if rag_response.files:
         await _send_files(update.message, rag_response.files)
 
-    # Логируем в Google Sheets
+    # Запись в БД (для мониторинга) и в Google Sheets
+    asyncio.ensure_future(
+        _db_write_tg(
+            user_id,
+            text,
+            rag_response.answer,
+            rag_response.confidence,
+            rag_response.detected_reason_name,
+        )
+    )
     await get_gsheet_logger().log(
         question=text,
         answer=rag_response.answer,
@@ -473,7 +533,16 @@ async def handle_reason_callback(update: Update, context: ContextTypes.DEFAULT_T
     if rag_response.files:
         await _send_files(query.message, rag_response.files)
 
-    # Логируем в Google Sheets
+    # Запись в БД (для мониторинга) и в Google Sheets
+    asyncio.ensure_future(
+        _db_write_tg(
+            user_id,
+            original_query,
+            rag_response.answer,
+            rag_response.confidence,
+            rag_response.detected_reason_name,
+        )
+    )
     await get_gsheet_logger().log(
         question=original_query,
         answer=rag_response.answer,
@@ -505,7 +574,7 @@ def main():
 
     logger.info("🤖 Запуск Telegram-бота технической поддержки 1.0.0...")
 
-    app = Application.builder().token(token).build()
+    app = Application.builder().token(token).post_init(_on_post_init).build()
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))

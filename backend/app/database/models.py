@@ -10,6 +10,7 @@ SQLite для хранения:
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
 
@@ -23,11 +24,14 @@ from sqlalchemy import (
     String,
     Text,
     event,
+    text,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, relationship
 
 from app.config import SARATOV_TZ, settings
+
+logger = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -62,6 +66,8 @@ class ChatMessageDB(Base):
     content = Column(Text, nullable=False)
     confidence = Column(Float, nullable=True)
     source_articles = Column(Text, nullable=True)  # JSON
+    source = Column(String(16), nullable=False, server_default="web", index=True)  # web | tg | operator
+    detected_reason = Column(String(128), nullable=True, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ))
 
     session = relationship("ChatSession", back_populates="messages")
@@ -197,10 +203,21 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
+async def _migrate_add_column_if_missing(conn, table: str, column: str, column_def: str) -> None:
+    """Идемпотентно добавляет колонку в таблицу SQLite, если её нет."""
+    result = await conn.execute(text(f"PRAGMA table_info({table})"))
+    cols = [row[1] for row in result.fetchall()]
+    if column not in cols:
+        await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_def}"))
+        logger.info("[MIGRATE] Added column %s.%s", table, column)
+
+
 async def init_db():
-    """Создание всех таблиц."""
+    """Создание всех таблиц + идемпотентные миграции колонок."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await _migrate_add_column_if_missing(conn, "chat_messages", "source", "TEXT NOT NULL DEFAULT 'web'")
+        await _migrate_add_column_if_missing(conn, "chat_messages", "detected_reason", "TEXT")
 
 
 async def get_db():

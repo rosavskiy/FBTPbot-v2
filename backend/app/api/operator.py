@@ -60,6 +60,12 @@ def _cleanup_expired_tokens() -> None:
         del _active_tokens[t]
 
 
+def get_active_operator_tokens_count() -> int:
+    """Количество активных operator-сессий (для мониторинга)."""
+    _cleanup_expired_tokens()
+    return len(_active_tokens)
+
+
 def _verify_token(authorization: str | None = Header(None)) -> dict:
     """Проверка токена авторизации оператора."""
     if not authorization:
@@ -170,6 +176,7 @@ async def operator_reply(
         session_id=escalation.session_id,
         role="assistant",
         content=f"[Оператор ТП] {request.message}",
+        source="operator",
     )
 
     # Обновляем статус эскалации

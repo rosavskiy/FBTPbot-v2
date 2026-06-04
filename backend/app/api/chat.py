@@ -347,6 +347,7 @@ async def send_message(
         content=rag_response.answer,
         confidence=rag_response.confidence,
         source_articles=rag_response.source_articles,
+        detected_reason=rag_response.detected_reason_name or None,
     )
 
     conf_level = compute_confidence_level(rag_response.confidence)

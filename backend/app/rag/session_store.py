@@ -119,3 +119,8 @@ async def cleanup_expired_sessions() -> None:
         if expired:
             logger.debug(f"[SESSION] Cleaned up {len(expired)} expired clarification contexts")
         await asyncio.sleep(300)
+
+
+def get_active_sessions_count() -> int:
+    """Количество активных сессий уточнения (для мониторинга)."""
+    return len(_store)

@@ -233,6 +233,13 @@ class GoogleSheetLogger:
             return
         self._sheet.append_row(row, value_input_option="USER_ENTERED")
 
+    def get_status(self) -> dict:
+        """Public status snapshot for monitoring dashboard."""
+        return {
+            "enabled": self._enabled,
+            "last_row": self._next_row_number,
+        }
+
 
 # ── Синглтон ──
 

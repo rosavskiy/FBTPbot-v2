@@ -80,6 +80,17 @@ class DatabaseService:
         )
         return result.scalar_one_or_none()
 
+    async def get_or_create_tg_session(self, session_id: str) -> ChatSession:
+        """Получить или создать сессию с явным ID (для TG-бота)."""
+        result = await self.session.execute(select(ChatSession).where(ChatSession.id == session_id))
+        existing = result.scalar_one_or_none()
+        if existing is not None:
+            return existing
+        chat_session = ChatSession(id=session_id, user_agent="telegram")
+        self.session.add(chat_session)
+        await self._commit_with_retry()
+        return chat_session
+
     # === Сообщения ===
 
     async def add_message(
@@ -89,6 +100,8 @@ class DatabaseService:
         content: str,
         confidence: float | None = None,
         source_articles: list[str] | None = None,
+        source: str = "web",
+        detected_reason: str | None = None,
     ) -> ChatMessageDB:
         message = ChatMessageDB(
             session_id=session_id,
@@ -96,6 +109,8 @@ class DatabaseService:
             content=content,
             confidence=confidence,
             source_articles=json.dumps(source_articles) if source_articles else None,
+            source=source,
+            detected_reason=detected_reason,
         )
         self.session.add(message)
         await self._commit_with_retry()

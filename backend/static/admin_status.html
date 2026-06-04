@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Мониторинг бота</title>
+  <link rel="stylesheet" href="/static/bot_config_base.css" />
+  <link rel="stylesheet" href="/static/admin_common.css" />
+  <link rel="stylesheet" href="/static/admin_status.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="/static/admin_nav.js"></script>
+</head>
+<body>
+<div class="refresh-bar">
+  <div class="refresh-spinner" id="spinner"></div>
+  <span id="lastUpdate">Загрузка...</span>
+  <span style="margin-left:auto; color: var(--color-text-secondary);">
+    Автообновление 10 сек &nbsp;
+    <button id="pauseBtn" onclick="togglePause()" style="font-size:.72rem;padding:.1rem .5rem;cursor:pointer;border:1px solid currentColor;border-radius:.3rem;background:transparent;color:inherit;">⏸ Пауза</button>
+  </span>
+</div>
+
+<div class="status-grid">
+
+  <!-- ── Сервисы ── -->
+  <div>
+    <div class="section-title">Состояние сервисов</div>
+    <div class="tiles-row" id="tilesRow">
+      <div class="tile" id="tile-backend">
+        <span class="tile__dot tile__dot--unknown" id="dot-backend"></span>
+        <span class="tile__name">Backend</span>
+        <span class="tile__value" id="val-backend">—</span>
+        <span class="tile__sub" id="sub-backend"></span>
+      </div>
+      <div class="tile" id="tile-database">
+        <span class="tile__dot tile__dot--unknown" id="dot-database"></span>
+        <span class="tile__name">База данных</span>
+        <span class="tile__value" id="val-database">—</span>
+        <span class="tile__sub" id="sub-database"></span>
+      </div>
+      <div class="tile" id="tile-kb">
+        <span class="tile__dot tile__dot--unknown" id="dot-kb"></span>
+        <span class="tile__name">База знаний</span>
+        <span class="tile__value" id="val-kb">—</span>
+        <span class="tile__sub" id="sub-kb"></span>
+      </div>
+      <div class="tile" id="tile-llm">
+        <span class="tile__dot tile__dot--unknown" id="dot-llm"></span>
+        <span class="tile__name">LLM</span>
+        <span class="tile__value" id="val-llm">—</span>
+        <span class="tile__sub" id="sub-llm"></span>
+      </div>
+      <div class="tile" id="tile-tg">
+        <span class="tile__dot tile__dot--unknown" id="dot-tg"></span>
+        <span class="tile__name">TG Бот</span>
+        <span class="tile__value" id="val-tg">—</span>
+        <span class="tile__sub" id="sub-tg"></span>
+      </div>
+      <div class="tile" id="tile-gsheets">
+        <span class="tile__dot tile__dot--unknown" id="dot-gsheets"></span>
+        <span class="tile__name">Google Sheets</span>
+        <span class="tile__value" id="val-gsheets">—</span>
+        <span class="tile__sub" id="sub-gsheets"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── KPI ── -->
+  <div>
+    <div class="section-title">Сегодня</div>
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-card__label">Сообщений</div>
+        <div class="kpi-card__value" id="kpi-msgs">—</div>
+        <div class="kpi-card__breakdown" id="kpi-msgs-breakdown"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-card__label">Сессий</div>
+        <div class="kpi-card__value" id="kpi-sessions">—</div>
+        <div class="kpi-card__sub">уникальных диалогов</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-card__label">Эскалаций</div>
+        <div class="kpi-card__value" id="kpi-esc">—</div>
+        <div class="kpi-card__sub" id="kpi-esc-sub">pending: —</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-card__label">Avg Confidence</div>
+        <div class="kpi-card__value" id="kpi-conf">—</div>
+        <div class="kpi-card__sub" id="kpi-conf-sub"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Графики ── -->
+  <div>
+    <div class="section-title">Активность за 24 часа</div>
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="chart-card__title">Вопросы по каналам (почасово)</div>
+        <div class="chart-wrap">
+          <canvas id="timelineChart"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card__title">Распределение confidence</div>
+        <div class="chart-wrap">
+          <canvas id="confChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TOP причин ── -->
+  <div>
+    <div class="section-title">Топ причин обращения (24 ч)</div>
+    <div class="reasons-card">
+      <div class="reasons-chart-wrap">
+        <canvas id="reasonsChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Лента + эскалации ── -->
+  <div>
+    <div class="section-title">Последние события</div>
+    <div class="bottom-row">
+      <div class="feed-card">
+        <div class="feed-card__title">Последние Q&amp;A</div>
+        <div id="qaFeed"><div class="empty-state">Загрузка...</div></div>
+      </div>
+      <div class="esc-card">
+        <div class="esc-card__title">Активные эскалации</div>
+        <div id="escFeed"><div class="empty-state">Загрузка...</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+AdminNav.init({ currentPage: 'admin-status' });
+
+// ── State ──
+let paused = false;
+let timelineChart = null;
+let confChart = null;
+let reasonsChart = null;
+
+// ── Helpers ──
+function setDot(id, status) {
+    const el = document.getElementById('dot-' + id);
+    if (!el) return;
+    el.className = 'tile__dot tile__dot--' + status;
+}
+function setText(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+}
+function escape(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Confidence badge ──
+function confBadge(conf) {
+    if (conf === null || conf === undefined) return '';
+    const c = parseFloat(conf);
+    let cls, label;
+    if (c >= 0.8)       { cls = 'high';       label = 'High ' + c.toFixed(2); }
+    else if (c >= 0.6)  { cls = 'acceptable'; label = 'OK ' + c.toFixed(2); }
+    else if (c >= 0.3)  { cls = 'partial';    label = 'Part ' + c.toFixed(2); }
+    else                { cls = 'escalation'; label = 'Esc ' + c.toFixed(2); }
+    return `<span class="badge-conf badge-conf--${cls}">${label}</span>`;
+}
+
+function sourceBadge(src) {
+    const label = {web:'WEB', tg:'TG', operator:'OP'}[src] || src.toUpperCase();
+    return `<span class="badge-source badge-source--${src}">${label}</span>`;
+}
+
+// ── Render overview ──
+function renderOverview(data) {
+    // Backend
+    setDot('backend', data.backend.ok ? 'ok' : 'error');
+    setText('val-backend', data.backend.ok ? 'OK' : 'ERR');
+
+    // Database
+    setDot('database', data.database.ok ? 'ok' : 'error');
+    setText('val-database', data.database.ok ? 'OK' : 'ERR');
+    setText('sub-database', data.database.detail || '');
+
+    // KB
+    setDot('kb', data.kb.ok ? 'ok' : 'warn');
+    setText('val-kb', data.kb.detail || (data.kb.ok ? 'OK' : '—'));
+
+    // LLM
+    setDot('llm', 'ok');
+    setText('val-llm', data.llm.provider);
+    setText('sub-llm', data.llm.model);
+
+    // TG bot
+    if (data.tg_bot.alive) {
+        setDot('tg', 'ok');
+        const ago = data.tg_bot.age_sec !== null ? data.tg_bot.age_sec + 'с назад' : '';
+        setText('val-tg', 'Online');
+        setText('sub-tg', ago);
+    } else {
+        setDot('tg', data.tg_bot.age_sec !== null ? 'error' : 'unknown');
+        setText('val-tg', data.tg_bot.age_sec !== null ? 'Offline' : 'Нет данных');
+        setText('sub-tg', data.tg_bot.age_sec !== null ? data.tg_bot.age_sec + 'с назад' : '');
+    }
+
+    // GSheets
+    setDot('gsheets', data.gsheets.enabled ? 'ok' : 'warn');
+    setText('val-gsheets', data.gsheets.enabled ? 'On' : 'Off');
+    setText('sub-gsheets', data.gsheets.last_row ? 'строк: ' + data.gsheets.last_row : '');
+
+    // KPI
+    setText('kpi-msgs', data.today.messages_total);
+    const b = document.getElementById('kpi-msgs-breakdown');
+    if (b) b.innerHTML =
+        sourceBadge('web') + ' ' + data.today.messages_web + ' &nbsp;' +
+        sourceBadge('tg')  + ' ' + data.today.messages_tg + ' &nbsp;' +
+        sourceBadge('operator') + ' ' + data.today.messages_operator;
+
+    setText('kpi-sessions', data.today.sessions);
+    setText('kpi-esc', data.today.escalations);
+    setText('kpi-esc-sub', 'pending: ' + data.pending_escalations);
+
+    const avgConf = data.today.avg_confidence;
+    if (avgConf !== null && avgConf !== undefined) {
+        setText('kpi-conf', (avgConf * 100).toFixed(0) + '%');
+        const c = avgConf;
+        let label;
+        if (c >= 0.8) label = 'Уверенный';
+        else if (c >= 0.6) label = 'Приемлемый';
+        else if (c >= 0.3) label = 'Частичный';
+        else label = 'Низкий';
+        setText('kpi-conf-sub', label);
+    } else {
+        setText('kpi-conf', '—');
+        setText('kpi-conf-sub', 'нет данных');
+    }
+}
+
+// ── Timeline chart ──
+function renderTimeline(data) {
+    const labels = data.buckets.map(b => b.bucket.slice(11, 16)); // "HH:00"
+    const webData = data.buckets.map(b => b.web);
+    const tgData  = data.buckets.map(b => b.tg);
+    const opData  = data.buckets.map(b => b.operator);
+
+    if (timelineChart) {
+        timelineChart.data.labels = labels;
+        timelineChart.data.datasets[0].data = webData;
+        timelineChart.data.datasets[1].data = tgData;
+        timelineChart.data.datasets[2].data = opData;
+        timelineChart.update('none');
+        return;
+    }
+
+    const ctx = document.getElementById('timelineChart').getContext('2d');
+    timelineChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                { label: 'Web', data: webData, backgroundColor: '#93c5fd', stack: 'a' },
+                { label: 'TG',  data: tgData,  backgroundColor: '#7dd3fc', stack: 'a' },
+                { label: 'Op',  data: opData,  backgroundColor: '#86efac', stack: 'a' },
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { font: { size: 11 } } } },
+            scales: {
+                x: { stacked: true, ticks: { font: { size: 10 }, maxRotation: 45 } },
+                y: { stacked: true, ticks: { font: { size: 10 }, precision: 0 }, beginAtZero: true }
+            }
+        }
+    });
+}
+
+// ── Confidence donut ──
+function renderConfDonut(data) {
+    const vals = [data.high, data.acceptable, data.partial, data.escalation];
+    const labels = ['High', 'OK', 'Part', 'Esc'];
+    const colors = ['#4ade80', '#fde047', '#fb923c', '#f87171'];
+
+    if (confChart) {
+        confChart.data.datasets[0].data = vals;
+        confChart.update('none');
+        return;
+    }
+
+    const ctx = document.getElementById('confChart').getContext('2d');
+    confChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: vals, backgroundColor: colors, borderWidth: 2 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'right', labels: { font: { size: 11 }, boxWidth: 12 } }
+            }
+        }
+    });
+}
+
+// ── Top reasons bar ──
+function renderReasons(data) {
+    if (!data.items || data.items.length === 0) {
+        if (reasonsChart) { reasonsChart.destroy(); reasonsChart = null; }
+        document.getElementById('reasonsChart').parentElement.innerHTML =
+            '<div class="empty-state">Нет данных о причинах обращения за 24 ч</div>';
+        return;
+    }
+
+    const labels = data.items.map(i => i.reason.length > 40 ? i.reason.slice(0, 38) + '…' : i.reason);
+    const counts = data.items.map(i => i.count);
+
+    if (reasonsChart) {
+        reasonsChart.data.labels = labels;
+        reasonsChart.data.datasets[0].data = counts;
+        reasonsChart.update('none');
+        return;
+    }
+
+    const ctx = document.getElementById('reasonsChart').getContext('2d');
+    reasonsChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{ label: 'Обращений', data: counts, backgroundColor: '#818cf8', borderRadius: 4 }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { font: { size: 10 }, precision: 0 }, beginAtZero: true },
+                y: { ticks: { font: { size: 10 } } }
+            }
+        }
+    });
+}
+
+// ── Q&A feed ──
+function renderQAFeed(data) {
+    const el = document.getElementById('qaFeed');
+    if (!data.items || data.items.length === 0) {
+        el.innerHTML = '<div class="empty-state">Пока нет диалогов</div>';
+        return;
+    }
+    el.innerHTML = data.items.map(item => `
+        <div class="qa-item">
+            <div class="qa-item__meta">
+                ${sourceBadge(item.source)}
+                ${confBadge(item.confidence)}
+                <span class="qa-item__time">${item.created_at.slice(11, 16)}</span>
+            </div>
+            <div class="qa-item__q">❓ ${escape(item.question)}</div>
+            <div class="qa-item__a">💬 ${escape(item.answer)}</div>
+        </div>
+    `).join('');
+}
+
+// ── Escalations feed ──
+function renderEscFeed(data) {
+    const el = document.getElementById('escFeed');
+    if (!data.items || data.items.length === 0) {
+        el.innerHTML = '<div class="empty-state">Нет активных эскалаций</div>';
+        return;
+    }
+    el.innerHTML = data.items.map(item => `
+        <div class="esc-item">
+            <div class="esc-item__id">#${item.id.slice(0, 8)} · ${item.status}</div>
+            <div class="esc-item__reason">${escape(item.reason || 'Без причины')}</div>
+            <div class="esc-item__meta">
+                ${item.contact_info ? `<span>📞 ${escape(item.contact_info)}</span>` : ''}
+                <span>🕒 ${item.created_at.slice(0, 16)}</span>
+                <a class="esc-item__link" href="/bot-config">→ Оператор</a>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ── Refresh ──
+async function refreshAll() {
+    if (paused) return;
+    const spinner = document.getElementById('spinner');
+    spinner.classList.add('active');
+    try {
+        const [overview, timeline, conf, reasons, qa, esc] = await Promise.all([
+            AdminNav.authFetch('/api/status/overview').then(r => r.json()),
+            AdminNav.authFetch('/api/status/timeline?hours=24').then(r => r.json()),
+            AdminNav.authFetch('/api/status/confidence-distribution?hours=24').then(r => r.json()),
+            AdminNav.authFetch('/api/status/top-reasons?hours=24&limit=10').then(r => r.json()),
+            AdminNav.authFetch('/api/status/recent-qa?limit=20').then(r => r.json()),
+            AdminNav.authFetch('/api/status/pending-escalations?limit=10').then(r => r.json()),
+        ]);
+
+        renderOverview(overview);
+        renderTimeline(timeline);
+        renderConfDonut(conf);
+        renderReasons(reasons);
+        renderQAFeed(qa);
+        renderEscFeed(esc);
+
+        const now = new Date();
+        setText('lastUpdate', 'Обновлено: ' + now.toLocaleTimeString('ru-RU'));
+    } catch (err) {
+        console.error('[status] refresh error', err);
+        setText('lastUpdate', 'Ошибка обновления');
+    } finally {
+        spinner.classList.remove('active');
+    }
+}
+
+function togglePause() {
+    paused = !paused;
+    document.getElementById('pauseBtn').textContent = paused ? '▶ Продолжить' : '⏸ Пауза';
+    if (!paused) refreshAll();
+}
+
+// ── Pause when tab hidden ──
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && !paused) refreshAll();
+});
+
+// ── Init ──
+refreshAll();
+setInterval(refreshAll, 10000);
+</script>
+</body>
+</html>
