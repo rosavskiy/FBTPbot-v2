@@ -14,9 +14,9 @@
 <div class="refresh-bar">
   <div class="refresh-spinner" id="spinner"></div>
   <span id="lastUpdate">Загрузка...</span>
-  <span style="margin-left:auto; color: var(--color-text-secondary);">
+  <span style="margin-left:auto; color: var(--gray-500);">
     Автообновление 10 сек &nbsp;
-    <button id="pauseBtn" onclick="togglePause()" style="font-size:.72rem;padding:.1rem .5rem;cursor:pointer;border:1px solid currentColor;border-radius:.3rem;background:transparent;color:inherit;">⏸ Пауза</button>
+    <button id="pauseBtn" onclick="togglePause()">⏸ Пауза</button>
   </span>
 </div>
 
@@ -141,6 +141,35 @@
 <script>
 AdminNav.init({ currentPage: 'admin-status' });
 
+// ── Theme-aware Chart.js colors ──
+function _chartColors() {
+    const theme = document.documentElement.getAttribute('data-theme');
+    const isLight = theme === 'light' || (
+        !theme && window.matchMedia('(prefers-color-scheme: light)').matches
+    );
+    return {
+        text:    isLight ? '#52525b' : '#a1a1aa',
+        subtext: isLight ? '#89898B' : '#71717a',
+        grid:    isLight ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.07)',
+        bar: {
+            web:  isLight ? '#93c5fd' : '#60a5fa',
+            tg:   isLight ? '#7dd3fc' : '#38bdf8',
+            op:   isLight ? '#86efac' : '#4ade80',
+        },
+        donut:   isLight
+            ? ['#22c55e', '#eab308', '#f97316', '#ef4444']
+            : ['#4ade80', '#fde047', '#fb923c', '#f87171'],
+        reasons: isLight ? '#6366f1' : '#818cf8',
+    };
+}
+
+function _applyChartDefaults() {
+    const c = _chartColors();
+    Chart.defaults.color = c.text;
+    Chart.defaults.borderColor = c.grid;
+}
+_applyChartDefaults();
+
 // ── State ──
 let paused = false;
 let timelineChart = null;
@@ -249,12 +278,21 @@ function renderTimeline(data) {
     const webData = data.buckets.map(b => b.web);
     const tgData  = data.buckets.map(b => b.tg);
     const opData  = data.buckets.map(b => b.operator);
+    const c = _chartColors();
 
     if (timelineChart) {
         timelineChart.data.labels = labels;
         timelineChart.data.datasets[0].data = webData;
+        timelineChart.data.datasets[0].backgroundColor = c.bar.web;
         timelineChart.data.datasets[1].data = tgData;
+        timelineChart.data.datasets[1].backgroundColor = c.bar.tg;
         timelineChart.data.datasets[2].data = opData;
+        timelineChart.data.datasets[2].backgroundColor = c.bar.op;
+        timelineChart.options.scales.x.ticks.color = c.text;
+        timelineChart.options.scales.y.ticks.color = c.text;
+        timelineChart.options.scales.x.grid.color = c.grid;
+        timelineChart.options.scales.y.grid.color = c.grid;
+        timelineChart.options.plugins.legend.labels.color = c.text;
         timelineChart.update('none');
         return;
     }
@@ -265,17 +303,28 @@ function renderTimeline(data) {
         data: {
             labels,
             datasets: [
-                { label: 'Web', data: webData, backgroundColor: '#93c5fd', stack: 'a' },
-                { label: 'TG',  data: tgData,  backgroundColor: '#7dd3fc', stack: 'a' },
-                { label: 'Op',  data: opData,  backgroundColor: '#86efac', stack: 'a' },
+                { label: 'Web', data: webData, backgroundColor: c.bar.web, stack: 'a' },
+                { label: 'TG',  data: tgData,  backgroundColor: c.bar.tg,  stack: 'a' },
+                { label: 'Op',  data: opData,  backgroundColor: c.bar.op,  stack: 'a' },
             ]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { labels: { font: { size: 11 } } } },
+            plugins: {
+                legend: { labels: { font: { size: 11 }, color: c.text } }
+            },
             scales: {
-                x: { stacked: true, ticks: { font: { size: 10 }, maxRotation: 45 } },
-                y: { stacked: true, ticks: { font: { size: 10 }, precision: 0 }, beginAtZero: true }
+                x: {
+                    stacked: true,
+                    ticks: { font: { size: 10 }, maxRotation: 45, color: c.text },
+                    grid: { color: c.grid },
+                },
+                y: {
+                    stacked: true,
+                    ticks: { font: { size: 10 }, precision: 0, color: c.text },
+                    grid: { color: c.grid },
+                    beginAtZero: true,
+                }
             }
         }
     });
@@ -285,10 +334,12 @@ function renderTimeline(data) {
 function renderConfDonut(data) {
     const vals = [data.high, data.acceptable, data.partial, data.escalation];
     const labels = ['High', 'OK', 'Part', 'Esc'];
-    const colors = ['#4ade80', '#fde047', '#fb923c', '#f87171'];
+    const c = _chartColors();
 
     if (confChart) {
         confChart.data.datasets[0].data = vals;
+        confChart.data.datasets[0].backgroundColor = c.donut;
+        confChart.options.plugins.legend.labels.color = c.text;
         confChart.update('none');
         return;
     }
@@ -296,11 +347,14 @@ function renderConfDonut(data) {
     const ctx = document.getElementById('confChart').getContext('2d');
     confChart = new Chart(ctx, {
         type: 'doughnut',
-        data: { labels, datasets: [{ data: vals, backgroundColor: colors, borderWidth: 2 }] },
+        data: { labels, datasets: [{ data: vals, backgroundColor: c.donut, borderWidth: 2 }] },
         options: {
             responsive: true, maintainAspectRatio: false,
             plugins: {
-                legend: { position: 'right', labels: { font: { size: 11 }, boxWidth: 12 } }
+                legend: {
+                    position: 'right',
+                    labels: { font: { size: 11 }, boxWidth: 12, color: c.text }
+                }
             }
         }
     });
@@ -317,10 +371,16 @@ function renderReasons(data) {
 
     const labels = data.items.map(i => i.reason.length > 40 ? i.reason.slice(0, 38) + '…' : i.reason);
     const counts = data.items.map(i => i.count);
+    const c = _chartColors();
 
     if (reasonsChart) {
         reasonsChart.data.labels = labels;
         reasonsChart.data.datasets[0].data = counts;
+        reasonsChart.data.datasets[0].backgroundColor = c.reasons;
+        reasonsChart.options.scales.x.ticks.color = c.text;
+        reasonsChart.options.scales.y.ticks.color = c.text;
+        reasonsChart.options.scales.x.grid.color = c.grid;
+        reasonsChart.options.scales.y.grid.color = c.grid;
         reasonsChart.update('none');
         return;
     }
@@ -330,15 +390,22 @@ function renderReasons(data) {
         type: 'bar',
         data: {
             labels,
-            datasets: [{ label: 'Обращений', data: counts, backgroundColor: '#818cf8', borderRadius: 4 }]
+            datasets: [{ label: 'Обращений', data: counts, backgroundColor: c.reasons, borderRadius: 4 }]
         },
         options: {
             indexAxis: 'y',
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-                x: { ticks: { font: { size: 10 }, precision: 0 }, beginAtZero: true },
-                y: { ticks: { font: { size: 10 } } }
+                x: {
+                    ticks: { font: { size: 10 }, precision: 0, color: c.text },
+                    grid: { color: c.grid },
+                    beginAtZero: true,
+                },
+                y: {
+                    ticks: { font: { size: 10 }, color: c.text },
+                    grid: { color: c.grid },
+                }
             }
         }
     });
@@ -387,6 +454,7 @@ function renderEscFeed(data) {
 // ── Refresh ──
 async function refreshAll() {
     if (paused) return;
+    _applyChartDefaults();
     const spinner = document.getElementById('spinner');
     spinner.classList.add('active');
     try {
