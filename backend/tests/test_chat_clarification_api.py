@@ -160,6 +160,14 @@ class AnswerRefinementRAGStub:
 
 
 class StandardAnswerRAGStub:
+    # Намеренно содержательно разные ответы: иначе анти-повтор в чате
+    # (детект почти дословного дубля) справедливо посчитает это зацикливанием.
+    ANSWERS = (
+        "Откройте накладную и проверьте, что заполнены все обязательные поля.",
+        "Если поля заполнены, пересохраните документ и повторите проведение заново.",
+        "Проверьте права доступа пользователя на проведение этого типа документа.",
+    )
+
     def __init__(self):
         self.calls: list[dict] = []
 
@@ -183,8 +191,9 @@ class StandardAnswerRAGStub:
             }
         )
 
+        answer = self.ANSWERS[(len(self.calls) - 1) % len(self.ANSWERS)]
         return RAGResponse(
-            answer=f"Стандартный ответ #{len(self.calls)}.",
+            answer=answer,
             confidence=0.91,
             needs_escalation=False,
             detected_reason="invoice_issue",
@@ -457,7 +466,7 @@ async def test_negative_gratitude_followup_does_not_resolve(tmp_path: Path):
 
         second_data = second_response.json()
         assert second_data["response_type"] == "answer"
-        assert second_data["answer"] == "Стандартный ответ #2."
+        assert second_data["answer"] == StandardAnswerRAGStub.ANSWERS[1]
         assert len(rag_stub.calls) == 2
     finally:
         await client.aclose()
@@ -473,7 +482,7 @@ async def test_first_message_gratitude_does_not_resolve_without_history(tmp_path
 
         data = response.json()
         assert data["response_type"] == "answer"
-        assert data["answer"] == "Стандартный ответ #1."
+        assert data["answer"] == StandardAnswerRAGStub.ANSWERS[0]
         assert len(rag_stub.calls) == 1
     finally:
         await client.aclose()
