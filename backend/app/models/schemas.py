@@ -126,6 +126,9 @@ class DebugTrace(BaseModel):
         "none", description="Степень участия LLM: none / classification_only / generation / classification+generation"
     )
     processing_time_ms: int = Field(0, description="Время обработки в мс")
+    chat_guards: dict | None = Field(
+        None, description="Результаты guard-проверок в chat.py (frustration, duplicate, silent_mode, …)"
+    )
 
 
 class FileData(BaseModel):

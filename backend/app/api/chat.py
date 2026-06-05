@@ -154,12 +154,20 @@ def _is_service_noise(message: str) -> bool:
     return any(marker in normalized for marker in SERVICE_NOISE_MARKERS)
 
 
-def _is_frustrated(message: str) -> bool:
-    """Признаки раздражения/тупика в сообщении пользователя."""
+def _match_frustration_marker(message: str) -> str | None:
+    """Возвращает первый совпавший маркер раздражения или None."""
     normalized = _normalize_followup_text(message)
     if not normalized:
-        return False
-    return any(marker in normalized for marker in FRUSTRATION_MARKERS)
+        return None
+    for marker in FRUSTRATION_MARKERS:
+        if marker in normalized:
+            return marker
+    return None
+
+
+def _is_frustrated(message: str) -> bool:
+    """Признаки раздражения/тупика в сообщении пользователя."""
+    return _match_frustration_marker(message) is not None
 
 
 def _last_assistant_answer(chat_history: list[dict]) -> str:
@@ -271,6 +279,7 @@ async def _trigger_escalation(
     user_message: str,
     reason_label: str,
     is_debug: bool = False,
+    chat_guards: dict | None = None,
 ) -> ChatResponse:
     """Создать реальную эскалацию на оператора и вернуть ответ с передачей специалисту.
 
@@ -363,7 +372,7 @@ async def _trigger_escalation(
         llm_model=str(llm_display["model"]),
         llm_label=str(llm_display["label"]),
         show_llm_in_chat=bool(llm_display["show_in_chat"]),
-        debug_trace=None,
+        debug_trace=DebugTrace(chat_guards=chat_guards) if (is_debug and chat_guards) else None,
     )
 
 
@@ -386,6 +395,9 @@ async def send_message(
     db_service = DatabaseService(db)
     rag_engine = get_rag_engine()
 
+    # Собираем результаты guard-проверок (только при debug=True)
+    guards: dict | None = {} if request.debug else None
+
     # Получаем или создаём сессию
     session = None
     if request.session_id:
@@ -406,7 +418,10 @@ async def send_message(
 
     # Служебные реплики внешней системы («Пользователь открыл чат») не должны
     # вызывать LLM и засорять историю диалога.
-    if _is_service_noise(request.message):
+    _svc_noise = _is_service_noise(request.message)
+    if guards is not None:
+        guards["service_noise"] = {"triggered": _svc_noise}
+    if _svc_noise:
         llm_display = get_active_llm_display()
         return ChatResponse(
             answer="",
@@ -428,7 +443,7 @@ async def send_message(
             llm_model=str(llm_display["model"]),
             llm_label=str(llm_display["label"]),
             show_llm_in_chat=bool(llm_display["show_in_chat"]),
-            debug_trace=None,
+            debug_trace=DebugTrace(chat_guards=guards) if guards else None,
         )
 
     # Сохраняем сообщение пользователя
@@ -441,6 +456,11 @@ async def send_message(
     # «Тихий» режим: если по сессии уже идёт эскалация на оператора — бот не
     # отвечает поверх специалиста, а лишь подтверждает ожидание.
     active_escalation = await db_service.get_active_escalation(session.id)
+    if guards is not None:
+        guards["silent_mode"] = {
+            "triggered": active_escalation is not None,
+            "escalation_id": active_escalation.id if active_escalation else None,
+        }
     if active_escalation is not None:
         await db_service.add_message(
             session_id=session.id,
@@ -470,10 +490,13 @@ async def send_message(
             llm_model=str(llm_display["model"]),
             llm_label=str(llm_display["label"]),
             show_llm_in_chat=bool(llm_display["show_in_chat"]),
-            debug_trace=None,
+            debug_trace=DebugTrace(chat_guards=guards) if guards else None,
         )
 
-    if _is_resolved_followup(request.message, chat_history):
+    _resolved = _is_resolved_followup(request.message, chat_history)
+    if guards is not None:
+        guards["resolved"] = {"triggered": _resolved}
+    if _resolved:
         if pending is not None:
             await db_service.clear_pending_clarification(session.id)
 
@@ -531,7 +554,15 @@ async def send_message(
 
     # Детект раздражения/тупика: если пользователь злится и бот уже что-то отвечал —
     # сразу передаём оператору, не повторяя инструкции.
-    if _is_frustrated(request.message) and _has_recent_assistant_reply(chat_history):
+    _frustration_marker = _match_frustration_marker(request.message)
+    _has_prior = _has_recent_assistant_reply(chat_history)
+    if guards is not None:
+        guards["frustration"] = {
+            "triggered": bool(_frustration_marker and _has_prior),
+            "matched_marker": _frustration_marker,
+            "has_prior_reply": _has_prior,
+        }
+    if _frustration_marker and _has_prior:
         logger.info("[CHAT] Автоэскалация по раздражению пользователя, session=%s", session.id)
         return await _trigger_escalation(
             db_service=db_service,
@@ -539,6 +570,7 @@ async def send_message(
             user_message=request.message,
             reason_label="пользователь выражает недовольство ответами бота",
             is_debug=request.debug,
+            chat_guards=guards,
         )
 
     question_for_engine = request.message
@@ -586,7 +618,17 @@ async def send_message(
 
     # Анти-повтор: если бот собирается повторить почти дословно предыдущий ответ —
     # это тупик, передаём оператору вместо зацикливания. Уточняющие вопросы не трогаем.
-    if response_type == "answer" and _is_duplicate_answer(rag_response.answer, chat_history):
+    _prev_answer = _last_assistant_answer(chat_history)
+    _dup_sim: float | None = None
+    if response_type == "answer" and _prev_answer and rag_response.answer.strip():
+        _a = _normalize_followup_text(rag_response.answer)
+        _b = _normalize_followup_text(_prev_answer)
+        if _a and _b:
+            _dup_sim = round(SequenceMatcher(None, _a, _b).ratio(), 3)
+    _is_dup = _dup_sim is not None and _dup_sim >= DUPLICATE_SIMILARITY_THRESHOLD
+    if guards is not None:
+        guards["duplicate_answer"] = {"triggered": _is_dup, "similarity": _dup_sim}
+    if _is_dup:
         logger.info("[CHAT] Автоэскалация по повтору ответа, session=%s", session.id)
         return await _trigger_escalation(
             db_service=db_service,
@@ -594,10 +636,13 @@ async def send_message(
             user_message=request.message,
             reason_label="бот повторяет один и тот же ответ, вопрос не решается",
             is_debug=request.debug,
+            chat_guards=guards,
         )
 
     # Движок сам определил низкую уверенность — создаём реальную эскалацию на оператора
     # (уведомление в Telegram + «тихий» режим), а не просто текст-заглушку.
+    if guards is not None:
+        guards["needs_escalation"] = {"triggered": rag_response.needs_escalation}
     if rag_response.needs_escalation:
         logger.info("[CHAT] Автоэскалация по низкой уверенности движка, session=%s", session.id)
         return await _trigger_escalation(
@@ -606,6 +651,7 @@ async def send_message(
             user_message=request.message,
             reason_label="недостаточно данных в базе знаний для решения вопроса",
             is_debug=request.debug,
+            chat_guards=guards,
         )
 
     if response_type == "clarification":
@@ -707,5 +753,7 @@ async def send_message(
         llm_model=str(llm_display["model"]),
         llm_label=str(llm_display["label"]),
         show_llm_in_chat=bool(llm_display["show_in_chat"]),
-        debug_trace=DebugTrace(**rag_response.debug_trace) if rag_response.debug_trace else None,
+        debug_trace=DebugTrace(**{**rag_response.debug_trace, "chat_guards": guards})
+        if rag_response.debug_trace
+        else (DebugTrace(chat_guards=guards) if guards else None),
     )
