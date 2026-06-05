@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import re
+from difflib import SequenceMatcher
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import ValidationError
@@ -27,6 +28,7 @@ from app.models.schemas import (
 )
 from app.rag.engine import get_rag_engine
 from app.sheets.gsheet_logger import get_gsheet_logger
+from app.tg.notifier import get_telegram_notifier
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -66,10 +68,94 @@ RESOLVED_NEGATIVE_MARKERS = (
 )
 RESOLVED_MAX_TOKENS = 12
 
+# Единая фраза передачи живому специалисту и режим ожидания оператора.
+ESCALATION_HANDOFF_TEXT = "Передаю ваше обращение специалисту техподдержки — он ответит здесь в ближайшее время."
+SILENT_MODE_TEXT = "Ваше обращение уже передано специалисту техподдержки. Пожалуйста, ожидайте ответа здесь."
+
+# Маркеры раздражения/тупика: при их появлении после ответа бота сразу зовём оператора,
+# не повторяя инструкции. Список намеренно консервативный, чтобы не эскалировать ложно.
+FRUSTRATION_MARKERS = (
+    "не обезьян",
+    "обезьяна",
+    "задолбал",
+    "задолбали",
+    "вы не понимаете",
+    "не понимаете",
+    "не понимаешь",
+    "вы достали",
+    "достали уже",
+    "хватит копировать",
+    "не надо мне копировать",
+    "перестань копировать",
+    "не копируйте",
+    "одно и тоже",
+    "одно и то же",
+    "валить друг на друга",
+    "валите друг на друга",
+    "бесполезно",
+    "буду жаловаться",
+    "напишу жалобу",
+    "через ваше руководство",
+    "через руководство",
+    "тупой бот",
+    "бестолков",
+)
+
+# Служебные сообщения, которые внешняя программа (WebClient) шлёт как реплику пользователя.
+# На них не нужно звать LLM и засорять историю диалога.
+SERVICE_NOISE_MARKERS = (
+    "пользователь открыл чат",
+    "пользователь закрыл чат",
+    "чат открыт",
+    "чат закрыт",
+)
+
+# Порог схожести (0..1) для детекта повторного ответа бота.
+DUPLICATE_SIMILARITY_THRESHOLD = 0.85
+
 
 @router.get("/routing-policy", response_model=ChatRoutingPolicy)
 async def get_chat_routing_policy_defaults():
     return ChatRoutingPolicy(**get_chat_routing_policy_settings())
+
+
+def _is_service_noise(message: str) -> bool:
+    """Служебная реплика внешней системы (открытие/закрытие чата) — не для LLM."""
+    normalized = _normalize_followup_text(message)
+    if not normalized:
+        return False
+    return any(marker in normalized for marker in SERVICE_NOISE_MARKERS)
+
+
+def _is_frustrated(message: str) -> bool:
+    """Признаки раздражения/тупика в сообщении пользователя."""
+    normalized = _normalize_followup_text(message)
+    if not normalized:
+        return False
+    return any(marker in normalized for marker in FRUSTRATION_MARKERS)
+
+
+def _last_assistant_answer(chat_history: list[dict]) -> str:
+    """Последний непустой ответ ассистента из истории."""
+    for msg in reversed(chat_history):
+        if msg.get("role") == "assistant":
+            content = str(msg.get("content", "")).strip()
+            if content:
+                return content
+    return ""
+
+
+def _is_duplicate_answer(new_answer: str, chat_history: list[dict]) -> bool:
+    """True, если новый ответ почти дословно повторяет предыдущий ответ бота."""
+    previous = _last_assistant_answer(chat_history)
+    if not previous or not new_answer.strip():
+        return False
+    a = _normalize_followup_text(new_answer)
+    b = _normalize_followup_text(previous)
+    if not a or not b:
+        return False
+    ratio = SequenceMatcher(None, a, b).ratio()
+    return ratio >= DUPLICATE_SIMILARITY_THRESHOLD
 
 
 def _build_suggested_topics(candidates: list[dict]) -> list[dict] | None:
@@ -152,6 +238,108 @@ def _resolve_routing_policy(
     return None
 
 
+async def _trigger_escalation(
+    db_service: DatabaseService,
+    session_id: str,
+    user_message: str,
+    reason_label: str,
+    is_debug: bool = False,
+) -> ChatResponse:
+    """Создать реальную эскалацию на оператора и вернуть ответ с передачей специалисту.
+
+    Используется при детекте раздражения, зацикливании ответов или низкой уверенности.
+    Идемпотентна: если по сессии уже есть активная эскалация — новую не создаёт.
+    """
+    existing = await db_service.get_active_escalation(session_id)
+
+    if existing is None:
+        history = await db_service.get_chat_history(session_id, limit=10)
+        last_question = ""
+        last_answer = ""
+        for msg in reversed(history):
+            if msg.role == "user" and not last_question:
+                last_question = msg.content
+            elif msg.role == "assistant" and not last_answer:
+                last_answer = msg.content
+            if last_question and last_answer:
+                break
+        if not last_question:
+            last_question = user_message
+
+        escalation = await db_service.create_escalation(
+            session_id=session_id,
+            reason=f"Автоэскалация: {reason_label}",
+            contact_info=None,
+        )
+
+        chat_summary = "\n".join(f"{'👤' if m.role == 'user' else '🤖'} {m.content[:100]}" for m in history[-6:])
+
+        try:
+            notifier = get_telegram_notifier()
+            tg_message_id = await notifier.send_escalation_notification(
+                escalation_id=escalation.id,
+                session_id=session_id,
+                user_question=last_question,
+                bot_answer=last_answer,
+                reason=f"Автоэскалация: {reason_label}",
+                contact_info=None,
+                chat_summary=chat_summary,
+            )
+            if tg_message_id:
+                await db_service.set_telegram_message_id(escalation.id, tg_message_id)
+        except Exception:  # noqa: BLE001
+            logger.exception("Не удалось отправить уведомление об автоэскалации в Telegram")
+
+        asyncio.ensure_future(
+            get_gsheet_logger().log(
+                question=last_question,
+                answer=ESCALATION_HANDOFF_TEXT,
+                session_id=session_id,
+                response_type="escalation",
+                escalation_info=f"Автоэскалация: {reason_label}",
+                needs_escalation=True,
+                is_debug=is_debug,
+            )
+        )
+
+    # Снимаем зависшее уточнение и фиксируем ответ-передачу специалисту.
+    await db_service.clear_pending_clarification(session_id)
+    await db_service.add_message(
+        session_id=session_id,
+        role="assistant",
+        content=ESCALATION_HANDOFF_TEXT,
+        confidence=0.0,
+        source_articles=[],
+    )
+
+    conf_level = compute_confidence_level(0.0)
+    conf_label = compute_confidence_label(0.0)
+    llm_display = get_active_llm_display()
+
+    return ChatResponse(
+        answer=ESCALATION_HANDOFF_TEXT,
+        session_id=session_id,
+        confidence=0.0,
+        confidence_level=conf_level,
+        confidence_label=conf_label,
+        needs_escalation=True,
+        source_articles=[],
+        youtube_links=[],
+        has_files=False,
+        files=[],
+        response_type="escalation",
+        clarification_kind=None,
+        suggested_topics=None,
+        detected_reason=None,
+        thematic_section=None,
+        llm_provider=str(llm_display["provider"]),
+        llm_model=str(llm_display["model"]),
+        llm_label=str(llm_display["label"]),
+        show_llm_in_chat=bool(llm_display["show_in_chat"]),
+        debug_trace=None,
+    )
+
+
 @router.post("", response_model=ChatResponse)
 async def send_message(
     request: ChatRequest,
@@ -189,12 +377,74 @@ async def send_message(
     history_messages = await db_service.get_chat_history(session.id, limit=10)
     chat_history = [{"role": msg.role, "content": msg.content} for msg in history_messages]
 
+    # Служебные реплики внешней системы («Пользователь открыл чат») не должны
+    # вызывать LLM и засорять историю диалога.
+    if _is_service_noise(request.message):
+        llm_display = get_active_llm_display()
+        return ChatResponse(
+            answer="",
+            session_id=session.id,
+            confidence=1.0,
+            confidence_level=compute_confidence_level(1.0),
+            confidence_label=compute_confidence_label(1.0),
+            needs_escalation=False,
+            source_articles=[],
+            youtube_links=[],
+            has_files=False,
+            files=[],
+            response_type="answer",
+            clarification_kind=None,
+            suggested_topics=None,
+            detected_reason=None,
+            thematic_section=None,
+            llm_provider=str(llm_display["provider"]),
+            llm_model=str(llm_display["model"]),
+            llm_label=str(llm_display["label"]),
+            show_llm_in_chat=bool(llm_display["show_in_chat"]),
+            debug_trace=None,
+        )
+
     # Сохраняем сообщение пользователя
     await db_service.add_message(
         session_id=session.id,
         role="user",
         content=request.message,
     )
+
+    # «Тихий» режим: если по сессии уже идёт эскалация на оператора — бот не
+    # отвечает поверх специалиста, а лишь подтверждает ожидание.
+    active_escalation = await db_service.get_active_escalation(session.id)
+    if active_escalation is not None:
+        await db_service.add_message(
+            session_id=session.id,
+            role="assistant",
+            content=SILENT_MODE_TEXT,
+            confidence=0.0,
+            source_articles=[],
+        )
+        llm_display = get_active_llm_display()
+        return ChatResponse(
+            answer=SILENT_MODE_TEXT,
+            session_id=session.id,
+            confidence=0.0,
+            confidence_level=compute_confidence_level(0.0),
+            confidence_label=compute_confidence_label(0.0),
+            needs_escalation=True,
+            source_articles=[],
+            youtube_links=[],
+            has_files=False,
+            files=[],
+            response_type="escalation",
+            clarification_kind=None,
+            suggested_topics=None,
+            detected_reason=None,
+            thematic_section=None,
+            llm_provider=str(llm_display["provider"]),
+            llm_model=str(llm_display["model"]),
+            llm_label=str(llm_display["label"]),
+            show_llm_in_chat=bool(llm_display["show_in_chat"]),
+            debug_trace=None,
+        )
 
     if _is_resolved_followup(request.message, chat_history):
         if pending is not None:
@@ -252,6 +502,18 @@ async def send_message(
             debug_trace=None,
         )
 
+    # Детект раздражения/тупика: если пользователь злится и бот уже что-то отвечал —
+    # сразу передаём оператору, не повторяя инструкции.
+    if _is_frustrated(request.message) and _has_recent_assistant_reply(chat_history):
+        logger.info("[CHAT] Автоэскалация по раздражению пользователя, session=%s", session.id)
+        return await _trigger_escalation(
+            db_service=db_service,
+            session_id=session.id,
+            user_message=request.message,
+            reason_label="пользователь выражает недовольство ответами бота",
+            is_debug=request.debug,
+        )
+
     question_for_engine = request.message
     reason_id_override: str | None = None
     pending_used = False
@@ -294,6 +556,30 @@ async def send_message(
 
     response_type = _resolve_response_type(rag_response.classification_method)
     suggested_topics = _build_suggested_topics(rag_response.clarification_candidates)
+
+    # Анти-повтор: если бот собирается повторить почти дословно предыдущий ответ —
+    # это тупик, передаём оператору вместо зацикливания. Уточняющие вопросы не трогаем.
+    if response_type == "answer" and _is_duplicate_answer(rag_response.answer, chat_history):
+        logger.info("[CHAT] Автоэскалация по повтору ответа, session=%s", session.id)
+        return await _trigger_escalation(
+            db_service=db_service,
+            session_id=session.id,
+            user_message=request.message,
+            reason_label="бот повторяет один и тот же ответ, вопрос не решается",
+            is_debug=request.debug,
+        )
+
+    # Движок сам определил низкую уверенность — создаём реальную эскалацию на оператора
+    # (уведомление в Telegram + «тихий» режим), а не просто текст-заглушку.
+    if rag_response.needs_escalation:
+        logger.info("[CHAT] Автоэскалация по низкой уверенности движка, session=%s", session.id)
+        return await _trigger_escalation(
+            db_service=db_service,
+            session_id=session.id,
+            user_message=request.message,
+            reason_label="недостаточно данных в базе знаний для решения вопроса",
+            is_debug=request.debug,
+        )
 
     if response_type == "clarification":
         if rag_response.classification_method == "clarification" and rag_response.clarification_candidates:

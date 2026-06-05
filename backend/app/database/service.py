@@ -222,6 +222,16 @@ class DatabaseService:
         )
         return list(result.scalars().all())
 
+    async def get_active_escalation(self, session_id: str) -> Escalation | None:
+        """Активная (незакрытая) эскалация для сессии — для «тихого» режима."""
+        result = await self.session.execute(
+            select(Escalation)
+            .where(Escalation.session_id == session_id)
+            .where(Escalation.status.in_(["pending", "in_progress"]))
+            .order_by(Escalation.created_at.desc())
+        )
+        return result.scalars().first()
+
     async def get_all_escalations(
         self, status: str | None = None, limit: int = 50, offset: int = 0
     ) -> tuple[list[Escalation], int, int]:
