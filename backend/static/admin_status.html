@@ -7,7 +7,10 @@
   <link rel="stylesheet" href="/static/bot_config_base.css" />
   <link rel="stylesheet" href="/static/admin_common.css" />
   <link rel="stylesheet" href="/static/admin_status.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
   <script src="/static/admin_nav.js"></script>
 </head>
 <body>
@@ -25,7 +28,7 @@
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     История за дату:
   </span>
-  <input type="date" id="datePicker" class="date-input" />
+  <input type="text" id="datePicker" class="date-input" readonly placeholder="дд.мм.гггг" />
   <button id="btnReturnLive" class="btn-return-live" style="display:none" onclick="returnToLive()">↩ Вернуться к мониторингу</button>
   <span id="historyBadge" class="history-badge" style="display:none">Просмотр: <strong id="historyDateLabel"></strong></span>
 </div>
@@ -187,6 +190,10 @@ let historyDate = null; // 'YYYY-MM-DD' or null
 let timelineChart = null;
 let confChart = null;
 let reasonsChart = null;
+let fpInstance = null;
+const PAGE_SIZE = 50;
+let qaOffset = 0;
+let escOffset = 0;
 
 // ── Helpers ──
 function setDot(id, status) {
@@ -431,34 +438,69 @@ function renderReasons(data) {
 }
 
 // ── Q&A feed ──
-function renderQAFeed(data) {
+function renderQAFeed(data, append = false) {
     const el = document.getElementById('qaFeed');
+    // Remove existing load-more button before (re)rendering
+    el.querySelector('.load-more-btn')?.remove();
+
     if (!data.items || data.items.length === 0) {
-        el.innerHTML = '<div class="empty-state">Пока нет диалогов</div>';
+        if (!append) el.innerHTML = '<div class="empty-state">Пока нет диалогов</div>';
         return;
     }
-    el.innerHTML = data.items.map(item => `
+
+    const html = data.items.map(item => `
         <div class="qa-item" onclick="openSessionModal('${item.session_id}')">
             <div class="qa-item__meta">
                 ${sourceBadge(item.source)}
                 ${confBadge(item.confidence)}
-                <span class="qa-item__time">${item.created_at.slice(11, 16)}</span>
+                <span class="qa-item__time">${item.created_at.slice(0, 16).replace('T', ' ')}</span>
             </div>
             <div class="qa-item__q">❓ ${escape(item.question)}</div>
             <div class="qa-item__a">💬 ${escape(item.answer)}</div>
         </div>
     `).join('');
+
+    if (append) {
+        el.insertAdjacentHTML('beforeend', html);
+    } else {
+        el.innerHTML = html;
+    }
+
+    if (data.items.length === PAGE_SIZE) {
+        el.insertAdjacentHTML('beforeend',
+            '<button class="load-more-btn" onclick="loadMoreQA()">↓ Загрузить ещё</button>');
+    }
+}
+
+async function loadMoreQA() {
+    const btn = document.querySelector('#qaFeed .load-more-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Загрузка...'; }
+    if (!historyMode && !paused) { paused = true; document.getElementById('pauseBtn').textContent = '▶ Продолжить'; }
+    qaOffset += PAGE_SIZE;
+    const dpa = historyDate ? `&date=${historyDate}` : '';
+    try {
+        const data = await AdminNav.authFetch(`/api/status/recent-qa?limit=${PAGE_SIZE}&offset=${qaOffset}${dpa}`).then(r => r.json());
+        renderQAFeed(data, true);
+    } catch (err) {
+        console.error('[status] loadMoreQA error', err);
+        if (btn) { btn.disabled = false; btn.textContent = '↓ Загрузить ещё'; }
+    }
 }
 
 // ── Escalations feed ──
-function renderEscFeed(data) {
+function renderEscFeed(data, append = false) {
     const el = document.getElementById('escFeed');
+    el.querySelector('.load-more-btn')?.remove();
+
     if (!data.items || data.items.length === 0) {
-        const emptyMsg = historyMode ? 'Нет эскалаций за выбранный день' : 'Нет активных эскалаций';
-        el.innerHTML = `<div class="empty-state">${emptyMsg}</div>`;
+        if (!append) {
+            const emptyMsg = historyMode ? 'Нет эскалаций за выбранный день' : 'Нет активных эскалаций';
+            el.innerHTML = `<div class="empty-state">${emptyMsg}</div>`;
+        }
         return;
     }
-    el.innerHTML = data.items.map(item => `
+
+    const html = data.items.map(item => `
         <div class="esc-item" onclick="openEscalationModal('${item.id}')">
             <div class="esc-item__id">#${item.id.slice(0, 8)} · ${item.status}</div>
             <div class="esc-item__reason">${escape(item.reason || 'Без причины')}</div>
@@ -469,6 +511,32 @@ function renderEscFeed(data) {
             </div>
         </div>
     `).join('');
+
+    if (append) {
+        el.insertAdjacentHTML('beforeend', html);
+    } else {
+        el.innerHTML = html;
+    }
+
+    if (data.items.length === PAGE_SIZE) {
+        el.insertAdjacentHTML('beforeend',
+            '<button class="load-more-btn" onclick="loadMoreEsc()">↓ Загрузить ещё</button>');
+    }
+}
+
+async function loadMoreEsc() {
+    const btn = document.querySelector('#escFeed .load-more-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Загрузка...'; }
+    if (!historyMode && !paused) { paused = true; document.getElementById('pauseBtn').textContent = '▶ Продолжить'; }
+    escOffset += PAGE_SIZE;
+    const dpa = historyDate ? `&date=${historyDate}` : '';
+    try {
+        const data = await AdminNav.authFetch(`/api/status/pending-escalations?limit=${PAGE_SIZE}&offset=${escOffset}${dpa}`).then(r => r.json());
+        renderEscFeed(data, true);
+    } catch (err) {
+        console.error('[status] loadMoreEsc error', err);
+        if (btn) { btn.disabled = false; btn.textContent = '↓ Загрузить ещё'; }
+    }
 }
 
 // ── Dialog modal ──
@@ -565,7 +633,7 @@ function enterHistoryMode(date) {
 function returnToLive() {
     historyMode = false;
     historyDate = null;
-    document.getElementById('datePicker').value = '';
+    if (fpInstance) fpInstance.clear();
     document.getElementById('btnReturnLive').style.display = 'none';
     document.getElementById('historyBadge').style.display = 'none';
     setText('kpiSectionTitle', 'Сегодня');
@@ -579,27 +647,28 @@ function returnToLive() {
 async function refreshAll() {
     if (paused && !historyMode) return;
     _applyChartDefaults();
+    qaOffset = 0;
+    escOffset = 0;
     const spinner = document.getElementById('spinner');
     spinner.classList.add('active');
     try {
         const dp = historyDate ? `?date=${historyDate}` : '';
         const dpa = historyDate ? `&date=${historyDate}` : '';
-        const qaLimit = historyDate ? 50 : 20;
         const [overview, timeline, conf, reasons, qa, esc] = await Promise.all([
             AdminNav.authFetch(`/api/status/overview${dp}`).then(r => r.json()),
             AdminNav.authFetch(`/api/status/timeline?hours=24${dpa}`).then(r => r.json()),
             AdminNav.authFetch(`/api/status/confidence-distribution?hours=24${dpa}`).then(r => r.json()),
             AdminNav.authFetch(`/api/status/top-reasons?hours=24&limit=10${dpa}`).then(r => r.json()),
-            AdminNav.authFetch(`/api/status/recent-qa?limit=${qaLimit}${dpa}`).then(r => r.json()),
-            AdminNav.authFetch(`/api/status/pending-escalations?limit=50${dpa}`).then(r => r.json()),
+            AdminNav.authFetch(`/api/status/recent-qa?limit=${PAGE_SIZE}${dpa}`).then(r => r.json()),
+            AdminNav.authFetch(`/api/status/pending-escalations?limit=${PAGE_SIZE}${dpa}`).then(r => r.json()),
         ]);
 
         renderOverview(overview);
         renderTimeline(timeline);
         renderConfDonut(conf);
         renderReasons(reasons);
-        renderQAFeed(qa);
-        renderEscFeed(esc);
+        renderQAFeed(qa, false);
+        renderEscFeed(esc, false);
 
         const now = new Date();
         if (historyMode) {
@@ -626,14 +695,26 @@ document.addEventListener('visibilitychange', () => {
     if (!document.hidden && !paused && !historyMode) refreshAll();
 });
 
-// ── Date picker init & listener ──
+// ── Date picker (Flatpickr) init ──
 (function() {
-    const dp = document.getElementById('datePicker');
-    const today = new Date();
-    const tzOffset = today.getTimezoneOffset() * 60000;
-    dp.max = new Date(today - tzOffset).toISOString().split('T')[0];
-    dp.addEventListener('change', function() {
-        if (this.value) enterHistoryMode(this.value);
+    fpInstance = flatpickr('#datePicker', {
+        locale: 'ru',
+        dateFormat: 'd.m.Y',
+        maxDate: 'today',
+        disableMobile: true,
+        onChange: function(selectedDates) {
+            if (selectedDates.length === 0) return;
+            const d = selectedDates[0];
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            enterHistoryMode(`${y}-${m}-${day}`);
+        },
+    });
+    // Click anywhere on the bar (except the return button and badge) opens the picker
+    document.querySelector('.date-picker-bar').addEventListener('click', (e) => {
+        if (e.target.closest('#btnReturnLive') || e.target.closest('#historyBadge')) return;
+        fpInstance.open();
     });
 })();
 

@@ -460,26 +460,28 @@ async def get_top_reasons(
 
 @router.get("/recent-qa", response_model=RecentQAResponse)
 async def get_recent_qa(
-    limit: int = 20,
+    limit: int = 50,
+    offset: int = Query(0, ge=0),
     date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     _user=Depends(verify_admin_token),
     db: AsyncSession = Depends(get_db),
 ):
     """Лента последних N пар вопрос-ответ из всех каналов, или все пары за выбранную дату."""
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
     dr = _date_range(date)
     if dr:
-        limit = max(1, min(limit, 100))
         ts_start, ts_end = dr
         date_cond = " AND a.created_at >= :ts_start AND a.created_at < :ts_end"
         params: dict[str, Any] = {
             "lim": limit,
+            "off": offset,
             "ts_start": ts_start.strftime("%Y-%m-%d %H:%M:%S"),
             "ts_end": ts_end.strftime("%Y-%m-%d %H:%M:%S"),
         }
     else:
-        limit = max(1, min(limit, 100))
         date_cond = ""
-        params = {"lim": limit}
+        params = {"lim": limit, "off": offset}
 
     rows = await db.execute(
         text(
@@ -493,7 +495,7 @@ async def get_recent_qa(
             "    SELECT MAX(id) FROM chat_messages "
             "    WHERE session_id = a.session_id AND role = 'user' AND id < a.id"
             "  ) "
-            "WHERE a.role = 'assistant'" + date_cond + " ORDER BY a.id DESC LIMIT :lim"
+            "WHERE a.role = 'assistant'" + date_cond + " ORDER BY a.id DESC LIMIT :lim OFFSET :off"
         ),
         params,
     )
@@ -603,13 +605,15 @@ async def get_escalation_detail(
 
 @router.get("/pending-escalations", response_model=PendingEscalationsResponse)
 async def get_pending_escalations(
-    limit: int = 10,
+    limit: int = 50,
+    offset: int = Query(0, ge=0),
     date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     _user=Depends(verify_admin_token),
     db: AsyncSession = Depends(get_db),
 ):
     """Активные (pending/in_progress) эскалации, или все эскалации за выбранную дату."""
-    limit = max(1, min(limit, 50))
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
     dr = _date_range(date)
 
     if dr:
@@ -620,6 +624,7 @@ async def get_pending_escalations(
             .where(Escalation.created_at < ts_end)
             .order_by(Escalation.created_at.desc())
             .limit(limit)
+            .offset(offset)
         )
     else:
         result = await db.execute(
@@ -627,6 +632,7 @@ async def get_pending_escalations(
             .where(Escalation.status.in_(["pending", "in_progress"]))
             .order_by(Escalation.created_at.desc())
             .limit(limit)
+            .offset(offset)
         )
 
     escalations = result.scalars().all()
