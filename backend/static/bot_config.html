@@ -2009,15 +2009,17 @@ async function sendDebugMessage() {
                 const guardRows = [];
                 if (g.service_noise != null) {
                     const icon = g.service_noise.triggered ? '🔇' : '✅';
-                    guardRows.push(`<tr><td>service_noise</td><td>${icon} ${g.service_noise.triggered ? '<b style="color:#fca5a5">Сработало</b>' : 'Нет'}</td><td></td></tr>`);
+                    const detail = g.service_noise.matched_marker ? `маркер: "${escapeHtml(g.service_noise.matched_marker)}"` : '';
+                    guardRows.push(`<tr><td>service_noise</td><td>${icon} ${g.service_noise.triggered ? '<b style="color:#fca5a5">Сработало</b>' : 'Нет'}</td><td>${detail}</td></tr>`);
                 }
                 if (g.silent_mode != null) {
                     const icon = g.silent_mode.triggered ? '🔇' : '✅';
-                    const esc = g.silent_mode.escalation_id != null ? ` (escalation #${g.silent_mode.escalation_id})` : '';
-                    guardRows.push(`<tr><td>silent_mode</td><td>${icon} ${g.silent_mode.triggered ? '<b style="color:#fca5a5">Сработало</b>' + esc : 'Нет'}</td><td></td></tr>`);
+                    const detail = g.silent_mode.escalation_id != null ? `escalation #${g.silent_mode.escalation_id}` : '';
+                    guardRows.push(`<tr><td>silent_mode</td><td>${icon} ${g.silent_mode.triggered ? '<b style="color:#fca5a5">Сработало</b>' : 'Нет'}</td><td>${detail}</td></tr>`);
                 }
                 if (g.resolved != null) {
-                    guardRows.push(`<tr><td>resolved_followup</td><td>${g.resolved.triggered ? '✅ <b style="color:#86efac">Сработало</b>' : '✅ Нет'}</td><td></td></tr>`);
+                    const detail = g.resolved.matched_marker ? `маркер: "${escapeHtml(g.resolved.matched_marker)}"` : '';
+                    guardRows.push(`<tr><td>resolved_followup</td><td>${g.resolved.triggered ? '✅ <b style="color:#86efac">Сработало</b>' : '✅ Нет'}</td><td>${detail}</td></tr>`);
                 }
                 if (g.frustration != null) {
                     const f = g.frustration;
@@ -2030,11 +2032,13 @@ async function sendDebugMessage() {
                 if (g.duplicate_answer != null) {
                     const d = g.duplicate_answer;
                     const icon = d.triggered ? '🔁' : '✅';
-                    const sim = d.similarity != null ? ` (similarity: <b>${d.similarity}</b> / порог: ${0.85})` : '';
-                    guardRows.push(`<tr><td>duplicate_answer</td><td>${icon} ${d.triggered ? '<b style="color:#fca5a5">Сработало</b>' : 'Нет'}${sim}</td><td></td></tr>`);
+                    const threshold = d.threshold ?? 0.85;
+                    const detail = d.similarity != null ? `similarity: <b>${d.similarity}</b> / порог: ${threshold}` : '';
+                    guardRows.push(`<tr><td>duplicate_answer</td><td>${icon} ${d.triggered ? '<b style="color:#fca5a5">Сработало</b>' : 'Нет'}</td><td>${detail}</td></tr>`);
                 }
                 if (g.needs_escalation != null) {
-                    guardRows.push(`<tr><td>needs_escalation (RAG)</td><td>${g.needs_escalation.triggered ? '🚨 <b style="color:#fca5a5">Сработало</b>' : '✅ Нет'}</td><td></td></tr>`);
+                    const escReason = g.needs_escalation.reason || '';
+                    guardRows.push(`<tr><td>needs_escalation (RAG)</td><td>${g.needs_escalation.triggered ? '🚨 <b style="color:#fca5a5">Сработало</b>' : '✅ Нет'}</td><td>${escReason}</td></tr>`);
                 }
                 if (guardRows.length) {
                     traceHtml += `<table><tr><th>Guard</th><th>Результат</th><th>Детали</th></tr>${guardRows.join('')}</table>`;

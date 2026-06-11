@@ -146,12 +146,20 @@ async def get_chat_routing_policy_defaults():
     return ChatRoutingPolicy(**get_chat_routing_policy_settings())
 
 
-def _is_service_noise(message: str) -> bool:
-    """Служебная реплика внешней системы (открытие/закрытие чата) — не для LLM."""
+def _match_service_noise(message: str) -> str | None:
+    """Возвращает первый совпавший служебный маркер или None."""
     normalized = _normalize_followup_text(message)
     if not normalized:
-        return False
-    return any(marker in normalized for marker in SERVICE_NOISE_MARKERS)
+        return None
+    for marker in SERVICE_NOISE_MARKERS:
+        if marker in normalized:
+            return marker
+    return None
+
+
+def _is_service_noise(message: str) -> bool:
+    """Служебная реплика внешней системы (открытие/закрытие чата) — не для LLM."""
+    return _match_service_noise(message) is not None
 
 
 def _match_frustration_marker(message: str) -> str | None:
@@ -224,21 +232,23 @@ def _has_recent_assistant_reply(chat_history: list[dict]) -> bool:
     return any(msg.get("role") == "assistant" and str(msg.get("content", "")).strip() for msg in chat_history)
 
 
-def _is_resolved_followup(message: str, chat_history: list[dict]) -> bool:
+def _match_resolved_marker(message: str, chat_history: list[dict]) -> str | None:
+    """Возвращает первый совпавший маркер «вопрос решён» или None."""
     if not _has_recent_assistant_reply(chat_history):
-        return False
-
+        return None
     normalized = _normalize_followup_text(message)
-    if not normalized:
-        return False
+    if not normalized or len(normalized.split()) > RESOLVED_MAX_TOKENS:
+        return None
+    if any(m in normalized for m in RESOLVED_NEGATIVE_MARKERS):
+        return None
+    for marker in RESOLVED_POSITIVE_MARKERS:
+        if marker in normalized:
+            return marker
+    return None
 
-    if len(normalized.split()) > RESOLVED_MAX_TOKENS:
-        return False
 
-    if any(marker in normalized for marker in RESOLVED_NEGATIVE_MARKERS):
-        return False
-
-    return any(marker in normalized for marker in RESOLVED_POSITIVE_MARKERS)
+def _is_resolved_followup(message: str, chat_history: list[dict]) -> bool:
+    return _match_resolved_marker(message, chat_history) is not None
 
 
 def _combine_query(original_query: str, followup: str) -> str:
@@ -418,10 +428,10 @@ async def send_message(
 
     # Служебные реплики внешней системы («Пользователь открыл чат») не должны
     # вызывать LLM и засорять историю диалога.
-    _svc_noise = _is_service_noise(request.message)
+    _svc_noise_marker = _match_service_noise(request.message)
     if guards is not None:
-        guards["service_noise"] = {"triggered": _svc_noise}
-    if _svc_noise:
+        guards["service_noise"] = {"triggered": _svc_noise_marker is not None, "matched_marker": _svc_noise_marker}
+    if _svc_noise_marker is not None:
         llm_display = get_active_llm_display()
         return ChatResponse(
             answer="",
@@ -493,10 +503,10 @@ async def send_message(
             debug_trace=DebugTrace(chat_guards=guards) if guards else None,
         )
 
-    _resolved = _is_resolved_followup(request.message, chat_history)
+    _resolved_marker = _match_resolved_marker(request.message, chat_history)
     if guards is not None:
-        guards["resolved"] = {"triggered": _resolved}
-    if _resolved:
+        guards["resolved"] = {"triggered": _resolved_marker is not None, "matched_marker": _resolved_marker}
+    if _resolved_marker is not None:
         if pending is not None:
             await db_service.clear_pending_clarification(session.id)
 
@@ -627,7 +637,7 @@ async def send_message(
             _dup_sim = round(SequenceMatcher(None, _a, _b).ratio(), 3)
     _is_dup = _dup_sim is not None and _dup_sim >= DUPLICATE_SIMILARITY_THRESHOLD
     if guards is not None:
-        guards["duplicate_answer"] = {"triggered": _is_dup, "similarity": _dup_sim}
+        guards["duplicate_answer"] = {"triggered": _is_dup, "similarity": _dup_sim, "threshold": DUPLICATE_SIMILARITY_THRESHOLD}
     if _is_dup:
         logger.info("[CHAT] Автоэскалация по повтору ответа, session=%s", session.id)
         return await _trigger_escalation(
@@ -642,7 +652,7 @@ async def send_message(
     # Движок сам определил низкую уверенность — создаём реальную эскалацию на оператора
     # (уведомление в Telegram + «тихий» режим), а не просто текст-заглушку.
     if guards is not None:
-        guards["needs_escalation"] = {"triggered": rag_response.needs_escalation}
+        guards["needs_escalation"] = {"triggered": rag_response.needs_escalation, "reason": rag_response.confidence_reason}
     if rag_response.needs_escalation:
         logger.info("[CHAT] Автоэскалация по низкой уверенности движка, session=%s", session.id)
         return await _trigger_escalation(
