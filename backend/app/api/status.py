@@ -456,10 +456,7 @@ async def get_session_detail(
 ):
     """Полная история сообщений сессии."""
     result = await db.execute(
-        select(ChatMessageDB)
-        .where(ChatMessageDB.session_id == session_id)
-        .order_by(ChatMessageDB.id.asc())
-        .limit(100)
+        select(ChatMessageDB).where(ChatMessageDB.session_id == session_id).order_by(ChatMessageDB.id.asc()).limit(100)
     )
     messages = result.scalars().all()
     return SessionDetailResponse(
@@ -484,9 +481,7 @@ async def get_escalation_detail(
     db: AsyncSession = Depends(get_db),
 ):
     """Детали эскалации с полной историей сообщений сессии."""
-    esc_result = await db.execute(
-        select(Escalation).where(Escalation.id == escalation_id)
-    )
+    esc_result = await db.execute(select(Escalation).where(Escalation.id == escalation_id))
     esc = esc_result.scalar_one_or_none()
     if esc is None:
         raise HTTPException(status_code=404, detail="Escalation not found")
