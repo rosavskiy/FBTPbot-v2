@@ -345,6 +345,89 @@ body {
     padding: 1.5rem;
 }
 
+/* ── Date picker bar ── */
+.date-picker-bar {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .5rem 1.5rem;
+    max-width: 1400px;
+    margin: .25rem auto .25rem;
+    background: var(--gray-900);
+    border: 1px solid var(--gray-800);
+    border-radius: .75rem;
+    flex-wrap: wrap;
+}
+
+.date-picker-label {
+    font-size: .75rem;
+    font-weight: 600;
+    color: var(--gray-400);
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    white-space: nowrap;
+}
+
+.date-input {
+    padding: .3rem .6rem;
+    border: 1px solid var(--gray-700);
+    border-radius: .4rem;
+    background: var(--gray-950);
+    color: var(--gray-100);
+    font-size: .8rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color .15s;
+}
+.date-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+.date-input::-webkit-calendar-picker-indicator {
+    filter: invert(0.6);
+    cursor: pointer;
+}
+[data-theme="light"] .date-input {
+    background: #f4f4f5;
+    color: #18181b;
+    border-color: #d4d4d8;
+}
+[data-theme="light"] .date-input::-webkit-calendar-picker-indicator { filter: none; }
+
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme]) .date-input {
+        background: #f4f4f5;
+        color: #18181b;
+        border-color: #d4d4d8;
+    }
+    :root:not([data-theme]) .date-input::-webkit-calendar-picker-indicator { filter: none; }
+}
+
+.btn-return-live {
+    padding: .3rem .8rem;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: .4rem;
+    cursor: pointer;
+    font-size: .78rem;
+    font-family: inherit;
+    font-weight: 600;
+    transition: opacity .15s;
+    white-space: nowrap;
+}
+.btn-return-live:hover { opacity: .85; }
+
+.history-badge {
+    font-size: .78rem;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    padding: .25rem .65rem;
+    border-radius: 1rem;
+    white-space: nowrap;
+}
+
 /* ── Refresh status bar ── */
 .refresh-bar {
     display: flex;

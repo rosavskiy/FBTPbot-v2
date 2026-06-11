@@ -20,6 +20,16 @@
   </span>
 </div>
 
+<div class="date-picker-bar">
+  <span class="date-picker-label">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    История за дату:
+  </span>
+  <input type="date" id="datePicker" class="date-input" />
+  <button id="btnReturnLive" class="btn-return-live" style="display:none" onclick="returnToLive()">↩ Вернуться к мониторингу</button>
+  <span id="historyBadge" class="history-badge" style="display:none">Просмотр: <strong id="historyDateLabel"></strong></span>
+</div>
+
 <div class="status-grid">
 
   <!-- ── Сервисы ── -->
@@ -67,7 +77,7 @@
 
   <!-- ── KPI ── -->
   <div>
-    <div class="section-title">Сегодня</div>
+    <div class="section-title" id="kpiSectionTitle">Сегодня</div>
     <div class="kpi-row">
       <div class="kpi-card">
         <div class="kpi-card__label">Сообщений</div>
@@ -94,7 +104,7 @@
 
   <!-- ── Графики ── -->
   <div>
-    <div class="section-title">Активность за 24 часа</div>
+    <div class="section-title" id="activitySectionTitle">Активность за 24 часа</div>
     <div class="charts-row">
       <div class="chart-card">
         <div class="chart-card__title">Вопросы по каналам (почасово)</div>
@@ -113,7 +123,7 @@
 
   <!-- ── TOP причин ── -->
   <div>
-    <div class="section-title">Топ причин обращения (24 ч)</div>
+    <div class="section-title" id="reasonsSectionTitle">Топ причин обращения (24 ч)</div>
     <div class="reasons-card">
       <div class="reasons-chart-wrap">
         <canvas id="reasonsChart"></canvas>
@@ -130,7 +140,7 @@
         <div id="qaFeed"><div class="empty-state">Загрузка...</div></div>
       </div>
       <div class="esc-card">
-        <div class="esc-card__title">Активные эскалации</div>
+        <div class="esc-card__title" id="escCardTitle">Активные эскалации</div>
         <div id="escFeed"><div class="empty-state">Загрузка...</div></div>
       </div>
     </div>
@@ -172,6 +182,8 @@ _applyChartDefaults();
 
 // ── State ──
 let paused = false;
+let historyMode = false;
+let historyDate = null; // 'YYYY-MM-DD' or null
 let timelineChart = null;
 let confChart = null;
 let reasonsChart = null;
@@ -254,7 +266,7 @@ function renderOverview(data) {
 
     setText('kpi-sessions', data.today.sessions);
     setText('kpi-esc', data.today.escalations);
-    setText('kpi-esc-sub', 'pending: ' + data.pending_escalations);
+    setText('kpi-esc-sub', historyMode ? 'за выбранный день' : 'pending: ' + data.pending_escalations);
 
     const avgConf = data.today.avg_confidence;
     if (avgConf !== null && avgConf !== undefined) {
@@ -364,9 +376,16 @@ function renderConfDonut(data) {
 function renderReasons(data) {
     if (!data.items || data.items.length === 0) {
         if (reasonsChart) { reasonsChart.destroy(); reasonsChart = null; }
+        const emptyMsg = historyMode ? 'Нет данных о причинах обращения за выбранный день' : 'Нет данных о причинах обращения за 24 ч';
         document.getElementById('reasonsChart').parentElement.innerHTML =
-            '<div class="empty-state">Нет данных о причинах обращения за 24 ч</div>';
+            `<div class="empty-state">${emptyMsg}</div>`;
         return;
+    }
+
+    // Canvas may have been replaced by empty state — restore it
+    if (!document.getElementById('reasonsChart')) {
+        const wrap = document.querySelector('.reasons-chart-wrap');
+        if (wrap) { wrap.innerHTML = '<canvas id="reasonsChart"></canvas>'; reasonsChart = null; }
     }
 
     const labels = data.items.map(i => i.reason.length > 40 ? i.reason.slice(0, 38) + '…' : i.reason);
@@ -435,7 +454,8 @@ function renderQAFeed(data) {
 function renderEscFeed(data) {
     const el = document.getElementById('escFeed');
     if (!data.items || data.items.length === 0) {
-        el.innerHTML = '<div class="empty-state">Нет активных эскалаций</div>';
+        const emptyMsg = historyMode ? 'Нет эскалаций за выбранный день' : 'Нет активных эскалаций';
+        el.innerHTML = `<div class="empty-state">${emptyMsg}</div>`;
         return;
     }
     el.innerHTML = data.items.map(item => `
@@ -523,20 +543,55 @@ async function openEscalationModal(escId) {
     }
 }
 
+// ── History mode ──
+function _formatDateRu(dateStr) {
+    const [y, m, d] = dateStr.split('-');
+    return `${d}.${m}.${y}`;
+}
+
+function enterHistoryMode(date) {
+    historyMode = true;
+    historyDate = date;
+    document.getElementById('btnReturnLive').style.display = '';
+    document.getElementById('historyBadge').style.display = '';
+    document.getElementById('historyDateLabel').textContent = _formatDateRu(date);
+    setText('kpiSectionTitle', 'За ' + _formatDateRu(date));
+    setText('activitySectionTitle', 'Активность за день');
+    setText('reasonsSectionTitle', 'Топ причин (выбранный день)');
+    setText('escCardTitle', 'Эскалации за дату');
+    refreshAll();
+}
+
+function returnToLive() {
+    historyMode = false;
+    historyDate = null;
+    document.getElementById('datePicker').value = '';
+    document.getElementById('btnReturnLive').style.display = 'none';
+    document.getElementById('historyBadge').style.display = 'none';
+    setText('kpiSectionTitle', 'Сегодня');
+    setText('activitySectionTitle', 'Активность за 24 часа');
+    setText('reasonsSectionTitle', 'Топ причин обращения (24 ч)');
+    setText('escCardTitle', 'Активные эскалации');
+    refreshAll();
+}
+
 // ── Refresh ──
 async function refreshAll() {
-    if (paused) return;
+    if (paused && !historyMode) return;
     _applyChartDefaults();
     const spinner = document.getElementById('spinner');
     spinner.classList.add('active');
     try {
+        const dp = historyDate ? `?date=${historyDate}` : '';
+        const dpa = historyDate ? `&date=${historyDate}` : '';
+        const qaLimit = historyDate ? 50 : 20;
         const [overview, timeline, conf, reasons, qa, esc] = await Promise.all([
-            AdminNav.authFetch('/api/status/overview').then(r => r.json()),
-            AdminNav.authFetch('/api/status/timeline?hours=24').then(r => r.json()),
-            AdminNav.authFetch('/api/status/confidence-distribution?hours=24').then(r => r.json()),
-            AdminNav.authFetch('/api/status/top-reasons?hours=24&limit=10').then(r => r.json()),
-            AdminNav.authFetch('/api/status/recent-qa?limit=20').then(r => r.json()),
-            AdminNav.authFetch('/api/status/pending-escalations?limit=10').then(r => r.json()),
+            AdminNav.authFetch(`/api/status/overview${dp}`).then(r => r.json()),
+            AdminNav.authFetch(`/api/status/timeline?hours=24${dpa}`).then(r => r.json()),
+            AdminNav.authFetch(`/api/status/confidence-distribution?hours=24${dpa}`).then(r => r.json()),
+            AdminNav.authFetch(`/api/status/top-reasons?hours=24&limit=10${dpa}`).then(r => r.json()),
+            AdminNav.authFetch(`/api/status/recent-qa?limit=${qaLimit}${dpa}`).then(r => r.json()),
+            AdminNav.authFetch(`/api/status/pending-escalations?limit=50${dpa}`).then(r => r.json()),
         ]);
 
         renderOverview(overview);
@@ -547,7 +602,11 @@ async function refreshAll() {
         renderEscFeed(esc);
 
         const now = new Date();
-        setText('lastUpdate', 'Обновлено: ' + now.toLocaleTimeString('ru-RU'));
+        if (historyMode) {
+            setText('lastUpdate', 'История за ' + _formatDateRu(historyDate));
+        } else {
+            setText('lastUpdate', 'Обновлено: ' + now.toLocaleTimeString('ru-RU'));
+        }
     } catch (err) {
         console.error('[status] refresh error', err);
         setText('lastUpdate', 'Ошибка обновления');
@@ -564,12 +623,23 @@ function togglePause() {
 
 // ── Pause when tab hidden ──
 document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && !paused) refreshAll();
+    if (!document.hidden && !paused && !historyMode) refreshAll();
 });
+
+// ── Date picker init & listener ──
+(function() {
+    const dp = document.getElementById('datePicker');
+    const today = new Date();
+    const tzOffset = today.getTimezoneOffset() * 60000;
+    dp.max = new Date(today - tzOffset).toISOString().split('T')[0];
+    dp.addEventListener('change', function() {
+        if (this.value) enterHistoryMode(this.value);
+    });
+})();
 
 // ── Init ──
 refreshAll();
-setInterval(refreshAll, 10000);
+setInterval(() => { if (!historyMode) refreshAll(); }, 10000);
 </script>
 
 <div id="dialogModal" class="modal-overlay" onclick="onModalOverlayClick(event)">

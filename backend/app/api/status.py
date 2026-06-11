@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +42,14 @@ def _today_start() -> datetime:
 def _hours_ago(hours: int = 24) -> datetime:
     """Naive datetime N часов назад в саратовском времени (как в БД)."""
     return datetime.now(SARATOV_TZ).replace(tzinfo=None) - timedelta(hours=hours)
+
+
+def _date_range(date_str: str | None) -> tuple[datetime, datetime] | None:
+    """Returns (start, end) naive datetimes for a given YYYY-MM-DD date, or None."""
+    if not date_str:
+        return None
+    day = datetime.strptime(date_str, "%Y-%m-%d")
+    return day, day + timedelta(days=1)
 
 
 def _read_tg_heartbeat() -> dict[str, Any]:
@@ -166,12 +174,24 @@ class PendingEscalationsResponse(BaseModel):
 
 @router.get("/overview", response_model=OverviewResponse)
 async def get_overview(
+    date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     _user=Depends(verify_admin_token),
     db: AsyncSession = Depends(get_db),
 ):
-    """Общий срез состояния системы: сервисы, KPI за сегодня, счётчики."""
-    today_start = _today_start()
-    today_start_str = today_start.strftime("%Y-%m-%d %H:%M:%S")
+    """Общий срез состояния системы: сервисы, KPI за сегодня/дату, счётчики."""
+    dr = _date_range(date)
+    if dr:
+        ts_start, ts_end = dr
+    else:
+        ts_start = _today_start()
+        ts_end = None
+
+    ts_start_str = ts_start.strftime("%Y-%m-%d %H:%M:%S")
+    ts_end_str = ts_end.strftime("%Y-%m-%d %H:%M:%S") if ts_end else None
+    extra_cond = " AND created_at < :ts_end" if ts_end_str else ""
+    params_base: dict[str, Any] = {"ts_start": ts_start_str}
+    if ts_end_str:
+        params_base["ts_end"] = ts_end_str
 
     # ── DB health ──
     db_ok = True
@@ -204,37 +224,42 @@ async def get_overview(
     except Exception:
         gs_status = GsheetsStatus(enabled=False)
 
-    # ── Today stats ──
+    # ── Period stats ──
     source_rows = await db.execute(
         text(
             "SELECT COALESCE(source, 'web') as src, COUNT(*) as cnt "
-            "FROM chat_messages WHERE role = 'user' AND created_at >= :ts "
-            "GROUP BY src"
+            "FROM chat_messages WHERE role = 'user' AND created_at >= :ts_start"
+            + extra_cond
+            + " GROUP BY src"
         ),
-        {"ts": today_start_str},
+        params_base,
     )
     source_counts: dict[str, int] = {}
     for row in source_rows:
         source_counts[row[0]] = row[1]
 
     sessions_row = await db.execute(
-        text("SELECT COUNT(DISTINCT session_id) FROM chat_messages WHERE created_at >= :ts"),
-        {"ts": today_start_str},
+        text(
+            "SELECT COUNT(DISTINCT session_id) FROM chat_messages"
+            " WHERE created_at >= :ts_start" + extra_cond
+        ),
+        params_base,
     )
     sessions_count = sessions_row.scalar_one_or_none() or 0
 
     esc_today_row = await db.execute(
-        text("SELECT COUNT(*) FROM escalations WHERE created_at >= :ts"),
-        {"ts": today_start_str},
+        text("SELECT COUNT(*) FROM escalations WHERE created_at >= :ts_start" + extra_cond),
+        params_base,
     )
     esc_today = esc_today_row.scalar_one_or_none() or 0
 
     avg_conf_row = await db.execute(
         text(
             "SELECT AVG(confidence) FROM chat_messages "
-            "WHERE role = 'assistant' AND confidence IS NOT NULL AND created_at >= :ts"
+            "WHERE role = 'assistant' AND confidence IS NOT NULL AND created_at >= :ts_start"
+            + extra_cond
         ),
-        {"ts": today_start_str},
+        params_base,
     )
     avg_conf_raw = avg_conf_row.scalar_one_or_none()
     avg_conf = round(float(avg_conf_raw), 3) if avg_conf_raw is not None else None
@@ -254,9 +279,16 @@ async def get_overview(
         avg_confidence=avg_conf,
     )
 
-    # ── Pending escalations ──
-    pending_row = await db.execute(text("SELECT COUNT(*) FROM escalations WHERE status IN ('pending', 'in_progress')"))
-    pending_count = pending_row.scalar_one_or_none() or 0
+    # ── Pending escalations (live state only, zeroed in history mode) ──
+    if not dr:
+        pending_row = await db.execute(text("SELECT COUNT(*) FROM escalations WHERE status IN ('pending', 'in_progress')"))
+        pending_count = pending_row.scalar_one_or_none() or 0
+        active_clarifications = get_active_sessions_count()
+        active_operators = get_active_operator_tokens_count()
+    else:
+        pending_count = 0
+        active_clarifications = 0
+        active_operators = 0
 
     return OverviewResponse(
         backend=ServiceStatus(ok=True),
@@ -267,33 +299,50 @@ async def get_overview(
         gsheets=gs_status,
         today=today_stats,
         pending_escalations=pending_count,
-        active_clarifications=get_active_sessions_count(),
-        active_operators=get_active_operator_tokens_count(),
+        active_clarifications=active_clarifications,
+        active_operators=active_operators,
     )
 
 
 @router.get("/timeline", response_model=TimelineResponse)
 async def get_timeline(
     hours: int = 24,
+    date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     _user=Depends(verify_admin_token),
     db: AsyncSession = Depends(get_db),
 ):
-    """Активность по часам за последние N часов с разбивкой по каналу."""
-    hours = max(1, min(hours, 168))  # cap 1–168
-    since = _hours_ago(hours)
-    since_str = since.strftime("%Y-%m-%d %H:%M:%S")
+    """Активность по часам за последние N часов или за конкретную дату."""
+    dr = _date_range(date)
 
-    rows = await db.execute(
-        text(
-            "SELECT strftime('%Y-%m-%dT%H:00', created_at) as bucket, "
-            "COALESCE(source, 'web') as src, COUNT(*) as cnt "
-            "FROM chat_messages "
-            "WHERE role = 'user' AND created_at >= :since "
-            "GROUP BY bucket, src "
-            "ORDER BY bucket"
-        ),
-        {"since": since_str},
-    )
+    if dr:
+        day_start, day_end = dr
+        since_str = day_start.strftime("%Y-%m-%d %H:%M:%S")
+        until_str = day_end.strftime("%Y-%m-%d %H:%M:%S")
+        rows = await db.execute(
+            text(
+                "SELECT strftime('%Y-%m-%dT%H:00', created_at) as bucket, "
+                "COALESCE(source, 'web') as src, COUNT(*) as cnt "
+                "FROM chat_messages "
+                "WHERE role = 'user' AND created_at >= :since AND created_at < :until "
+                "GROUP BY bucket, src "
+                "ORDER BY bucket"
+            ),
+            {"since": since_str, "until": until_str},
+        )
+    else:
+        hours = max(1, min(hours, 168))
+        since_str = _hours_ago(hours).strftime("%Y-%m-%d %H:%M:%S")
+        rows = await db.execute(
+            text(
+                "SELECT strftime('%Y-%m-%dT%H:00', created_at) as bucket, "
+                "COALESCE(source, 'web') as src, COUNT(*) as cnt "
+                "FROM chat_messages "
+                "WHERE role = 'user' AND created_at >= :since "
+                "GROUP BY bucket, src "
+                "ORDER BY bucket"
+            ),
+            {"since": since_str},
+        )
 
     # Aggregate by bucket
     data: dict[str, dict[str, int]] = {}
@@ -303,17 +352,27 @@ async def get_timeline(
             data[bucket] = {"web": 0, "tg": 0, "operator": 0}
         data[bucket][src] = data[bucket].get(src, 0) + cnt
 
-    # Build full hourly grid (all slots, even empty)
-    now_saratov = datetime.now(SARATOV_TZ).replace(tzinfo=None)
+    # Build full hourly grid
     buckets: list[TimelineBucket] = []
-    for h in range(hours, 0, -1):
-        slot = (now_saratov - timedelta(hours=h)).replace(minute=0, second=0, microsecond=0)
-        key = slot.strftime("%Y-%m-%dT%H:00")
-        counts = data.get(key, {})
-        web = counts.get("web", 0)
-        tg = counts.get("tg", 0)
-        op = counts.get("operator", 0)
-        buckets.append(TimelineBucket(bucket=key, web=web, tg=tg, operator=op, total=web + tg + op))
+    if dr:
+        for h in range(24):
+            slot = day_start + timedelta(hours=h)
+            key = slot.strftime("%Y-%m-%dT%H:00")
+            counts = data.get(key, {})
+            web = counts.get("web", 0)
+            tg = counts.get("tg", 0)
+            op = counts.get("operator", 0)
+            buckets.append(TimelineBucket(bucket=key, web=web, tg=tg, operator=op, total=web + tg + op))
+    else:
+        now_saratov = datetime.now(SARATOV_TZ).replace(tzinfo=None)
+        for h in range(hours, 0, -1):
+            slot = (now_saratov - timedelta(hours=h)).replace(minute=0, second=0, microsecond=0)
+            key = slot.strftime("%Y-%m-%dT%H:00")
+            counts = data.get(key, {})
+            web = counts.get("web", 0)
+            tg = counts.get("tg", 0)
+            op = counts.get("operator", 0)
+            buckets.append(TimelineBucket(bucket=key, web=web, tg=tg, operator=op, total=web + tg + op))
 
     return TimelineResponse(buckets=buckets)
 
@@ -321,12 +380,20 @@ async def get_timeline(
 @router.get("/confidence-distribution", response_model=ConfidenceDistribution)
 async def get_confidence_distribution(
     hours: int = 24,
+    date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     _user=Depends(verify_admin_token),
     db: AsyncSession = Depends(get_db),
 ):
-    """Распределение ответов по уровням уверенности за последние N часов."""
-    hours = max(1, min(hours, 168))
-    since_str = _hours_ago(hours).strftime("%Y-%m-%d %H:%M:%S")
+    """Распределение ответов по уровням уверенности за последние N часов или за дату."""
+    dr = _date_range(date)
+    if dr:
+        ts_start, ts_end = dr
+        time_filter = "created_at >= :since AND created_at < :until"
+        params: dict[str, Any] = {"since": ts_start.strftime("%Y-%m-%d %H:%M:%S"), "until": ts_end.strftime("%Y-%m-%d %H:%M:%S")}
+    else:
+        hours = max(1, min(hours, 168))
+        time_filter = "created_at >= :since"
+        params = {"since": _hours_ago(hours).strftime("%Y-%m-%d %H:%M:%S")}
 
     row = await db.execute(
         text(
@@ -337,9 +404,9 @@ async def get_confidence_distribution(
             "SUM(CASE WHEN confidence < 0.3 THEN 1 ELSE 0 END) as escalation_lvl, "
             "COUNT(*) as total "
             "FROM chat_messages "
-            "WHERE role = 'assistant' AND confidence IS NOT NULL AND created_at >= :since"
+            f"WHERE role = 'assistant' AND confidence IS NOT NULL AND {time_filter}"
         ),
-        {"since": since_str},
+        params,
     )
     r = row.fetchone()
     if r is None or r[4] == 0:
@@ -357,25 +424,32 @@ async def get_confidence_distribution(
 async def get_top_reasons(
     hours: int = 24,
     limit: int = 10,
+    date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     _user=Depends(verify_admin_token),
     db: AsyncSession = Depends(get_db),
 ):
-    """TOP-N причин обращения по сохранённому detected_reason за последние N часов."""
-    hours = max(1, min(hours, 168))
+    """TOP-N причин обращения по сохранённому detected_reason за последние N часов или за дату."""
     limit = max(1, min(limit, 50))
-    since_str = _hours_ago(hours).strftime("%Y-%m-%d %H:%M:%S")
+    dr = _date_range(date)
+    if dr:
+        ts_start, ts_end = dr
+        time_filter = "created_at >= :since AND created_at < :until"
+        params: dict[str, Any] = {"since": ts_start.strftime("%Y-%m-%d %H:%M:%S"), "until": ts_end.strftime("%Y-%m-%d %H:%M:%S"), "lim": limit}
+    else:
+        hours = max(1, min(hours, 168))
+        time_filter = "created_at >= :since"
+        params = {"since": _hours_ago(hours).strftime("%Y-%m-%d %H:%M:%S"), "lim": limit}
 
     rows = await db.execute(
         text(
             "SELECT detected_reason, COUNT(*) as cnt "
             "FROM chat_messages "
-            "WHERE role = 'assistant' AND detected_reason IS NOT NULL AND detected_reason != '' "
-            "AND created_at >= :since "
+            f"WHERE role = 'assistant' AND detected_reason IS NOT NULL AND detected_reason != '' AND {time_filter} "
             "GROUP BY detected_reason "
             "ORDER BY cnt DESC "
             "LIMIT :lim"
         ),
-        {"since": since_str, "lim": limit},
+        params,
     )
     items = [TopReasonItem(reason=row[0], count=row[1]) for row in rows]
     return TopReasonsResponse(items=items)
@@ -384,13 +458,22 @@ async def get_top_reasons(
 @router.get("/recent-qa", response_model=RecentQAResponse)
 async def get_recent_qa(
     limit: int = 20,
+    date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     _user=Depends(verify_admin_token),
     db: AsyncSession = Depends(get_db),
 ):
-    """Лента последних N пар вопрос-ответ из всех каналов."""
-    limit = max(1, min(limit, 100))
+    """Лента последних N пар вопрос-ответ из всех каналов, или все пары за выбранную дату."""
+    dr = _date_range(date)
+    if dr:
+        limit = max(1, min(limit, 100))
+        ts_start, ts_end = dr
+        date_cond = " AND a.created_at >= :ts_start AND a.created_at < :ts_end"
+        params: dict[str, Any] = {"lim": limit, "ts_start": ts_start.strftime("%Y-%m-%d %H:%M:%S"), "ts_end": ts_end.strftime("%Y-%m-%d %H:%M:%S")}
+    else:
+        limit = max(1, min(limit, 100))
+        date_cond = ""
+        params = {"lim": limit}
 
-    # Get latest assistant messages with their preceding user message
     rows = await db.execute(
         text(
             "SELECT a.session_id, COALESCE(a.source, 'web'), "
@@ -403,11 +486,11 @@ async def get_recent_qa(
             "    SELECT MAX(id) FROM chat_messages "
             "    WHERE session_id = a.session_id AND role = 'user' AND id < a.id"
             "  ) "
-            "WHERE a.role = 'assistant' "
-            "ORDER BY a.id DESC "
-            "LIMIT :lim"
+            "WHERE a.role = 'assistant'"
+            + date_cond
+            + " ORDER BY a.id DESC LIMIT :lim"
         ),
-        {"lim": limit},
+        params,
     )
     items = []
     for row in rows:
@@ -516,18 +599,31 @@ async def get_escalation_detail(
 @router.get("/pending-escalations", response_model=PendingEscalationsResponse)
 async def get_pending_escalations(
     limit: int = 10,
+    date: str | None = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     _user=Depends(verify_admin_token),
     db: AsyncSession = Depends(get_db),
 ):
-    """Список активных (pending/in_progress) эскалаций."""
+    """Активные (pending/in_progress) эскалации, или все эскалации за выбранную дату."""
     limit = max(1, min(limit, 50))
+    dr = _date_range(date)
 
-    result = await db.execute(
-        select(Escalation)
-        .where(Escalation.status.in_(["pending", "in_progress"]))
-        .order_by(Escalation.created_at.desc())
-        .limit(limit)
-    )
+    if dr:
+        ts_start, ts_end = dr
+        result = await db.execute(
+            select(Escalation)
+            .where(Escalation.created_at >= ts_start)
+            .where(Escalation.created_at < ts_end)
+            .order_by(Escalation.created_at.desc())
+            .limit(limit)
+        )
+    else:
+        result = await db.execute(
+            select(Escalation)
+            .where(Escalation.status.in_(["pending", "in_progress"]))
+            .order_by(Escalation.created_at.desc())
+            .limit(limit)
+        )
+
     escalations = result.scalars().all()
     items = [
         PendingEscalationItem(
