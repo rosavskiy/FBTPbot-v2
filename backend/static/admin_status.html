@@ -244,7 +244,7 @@ function renderOverview(data) {
     // LLM
     setDot('llm', 'ok');
     setText('val-llm', data.llm.provider);
-    setText('sub-llm', data.llm.model);
+    setText('sub-llm', data.llm.model + (data.llm.balance ? ' · ' + data.llm.balance : ''));
 
     // TG bot
     if (data.tg_bot.alive) {
