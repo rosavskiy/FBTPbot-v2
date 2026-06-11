@@ -637,7 +637,11 @@ async def send_message(
             _dup_sim = round(SequenceMatcher(None, _a, _b).ratio(), 3)
     _is_dup = _dup_sim is not None and _dup_sim >= DUPLICATE_SIMILARITY_THRESHOLD
     if guards is not None:
-        guards["duplicate_answer"] = {"triggered": _is_dup, "similarity": _dup_sim, "threshold": DUPLICATE_SIMILARITY_THRESHOLD}
+        guards["duplicate_answer"] = {
+            "triggered": _is_dup,
+            "similarity": _dup_sim,
+            "threshold": DUPLICATE_SIMILARITY_THRESHOLD,
+        }
     if _is_dup:
         logger.info("[CHAT] Автоэскалация по повтору ответа, session=%s", session.id)
         return await _trigger_escalation(
@@ -652,7 +656,10 @@ async def send_message(
     # Движок сам определил низкую уверенность — создаём реальную эскалацию на оператора
     # (уведомление в Telegram + «тихий» режим), а не просто текст-заглушку.
     if guards is not None:
-        guards["needs_escalation"] = {"triggered": rag_response.needs_escalation, "reason": rag_response.confidence_reason}
+        guards["needs_escalation"] = {
+            "triggered": rag_response.needs_escalation,
+            "reason": rag_response.confidence_reason,
+        }
     if rag_response.needs_escalation:
         logger.info("[CHAT] Автоэскалация по низкой уверенности движка, session=%s", session.id)
         return await _trigger_escalation(
