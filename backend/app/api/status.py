@@ -228,9 +228,7 @@ async def get_overview(
     source_rows = await db.execute(
         text(
             "SELECT COALESCE(source, 'web') as src, COUNT(*) as cnt "
-            "FROM chat_messages WHERE role = 'user' AND created_at >= :ts_start"
-            + extra_cond
-            + " GROUP BY src"
+            "FROM chat_messages WHERE role = 'user' AND created_at >= :ts_start" + extra_cond + " GROUP BY src"
         ),
         params_base,
     )
@@ -239,10 +237,7 @@ async def get_overview(
         source_counts[row[0]] = row[1]
 
     sessions_row = await db.execute(
-        text(
-            "SELECT COUNT(DISTINCT session_id) FROM chat_messages"
-            " WHERE created_at >= :ts_start" + extra_cond
-        ),
+        text("SELECT COUNT(DISTINCT session_id) FROM chat_messages" " WHERE created_at >= :ts_start" + extra_cond),
         params_base,
     )
     sessions_count = sessions_row.scalar_one_or_none() or 0
@@ -256,8 +251,7 @@ async def get_overview(
     avg_conf_row = await db.execute(
         text(
             "SELECT AVG(confidence) FROM chat_messages "
-            "WHERE role = 'assistant' AND confidence IS NOT NULL AND created_at >= :ts_start"
-            + extra_cond
+            "WHERE role = 'assistant' AND confidence IS NOT NULL AND created_at >= :ts_start" + extra_cond
         ),
         params_base,
     )
@@ -281,7 +275,9 @@ async def get_overview(
 
     # ── Pending escalations (live state only, zeroed in history mode) ──
     if not dr:
-        pending_row = await db.execute(text("SELECT COUNT(*) FROM escalations WHERE status IN ('pending', 'in_progress')"))
+        pending_row = await db.execute(
+            text("SELECT COUNT(*) FROM escalations WHERE status IN ('pending', 'in_progress')")
+        )
         pending_count = pending_row.scalar_one_or_none() or 0
         active_clarifications = get_active_sessions_count()
         active_operators = get_active_operator_tokens_count()
@@ -389,7 +385,10 @@ async def get_confidence_distribution(
     if dr:
         ts_start, ts_end = dr
         time_filter = "created_at >= :since AND created_at < :until"
-        params: dict[str, Any] = {"since": ts_start.strftime("%Y-%m-%d %H:%M:%S"), "until": ts_end.strftime("%Y-%m-%d %H:%M:%S")}
+        params: dict[str, Any] = {
+            "since": ts_start.strftime("%Y-%m-%d %H:%M:%S"),
+            "until": ts_end.strftime("%Y-%m-%d %H:%M:%S"),
+        }
     else:
         hours = max(1, min(hours, 168))
         time_filter = "created_at >= :since"
@@ -434,7 +433,11 @@ async def get_top_reasons(
     if dr:
         ts_start, ts_end = dr
         time_filter = "created_at >= :since AND created_at < :until"
-        params: dict[str, Any] = {"since": ts_start.strftime("%Y-%m-%d %H:%M:%S"), "until": ts_end.strftime("%Y-%m-%d %H:%M:%S"), "lim": limit}
+        params: dict[str, Any] = {
+            "since": ts_start.strftime("%Y-%m-%d %H:%M:%S"),
+            "until": ts_end.strftime("%Y-%m-%d %H:%M:%S"),
+            "lim": limit,
+        }
     else:
         hours = max(1, min(hours, 168))
         time_filter = "created_at >= :since"
@@ -468,7 +471,11 @@ async def get_recent_qa(
         limit = max(1, min(limit, 100))
         ts_start, ts_end = dr
         date_cond = " AND a.created_at >= :ts_start AND a.created_at < :ts_end"
-        params: dict[str, Any] = {"lim": limit, "ts_start": ts_start.strftime("%Y-%m-%d %H:%M:%S"), "ts_end": ts_end.strftime("%Y-%m-%d %H:%M:%S")}
+        params: dict[str, Any] = {
+            "lim": limit,
+            "ts_start": ts_start.strftime("%Y-%m-%d %H:%M:%S"),
+            "ts_end": ts_end.strftime("%Y-%m-%d %H:%M:%S"),
+        }
     else:
         limit = max(1, min(limit, 100))
         date_cond = ""
@@ -486,9 +493,7 @@ async def get_recent_qa(
             "    SELECT MAX(id) FROM chat_messages "
             "    WHERE session_id = a.session_id AND role = 'user' AND id < a.id"
             "  ) "
-            "WHERE a.role = 'assistant'"
-            + date_cond
-            + " ORDER BY a.id DESC LIMIT :lim"
+            "WHERE a.role = 'assistant'" + date_cond + " ORDER BY a.id DESC LIMIT :lim"
         ),
         params,
     )
