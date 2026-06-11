@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.admin_auth import verify_admin_token
 from app.api.operator import get_active_operator_tokens_count
 from app.config import SARATOV_TZ, settings
-from app.database.models import Escalation, get_db
+from app.database.models import ChatMessageDB, Escalation, get_db
 from app.database.reason_store import get_cached_or_load
 from app.llm_settings import get_active_llm_display
 from app.rag.session_store import get_active_sessions_count
@@ -423,6 +423,99 @@ async def get_recent_qa(
             )
         )
     return RecentQAResponse(items=items)
+
+
+class SessionMessage(BaseModel):
+    role: str
+    content: str
+    confidence: float | None
+    detected_reason: str | None
+    created_at: str
+
+
+class SessionDetailResponse(BaseModel):
+    session_id: str
+    messages: list[SessionMessage]
+
+
+class EscalationDetailResponse(BaseModel):
+    id: str
+    session_id: str
+    status: str
+    reason: str | None
+    contact_info: str | None
+    created_at: str
+    messages: list[SessionMessage]
+
+
+@router.get("/session/{session_id}", response_model=SessionDetailResponse)
+async def get_session_detail(
+    session_id: str,
+    _user=Depends(verify_admin_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Полная история сообщений сессии."""
+    result = await db.execute(
+        select(ChatMessageDB)
+        .where(ChatMessageDB.session_id == session_id)
+        .order_by(ChatMessageDB.id.asc())
+        .limit(100)
+    )
+    messages = result.scalars().all()
+    return SessionDetailResponse(
+        session_id=session_id,
+        messages=[
+            SessionMessage(
+                role=m.role,
+                content=m.content,
+                confidence=m.confidence,
+                detected_reason=m.detected_reason,
+                created_at=str(m.created_at)[:19],
+            )
+            for m in messages
+        ],
+    )
+
+
+@router.get("/escalation/{escalation_id}", response_model=EscalationDetailResponse)
+async def get_escalation_detail(
+    escalation_id: str,
+    _user=Depends(verify_admin_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Детали эскалации с полной историей сообщений сессии."""
+    esc_result = await db.execute(
+        select(Escalation).where(Escalation.id == escalation_id)
+    )
+    esc = esc_result.scalar_one_or_none()
+    if esc is None:
+        raise HTTPException(status_code=404, detail="Escalation not found")
+
+    msg_result = await db.execute(
+        select(ChatMessageDB)
+        .where(ChatMessageDB.session_id == esc.session_id)
+        .order_by(ChatMessageDB.id.asc())
+        .limit(100)
+    )
+    messages = msg_result.scalars().all()
+    return EscalationDetailResponse(
+        id=str(esc.id),
+        session_id=str(esc.session_id),
+        status=str(esc.status),
+        reason=esc.reason,
+        contact_info=esc.contact_info,
+        created_at=str(esc.created_at)[:19],
+        messages=[
+            SessionMessage(
+                role=m.role,
+                content=m.content,
+                confidence=m.confidence,
+                detected_reason=m.detected_reason,
+                created_at=str(m.created_at)[:19],
+            )
+            for m in messages
+        ],
+    )
 
 
 @router.get("/pending-escalations", response_model=PendingEscalationsResponse)

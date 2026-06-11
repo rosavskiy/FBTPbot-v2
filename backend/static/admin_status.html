@@ -419,7 +419,7 @@ function renderQAFeed(data) {
         return;
     }
     el.innerHTML = data.items.map(item => `
-        <div class="qa-item">
+        <div class="qa-item" onclick="openSessionModal('${item.session_id}')">
             <div class="qa-item__meta">
                 ${sourceBadge(item.source)}
                 ${confBadge(item.confidence)}
@@ -439,16 +439,88 @@ function renderEscFeed(data) {
         return;
     }
     el.innerHTML = data.items.map(item => `
-        <div class="esc-item">
+        <div class="esc-item" onclick="openEscalationModal('${item.id}')">
             <div class="esc-item__id">#${item.id.slice(0, 8)} · ${item.status}</div>
             <div class="esc-item__reason">${escape(item.reason || 'Без причины')}</div>
             <div class="esc-item__meta">
                 ${item.contact_info ? `<span>📞 ${escape(item.contact_info)}</span>` : ''}
                 <span>🕒 ${item.created_at.slice(0, 16)}</span>
-                <a class="esc-item__link" href="/bot-config">→ Оператор</a>
+                <a class="esc-item__link" href="/bot-config" onclick="event.stopPropagation()">→ Оператор</a>
             </div>
         </div>
     `).join('');
+}
+
+// ── Dialog modal ──
+function openModal() {
+    document.getElementById('dialogModal').classList.add('open');
+    document.addEventListener('keydown', onModalEscape);
+}
+function closeDialogModal() {
+    document.getElementById('dialogModal').classList.remove('open');
+    document.removeEventListener('keydown', onModalEscape);
+}
+function onModalEscape(e) {
+    if (e.key === 'Escape') closeDialogModal();
+}
+function onModalOverlayClick(e) {
+    if (e.target === document.getElementById('dialogModal')) closeDialogModal();
+}
+
+function confLabel(c) {
+    if (c === null || c === undefined) return '';
+    if (c >= 0.85) return `<span class="badge badge-conf--high">High ${(c * 100).toFixed(0)}%</span>`;
+    if (c >= 0.6)  return `<span class="badge badge-conf--acceptable">OK ${(c * 100).toFixed(0)}%</span>`;
+    if (c >= 0.35) return `<span class="badge badge-conf--partial">Part ${(c * 100).toFixed(0)}%</span>`;
+    return `<span class="badge badge-conf--escalation">Esc ${(c * 100).toFixed(0)}%</span>`;
+}
+
+function renderMessages(messages) {
+    if (!messages || messages.length === 0) return '<div class="modal-loading">Нет сообщений</div>';
+    return messages.map(m => {
+        const cls = `modal-msg modal-msg--${m.role}`;
+        const meta = [];
+        if (m.created_at) meta.push(m.created_at.slice(11, 16));
+        if (m.detected_reason) meta.push(`📌 ${escape(m.detected_reason)}`);
+        const metaHtml = meta.length ? `<div class="modal-msg__meta">${meta.join(' · ')}</div>` : '';
+        return `<div class="${cls}">${escape(m.content)}${metaHtml}</div>`;
+    }).join('');
+}
+
+async function openSessionModal(sessionId) {
+    document.getElementById('modalTitle').textContent = `Диалог #${sessionId.slice(0, 8)}`;
+    document.getElementById('modalMeta').innerHTML = `<span style="font-family:monospace;font-size:.7rem;color:var(--gray-500)">${sessionId}</span>`;
+    document.getElementById('modalMessages').innerHTML = '<div class="modal-loading">Загрузка...</div>';
+    openModal();
+    try {
+        const resp = await AdminNav.authFetch(`/api/status/session/${sessionId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        document.getElementById('modalMessages').innerHTML = renderMessages(data.messages);
+    } catch (err) {
+        document.getElementById('modalMessages').innerHTML = `<div class="modal-loading">Ошибка загрузки: ${err.message}</div>`;
+    }
+}
+
+async function openEscalationModal(escId) {
+    document.getElementById('modalTitle').textContent = `Эскалация #${escId.slice(0, 8)}`;
+    document.getElementById('modalMeta').innerHTML = '';
+    document.getElementById('modalMessages').innerHTML = '<div class="modal-loading">Загрузка...</div>';
+    openModal();
+    try {
+        const resp = await AdminNav.authFetch(`/api/status/escalation/${escId}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const metaParts = [];
+        metaParts.push(`<span class="badge badge-source--${data.status === 'pending' ? 'tg' : 'web'}">${data.status}</span>`);
+        if (data.reason) metaParts.push(`<span>📋 ${escape(data.reason)}</span>`);
+        if (data.contact_info) metaParts.push(`<span>📞 ${escape(data.contact_info)}</span>`);
+        metaParts.push(`<span style="margin-left:auto;font-size:.7rem;color:var(--gray-500)">${data.created_at}</span>`);
+        document.getElementById('modalMeta').innerHTML = metaParts.join('');
+        document.getElementById('modalMessages').innerHTML = renderMessages(data.messages);
+    } catch (err) {
+        document.getElementById('modalMessages').innerHTML = `<div class="modal-loading">Ошибка загрузки: ${err.message}</div>`;
+    }
 }
 
 // ── Refresh ──
@@ -499,5 +571,16 @@ document.addEventListener('visibilitychange', () => {
 refreshAll();
 setInterval(refreshAll, 10000);
 </script>
+
+<div id="dialogModal" class="modal-overlay" onclick="onModalOverlayClick(event)">
+    <div class="modal-window">
+        <div class="modal-header">
+            <div class="modal-title" id="modalTitle"></div>
+            <button class="modal-close" onclick="closeDialogModal()">✕</button>
+        </div>
+        <div class="modal-meta" id="modalMeta"></div>
+        <div class="modal-messages" id="modalMessages"></div>
+    </div>
+</div>
 </body>
 </html>
