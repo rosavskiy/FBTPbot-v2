@@ -96,6 +96,12 @@ class LLMSettingsPayload(BaseModel):
     llm_provider: str = Field(default="yandex")
     show_llm_in_chat: bool = False
     llm_temperature: float = Field(default=0.1, ge=0.0, le=1.0)
+    # Ключи/модели: None = не менять. Пустой ключ тоже трактуется как "не менять".
+    yandex_api_key: str | None = None
+    yandex_folder_id: str | None = None
+    yandex_gpt_model: str | None = None
+    deepseek_api_key: str | None = None
+    deepseek_model: str | None = None
 
 
 class LLMSettingsResponse(BaseModel):
@@ -106,6 +112,12 @@ class LLMSettingsResponse(BaseModel):
     active_provider: str = "yandex"
     active_model: str = "yandexgpt"
     active_label: str = "Yandex / yandexgpt"
+    # Секреты не отдаём — только признак, задан ли ключ. Модели/folder некритичны.
+    yandex_api_key_set: bool = False
+    yandex_folder_id: str = ""
+    yandex_gpt_model: str = "yandexgpt"
+    deepseek_api_key_set: bool = False
+    deepseek_model: str = "deepseek-chat"
 
 
 class ClassificationSettingsPayload(BaseModel):
@@ -283,6 +295,11 @@ def _get_llm_settings_response() -> LLMSettingsResponse:
         active_provider=str(active["provider"]),
         active_model=str(active["model"]),
         active_label=str(active["label"]),
+        yandex_api_key_set=bool(snapshot["yandex_api_key"].strip()),
+        yandex_folder_id=snapshot["yandex_folder_id"],
+        yandex_gpt_model=snapshot["yandex_gpt_model"],
+        deepseek_api_key_set=bool(snapshot["deepseek_api_key"].strip()),
+        deepseek_model=snapshot["deepseek_model"],
     )
 
 
@@ -479,17 +496,25 @@ async def update_llm_settings(
 
     env_path = _persist_llm_settings(payload)
     snapshot = get_llm_settings_snapshot()
+
+    def _pick_secret(new: str | None, current: str) -> str:
+        # Ключ обновляем только если передана непустая строка, иначе сохраняем текущий.
+        return new.strip() if (new is not None and new.strip()) else current
+
+    def _pick(new: str | None, current: str) -> str:
+        return new.strip() if new is not None else current
+
     runtime_path = save_runtime_llm_settings(
         {
             "llm_provider": payload.llm_provider,
             "show_llm_in_chat": str(payload.show_llm_in_chat).lower(),
             "llm_temperature": str(payload.llm_temperature),
-            "yandex_api_key": snapshot["yandex_api_key"],
-            "yandex_folder_id": snapshot["yandex_folder_id"],
-            "yandex_gpt_model": snapshot["yandex_gpt_model"],
+            "yandex_api_key": _pick_secret(payload.yandex_api_key, snapshot["yandex_api_key"]),
+            "yandex_folder_id": _pick(payload.yandex_folder_id, snapshot["yandex_folder_id"]),
+            "yandex_gpt_model": _pick(payload.yandex_gpt_model, snapshot["yandex_gpt_model"]),
             "yandex_embedding_model": snapshot["yandex_embedding_model"],
-            "deepseek_api_key": snapshot["deepseek_api_key"],
-            "deepseek_model": snapshot["deepseek_model"],
+            "deepseek_api_key": _pick_secret(payload.deepseek_api_key, snapshot["deepseek_api_key"]),
+            "deepseek_model": _pick(payload.deepseek_model, snapshot["deepseek_model"]),
         }
     )
     _apply_llm_settings(payload)

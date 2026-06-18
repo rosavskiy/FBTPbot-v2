@@ -353,6 +353,28 @@
                     <span id="llmTempValue" style="min-width:30px; font-family:var(--font-mono); font-size:13px;">0.10</span>
                 </div>
             </div>
+            <div style="border-top:1px solid var(--gray-700); margin:12px 0 4px;"></div>
+            <div class="form-row">
+                <div class="form-label">DeepSeek API-ключ</div>
+                <input type="password" class="form-input" id="deepseekApiKey" style="width:100%;" autocomplete="off" placeholder="не задан">
+            </div>
+            <div class="form-row">
+                <div class="form-label">DeepSeek модель</div>
+                <input type="text" class="form-input" id="deepseekModel" style="width:100%;" autocomplete="off" placeholder="deepseek-chat">
+            </div>
+            <div class="form-row">
+                <div class="form-label">Yandex API-ключ</div>
+                <input type="password" class="form-input" id="yandexApiKey" style="width:100%;" autocomplete="off" placeholder="не задан">
+            </div>
+            <div class="form-row">
+                <div class="form-label">Yandex Folder ID</div>
+                <input type="text" class="form-input" id="yandexFolderId" style="width:100%;" autocomplete="off">
+            </div>
+            <div class="form-row">
+                <div class="form-label">Yandex модель</div>
+                <input type="text" class="form-input" id="yandexGptModel" style="width:100%;" autocomplete="off" placeholder="yandexgpt">
+            </div>
+            <div style="border-top:1px solid var(--gray-700); margin:12px 0 4px;"></div>
             <div class="form-row">
                 <div class="form-label">Активная модель</div>
                 <span id="activeLlmIndicator" style="font-size:13px; color:var(--gray-300);">Активно: неизвестно</span>
@@ -1058,6 +1080,17 @@ async function loadLlmSettings() {
         document.getElementById('llmTemperature').value = temp;
         document.getElementById('llmTempValue').textContent = parseFloat(temp).toFixed(2);
         document.getElementById('activeLlmIndicator').textContent = `Активно: ${data.active_label || 'неизвестно'}`;
+
+        // Ключи не приходят с сервера — поле всегда пустое; плейсхолдер показывает, задан ли ключ.
+        const dsKey = document.getElementById('deepseekApiKey');
+        dsKey.value = '';
+        dsKey.placeholder = data.deepseek_api_key_set ? '•••••••• задан — оставьте пустым, чтобы не менять' : 'не задан';
+        document.getElementById('deepseekModel').value = data.deepseek_model || '';
+        const yKey = document.getElementById('yandexApiKey');
+        yKey.value = '';
+        yKey.placeholder = data.yandex_api_key_set ? '•••••••• задан — оставьте пустым, чтобы не менять' : 'не задан';
+        document.getElementById('yandexFolderId').value = data.yandex_folder_id || '';
+        document.getElementById('yandexGptModel').value = data.yandex_gpt_model || '';
     } catch (e) {
         notify('Ошибка загрузки LLM: ' + e.message, 'error');
     }
@@ -1073,7 +1106,15 @@ async function saveLlmSettings() {
         llm_provider: document.getElementById('llmProvider').value,
         show_llm_in_chat: document.getElementById('showLlmInChat').checked,
         llm_temperature: parseFloat(document.getElementById('llmTemperature').value),
+        deepseek_model: document.getElementById('deepseekModel').value.trim(),
+        yandex_folder_id: document.getElementById('yandexFolderId').value.trim(),
+        yandex_gpt_model: document.getElementById('yandexGptModel').value.trim(),
     };
+    // Ключи отправляем только если поле заполнено (пустое = не менять).
+    const dsKey = document.getElementById('deepseekApiKey').value.trim();
+    if (dsKey) payload.deepseek_api_key = dsKey;
+    const yKey = document.getElementById('yandexApiKey').value.trim();
+    if (yKey) payload.yandex_api_key = yKey;
 
     try {
         const r = await fetch(`${API}/llm-settings`, {
