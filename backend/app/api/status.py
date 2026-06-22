@@ -23,7 +23,7 @@ from app.config import SARATOV_TZ, settings
 from app.database.models import ChatMessageDB, Escalation, get_db
 from app.database.reason_store import get_cached_or_load
 from app.llm_balance import get_deepseek_balance_str
-from app.llm_settings import get_active_llm_display
+from app.llm_settings import get_active_llm_display, get_llm_settings_snapshot
 from app.rag.session_store import get_active_sessions_count
 from app.sheets.gsheet_logger import get_gsheet_logger
 
@@ -212,8 +212,11 @@ async def get_overview(
     try:
         llm_display = get_active_llm_display()
         llm_balance: str | None = None
-        if llm_display["provider"] == "deepseek" and settings.deepseek_api_key:
-            llm_balance = await get_deepseek_balance_str(settings.deepseek_api_key)
+        # Ключ берём из активного snapshot (runtime JSON), а не из settings/.env,
+        # иначе после рестарта используется устаревший ключ из .env.
+        deepseek_key = get_llm_settings_snapshot()["deepseek_api_key"]
+        if llm_display["provider"] == "deepseek" and deepseek_key:
+            llm_balance = await get_deepseek_balance_str(deepseek_key)
         llm_status = LlmStatus(
             provider=llm_display["provider"],
             model=str(llm_display["model"]),

@@ -25,7 +25,7 @@ from app.config import SARATOV_TZ, settings
 from app.database.models import AlertLog, async_session
 from app.database.reason_store import get_cached_or_load
 from app.llm_balance import fetch_deepseek_balance_raw, format_balance
-from app.llm_settings import get_active_llm_display
+from app.llm_settings import get_active_llm_display, get_llm_settings_snapshot
 from app.tg.notifier import get_telegram_notifier
 from app.tg.user_registry import resolve_recipient
 
@@ -233,8 +233,11 @@ async def _run_checks(cfg: dict[str, Any], state: dict[str, Any]) -> None:
     # ── Баланс API (DeepSeek) ──
     if cfg.get("balance_enabled", True):
         display = get_active_llm_display()
-        if display["provider"] == "deepseek" and settings.deepseek_api_key:
-            value, currency = await fetch_deepseek_balance_raw(settings.deepseek_api_key)
+        # Ключ из активного snapshot (runtime JSON) — тот же источник, что и движок,
+        # а не settings/.env (который устаревает после рестарта процесса).
+        deepseek_key = get_llm_settings_snapshot()["deepseek_api_key"]
+        if display["provider"] == "deepseek" and deepseek_key:
+            value, currency = await fetch_deepseek_balance_raw(deepseek_key)
             if value is not None:
                 threshold = float(cfg.get("balance_threshold_usd", 5.0))
                 decision = _should_fire(state, "balance", value < threshold, cooldown, recovery)
