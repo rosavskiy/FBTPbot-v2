@@ -97,6 +97,37 @@ class TelegramNotifier:
             logger.error(f"Ошибка отправки в Telegram: {e}")
             return None
 
+    async def send_message(
+        self,
+        chat_id: str,
+        text: str,
+        parse_mode: str | None = "HTML",
+    ) -> str | None:
+        """Отправить произвольное сообщение указанному chat_id.
+
+        Используется системой оповещений для рассылки по настроенным получателям.
+
+        Returns:
+            ID отправленного сообщения, либо None при ошибке/отключённом боте.
+        """
+        if not self.token:
+            logger.info("Telegram-токен не задан, пропуск отправки")
+            return None
+
+        payload: dict = {"chat_id": chat_id, "text": text}
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+
+        try:
+            response = await self._client.post(f"{self.api_url}/sendMessage", json=payload)
+            data = response.json()
+            if data.get("ok"):
+                return str(data["result"]["message_id"])
+            logger.warning("Telegram sendMessage error for %s: %s", chat_id, data)
+        except Exception as e:
+            logger.error(f"Ошибка отправки в Telegram ({chat_id}): {e}")
+        return None
+
     async def send_operator_reply(
         self,
         escalation_id: str,

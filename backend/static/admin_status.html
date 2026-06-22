@@ -12,6 +12,47 @@
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
   <script src="/static/admin_nav.js"></script>
+  <style>
+    .alerts-card { background: var(--card-bg, #1b1b1f); border: 1px solid var(--border, rgba(255,255,255,.08));
+      border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+    .alerts-card .al-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .alerts-card .al-row--inline { display: inline-flex; }
+    .alerts-card .al-master { font-size: 15px; }
+    .alerts-card .al-field { display: flex; flex-direction: column; gap: 6px; }
+    .alerts-card .al-label { font-weight: 600; font-size: 13px; color: var(--gray-400, #a1a1aa); }
+    .alerts-card textarea { width: 100%; box-sizing: border-box; background: var(--input-bg, #0f0f12);
+      color: inherit; border: 1px solid var(--border, rgba(255,255,255,.12)); border-radius: 8px;
+      padding: 8px 10px; font-family: inherit; font-size: 13px; resize: vertical; }
+    .alerts-card .al-hint { font-size: 12px; color: var(--gray-500, #71717a); }
+    .alerts-card .al-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .alerts-card .al-resolve { font-size: 12px; color: var(--gray-400, #a1a1aa); }
+    .alerts-card .al-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .alerts-card .al-box { border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 8px;
+      padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .alerts-card .al-sub { font-size: 13px; color: var(--gray-400, #a1a1aa); display: flex;
+      align-items: center; gap: 8px; flex-wrap: wrap; }
+    .alerts-card .al-common { padding-top: 4px; }
+    .alerts-card .al-num { width: 84px; background: var(--input-bg, #0f0f12); color: inherit;
+      border: 1px solid var(--border, rgba(255,255,255,.12)); border-radius: 6px; padding: 4px 8px; font-size: 13px; }
+    .alerts-card .al-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .alerts-card .al-btn { background: var(--accent, #6366f1); color: #fff; border: none; border-radius: 8px;
+      padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .alerts-card .al-btn--ghost { background: transparent; color: var(--accent, #818cf8);
+      border: 1px solid var(--accent, #818cf8); }
+    .alerts-card .al-btn:hover { opacity: .9; }
+    .alerts-card .al-status { font-size: 13px; }
+    .alerts-card .al-status.ok { color: #4ade80; }
+    .alerts-card .al-status.err { color: #f87171; }
+    .alerts-card .al-history__title { font-weight: 600; font-size: 13px; margin-bottom: 6px;
+      color: var(--gray-400, #a1a1aa); }
+    .alerts-card .al-hist-item { font-size: 12px; padding: 5px 0; border-top: 1px solid var(--border, rgba(255,255,255,.06));
+      display: flex; gap: 8px; align-items: baseline; }
+    .alerts-card .al-hist-item .sev { font-weight: 700; }
+    .alerts-card .al-hist-item .sev--critical { color: #f87171; }
+    .alerts-card .al-hist-item .sev--warning { color: #fbbf24; }
+    .alerts-card .al-hist-item .sev--recovery { color: #4ade80; }
+    .alerts-card .al-hist-item .sev--info { color: #818cf8; }
+  </style>
 </head>
 <body>
 <div class="refresh-bar">
@@ -145,6 +186,66 @@
       <div class="esc-card">
         <div class="esc-card__title" id="escCardTitle">Активные эскалации</div>
         <div id="escFeed"><div class="empty-state">Загрузка...</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Оповещения ── -->
+  <div id="alertsSection" style="display:none">
+    <div class="section-title">Оповещения в Telegram</div>
+    <div class="alerts-card">
+      <label class="al-row al-master">
+        <input type="checkbox" id="alEnabled" />
+        <span><b>Включить оповещения</b> — проактивные уведомления о состоянии системы</span>
+      </label>
+
+      <div class="al-field">
+        <label class="al-label" for="alRecipients">Получатели (по одному в строке)</label>
+        <textarea id="alRecipients" rows="3" placeholder="123456789&#10;@username&#10;-1001234567890"></textarea>
+        <div class="al-hint">Числовой ID, @username (пользователь должен был написать боту) или @канал.</div>
+        <div class="al-inline">
+          <button class="al-btn al-btn--ghost" id="alResolveBtn" type="button">Проверить получателей</button>
+          <span id="alResolveResult" class="al-resolve"></span>
+        </div>
+      </div>
+
+      <div class="al-grid">
+        <div class="al-box">
+          <label class="al-row"><input type="checkbox" id="alBalanceEnabled" /><span>Порог баланса API (DeepSeek)</span></label>
+          <div class="al-sub">
+            Порог, $: <input type="number" id="alBalanceThreshold" min="0" step="0.5" class="al-num" />
+          </div>
+        </div>
+        <div class="al-box">
+          <label class="al-row"><input type="checkbox" id="alHealthEnabled" /><span>Здоровье сервисов (БД / БЗ / TG-бот)</span></label>
+        </div>
+        <div class="al-box">
+          <label class="al-row"><input type="checkbox" id="alErrorsEnabled" /><span>Всплеск ошибок приложения</span></label>
+          <div class="al-sub">
+            Порог: <input type="number" id="alErrorSpike" min="1" step="1" class="al-num" />
+            Cooldown, мин: <input type="number" id="alErrorsCooldown" min="1" step="1" class="al-num" />
+          </div>
+        </div>
+        <div class="al-box">
+          <label class="al-row"><input type="checkbox" id="alLlmKeyEnabled" /><span>Сбой LLM-ключа (401/403/429)</span></label>
+        </div>
+      </div>
+
+      <div class="al-sub al-common">
+        Интервал опроса, сек: <input type="number" id="alPollInterval" min="30" step="30" class="al-num" />
+        Повтор алерта, мин: <input type="number" id="alCooldown" min="1" step="30" class="al-num" />
+        <label class="al-row al-row--inline"><input type="checkbox" id="alNotifyRecovery" /><span>Уведомлять о восстановлении</span></label>
+      </div>
+
+      <div class="al-actions">
+        <button class="al-btn" id="alSaveBtn" type="button">Сохранить</button>
+        <button class="al-btn al-btn--ghost" id="alTestBtn" type="button">Отправить тест</button>
+        <span id="alSaveStatus" class="al-status"></span>
+      </div>
+
+      <div class="al-history">
+        <div class="al-history__title">Последние оповещения</div>
+        <div id="alHistory"><div class="empty-state">—</div></div>
       </div>
     </div>
   </div>
@@ -717,6 +818,113 @@ document.addEventListener('visibilitychange', () => {
         fpInstance.open();
     });
 })();
+
+// ── Оповещения (alerts) ──
+const AL_FIELDS = {
+    enabled: 'alEnabled', balance_enabled: 'alBalanceEnabled', health_enabled: 'alHealthEnabled',
+    errors_enabled: 'alErrorsEnabled', llm_key_failure_enabled: 'alLlmKeyEnabled',
+    notify_on_recovery: 'alNotifyRecovery',
+    balance_threshold_usd: 'alBalanceThreshold', error_spike_threshold: 'alErrorSpike',
+    errors_cooldown_min: 'alErrorsCooldown', poll_interval_sec: 'alPollInterval', cooldown_min: 'alCooldown',
+};
+const AL_BOOL = ['enabled','balance_enabled','health_enabled','errors_enabled','llm_key_failure_enabled','notify_on_recovery'];
+
+function alSetStatus(msg, cls) {
+    const el = document.getElementById('alSaveStatus');
+    el.textContent = msg; el.className = 'al-status' + (cls ? ' ' + cls : '');
+}
+
+function alPopulate(cfg) {
+    for (const [key, id] of Object.entries(AL_FIELDS)) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        if (AL_BOOL.includes(key)) el.checked = !!cfg[key];
+        else el.value = cfg[key];
+    }
+    document.getElementById('alRecipients').value = (cfg.recipients || []).join('\n');
+}
+
+function alCollect() {
+    const payload = {};
+    for (const [key, id] of Object.entries(AL_FIELDS)) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        if (AL_BOOL.includes(key)) payload[key] = el.checked;
+        else payload[key] = parseFloat(el.value);
+    }
+    payload.recipients = document.getElementById('alRecipients').value
+        .split('\n').map(s => s.trim()).filter(Boolean);
+    return payload;
+}
+
+async function alLoad() {
+    try {
+        const cfg = await AdminNav.authFetch('/api/alerts/settings').then(r => r.json());
+        alPopulate(cfg);
+        alLoadHistory();
+    } catch (err) { console.error('[alerts] load', err); }
+}
+
+async function alSave() {
+    alSetStatus('Сохранение…', '');
+    try {
+        const resp = await AdminNav.authFetch('/api/alerts/settings',
+            { method: 'PUT', body: JSON.stringify(alCollect()) });
+        if (!resp.ok) throw new Error('save failed');
+        const cfg = await resp.json();
+        alPopulate(cfg);
+        alSetStatus('Сохранено ✓', 'ok');
+    } catch (err) { alSetStatus('Ошибка сохранения', 'err'); }
+}
+
+async function alTest() {
+    alSetStatus('Отправка теста…', '');
+    try {
+        const data = await AdminNav.authFetch('/api/alerts/test', { method: 'POST' }).then(r => r.json());
+        alSetStatus(`Доставлено ${data.delivered} из ${data.total}`, data.delivered === data.total && data.total > 0 ? 'ok' : 'err');
+        alLoadHistory();
+    } catch (err) { alSetStatus('Ошибка отправки теста', 'err'); }
+}
+
+async function alResolve() {
+    const recipients = document.getElementById('alRecipients').value
+        .split('\n').map(s => s.trim()).filter(Boolean);
+    const out = document.getElementById('alResolveResult');
+    try {
+        const data = await AdminNav.authFetch('/api/alerts/resolve',
+            { method: 'POST', body: JSON.stringify({ recipients }) }).then(r => r.json());
+        const okCount = data.items.filter(i => i.resolved).length;
+        out.innerHTML = data.items.map(i =>
+            `${escape(i.token)} → <b>${i.resolved ? '✓ ' + escape(i.chat_id) : '⚠ ' + escape(i.chat_id || '—')}</b>`
+        ).join(' &nbsp; ') + ` <span style="color:var(--gray-500)">(${okCount}/${data.items.length})</span>`;
+    } catch (err) { out.textContent = 'Ошибка проверки'; }
+}
+
+async function alLoadHistory() {
+    try {
+        const data = await AdminNav.authFetch('/api/alerts/history?limit=15').then(r => r.json());
+        const box = document.getElementById('alHistory');
+        if (!data.items.length) { box.innerHTML = '<div class="empty-state">—</div>'; return; }
+        box.innerHTML = data.items.map(i => {
+            const dt = i.created_at ? new Date(i.created_at).toLocaleString('ru-RU') : '';
+            const firstLine = (i.message || '').replace(/<[^>]+>/g, '').split('\n')[0];
+            return `<div class="al-hist-item"><span class="sev sev--${i.severity}">${escape(i.alert_type)}</span>`
+                + `<span>${escape(firstLine)}</span>`
+                + `<span style="margin-left:auto; color:var(--gray-500)">${escape(dt)} · ${i.delivered_count}/${i.recipients_count}</span></div>`;
+        }).join('');
+    } catch (err) { console.error('[alerts] history', err); }
+}
+
+function alInit() {
+    const role = (AdminNav.getUser() || {}).role;
+    if (role !== 'superadmin' && role !== 'admin') return;  // только editor
+    document.getElementById('alertsSection').style.display = '';
+    document.getElementById('alSaveBtn').addEventListener('click', alSave);
+    document.getElementById('alTestBtn').addEventListener('click', alTest);
+    document.getElementById('alResolveBtn').addEventListener('click', alResolve);
+    alLoad();
+}
+alInit();
 
 // ── Init ──
 refreshAll();

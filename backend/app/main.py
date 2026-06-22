@@ -13,9 +13,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.alerts.error_capture import install_error_capture
+from app.alerts.monitor import alert_monitor_loop
 from app.api.about import router as about_router
 from app.api.admin_auth import ensure_superadmin
 from app.api.admin_auth import router as admin_router
+from app.api.alerts import router as alerts_router
 from app.api.bot_config import router as bot_config_router
 from app.api.chat import router as chat_router
 from app.api.escalation import router as escalation_router
@@ -42,6 +45,9 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Lifecycle: инициализация при старте, очистка при остановке."""
     logger.info("🚀 Инициализация системы технической поддержки...")
+
+    # Перехват ERROR-логов для оповещений
+    install_error_capture()
 
     # Создаём директории
     Path("./data").mkdir(exist_ok=True)
@@ -72,9 +78,13 @@ async def lifespan(app: FastAPI):
 
     cleanup_task = asyncio.create_task(cleanup_expired_sessions())
 
+    # Фоновый монитор оповещений (баланс / здоровье / ошибки / сбой ключа)
+    monitor_task = asyncio.create_task(alert_monitor_loop())
+
     yield
 
     cleanup_task.cancel()
+    monitor_task.cancel()
     await close_rag_engine()
     logger.info("Завершение работы...")
 
@@ -110,6 +120,7 @@ app.include_router(images_router)
 app.include_router(admin_router)
 app.include_router(reason_builder_router)
 app.include_router(status_router)
+app.include_router(alerts_router)
 
 # Статические файлы (изображения из инструкций)
 images_dir = Path(settings.chroma_persist_dir).parent / "images"

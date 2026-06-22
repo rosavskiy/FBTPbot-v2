@@ -8,12 +8,10 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, text
@@ -24,6 +22,7 @@ from app.api.operator import get_active_operator_tokens_count
 from app.config import SARATOV_TZ, settings
 from app.database.models import ChatMessageDB, Escalation, get_db
 from app.database.reason_store import get_cached_or_load
+from app.llm_balance import get_deepseek_balance_str
 from app.llm_settings import get_active_llm_display
 from app.rag.session_store import get_active_sessions_count
 from app.sheets.gsheet_logger import get_gsheet_logger
@@ -33,32 +32,6 @@ router = APIRouter(prefix="/api/status", tags=["status"])
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
-
-_balance_cache: dict[str, Any] = {"value": None, "last_attempt": 0.0}
-_BALANCE_TTL = 60.0  # seconds between API calls
-
-
-async def _fetch_deepseek_balance(api_key: str) -> str | None:
-    """Fetch DeepSeek account balance with 60-second in-memory cache."""
-    now = time.monotonic()
-    if now - _balance_cache["last_attempt"] < _BALANCE_TTL:
-        return _balance_cache["value"]
-    _balance_cache["last_attempt"] = now
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                "https://api.deepseek.com/user/balance",
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
-        if resp.status_code == 200:
-            infos = resp.json().get("balance_infos", [])
-            entry = next((i for i in infos if i.get("currency") == "USD"), infos[0] if infos else None)
-            if entry:
-                sym = {"USD": "$", "CNY": "¥"}.get(entry["currency"], entry["currency"] + " ")
-                _balance_cache["value"] = f"{sym}{float(entry['total_balance']):.2f}"
-    except Exception as exc:
-        logger.debug("[STATUS] DeepSeek balance fetch failed: %s", exc)
-    return _balance_cache["value"]
 
 
 def _today_start() -> datetime:
@@ -240,7 +213,7 @@ async def get_overview(
         llm_display = get_active_llm_display()
         llm_balance: str | None = None
         if llm_display["provider"] == "deepseek" and settings.deepseek_api_key:
-            llm_balance = await _fetch_deepseek_balance(settings.deepseek_api_key)
+            llm_balance = await get_deepseek_balance_str(settings.deepseek_api_key)
         llm_status = LlmStatus(
             provider=llm_display["provider"],
             model=str(llm_display["model"]),

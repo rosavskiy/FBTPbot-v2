@@ -29,6 +29,7 @@ from app.database.models import async_session
 from app.database.service import DatabaseService
 from app.rag.engine import get_rag_engine
 from app.sheets.gsheet_logger import get_gsheet_logger
+from app.tg.user_registry import record_user
 
 # ── Logging ──
 logging.basicConfig(
@@ -214,6 +215,7 @@ async def _send_files(message, files: list[dict]):
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    record_user(user_id, update.effective_user.username)
     _clear_history(user_id)
     await update.message.reply_text(WELCOME_TEXT, parse_mode=ParseMode.HTML)
     logger.info(f"User {user_id} started bot")
@@ -248,6 +250,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     username = user.username or user.first_name or str(user_id)
     logger.info(f"[TG] question={text[:120]}|user={username}")
+
+    # Запоминаем username → chat_id для адресации оповещений
+    record_user(user_id, user.username)
 
     await update.message.chat.send_action(ChatAction.TYPING)
 
@@ -573,6 +578,11 @@ def main():
         sys.exit(1)
 
     logger.info("🤖 Запуск Telegram-бота технической поддержки 1.0.0...")
+
+    # Перехват ERROR-логов для оповещений (общий файл с бэкендом)
+    from app.alerts.error_capture import install_error_capture
+
+    install_error_capture()
 
     app = Application.builder().token(token).post_init(_on_post_init).build()
 

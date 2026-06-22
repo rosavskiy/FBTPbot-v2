@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
+from app.alerts.signals import record_llm_key_failure
 from app.api.images import resolve_file_codes
 from app.classifier.reason_classifier import ClassificationCandidate, L1Result, classify_reason, score_reason_candidate
 from app.classifier.section_classifier import L2Result, classify_section
@@ -221,6 +222,7 @@ class YandexGPTClient:
         if response.status_code != 200:
             error_text = response.text
             logger.error(f"YandexGPT API error {response.status_code}: {error_text}")
+            record_llm_key_failure("yandex", response.status_code)
             raise RuntimeError(f"YandexGPT API error: {response.status_code}")
 
         data = response.json()
@@ -301,6 +303,7 @@ class DeepSeekClient:
         if response.status_code != 200:
             error_text = response.text
             logger.error(f"DeepSeek API error {response.status_code}: {error_text}")
+            record_llm_key_failure("deepseek", response.status_code)
             raise RuntimeError(f"DeepSeek API error: {response.status_code}")
 
         data = response.json()

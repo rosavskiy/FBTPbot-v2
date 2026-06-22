@@ -181,6 +181,20 @@ class ProgressNote(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ), onupdate=lambda: datetime.now(SARATOV_TZ))
 
 
+class AlertLog(Base):
+    """История отправленных оповещений (для блока на /admin-status)."""
+
+    __tablename__ = "alert_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ), index=True)
+    alert_type = Column(String(40), nullable=False)  # balance | health | errors | llm_key | test
+    severity = Column(String(20), nullable=False, default="warning")  # warning | critical | recovery | info
+    message = Column(Text, nullable=False)
+    recipients_count = Column(Integer, default=0)
+    delivered_count = Column(Integer, default=0)
+
+
 # Async engine и session
 engine = create_async_engine(
     settings.database_url,
