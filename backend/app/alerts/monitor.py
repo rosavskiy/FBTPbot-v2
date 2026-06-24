@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from app.alerts.error_capture import ERROR_EVENTS_PATH
 from app.alerts.settings import get_alert_settings
@@ -68,6 +68,17 @@ def _minutes_since(iso: str | None) -> float:
         return float("inf")
     try:
         ts = datetime.fromisoformat(iso)
+        return (_now() - ts).total_seconds() / 60.0
+    except Exception:
+        return float("inf")
+
+
+def _row_age_minutes(created_at: datetime | None) -> float:
+    """Возраст записи в минутах. Наивный datetime трактуем как SARATOV_TZ."""
+    if created_at is None:
+        return float("inf")
+    try:
+        ts = created_at if created_at.tzinfo else created_at.replace(tzinfo=SARATOV_TZ)
         return (_now() - ts).total_seconds() / 60.0
     except Exception:
         return float("inf")
@@ -174,22 +185,42 @@ def _should_fire(
 # ── Отправка ─────────────────────────────────────────────────────────
 
 
-async def dispatch_alert(alert_type: str, severity: str, text_body: str, recipients: list[str]) -> tuple[int, int]:
-    """Разрезолвить получателей, отправить и записать историю. Возвращает (delivered, total)."""
+MAX_RESEND_ATTEMPTS = 5  # сколько раз пытаемся переотправить недоставленный алерт
+PENDING_MAX_AGE_MIN = 24 * 60  # старше суток — больше не переотправляем
+
+
+async def _deliver(text_body: str, recipients: list[str], retries: int = 2) -> tuple[int, int, str | None]:
+    """Разрезолвить получателей и отправить. Возвращает (delivered, total, error).
+
+    error — причина недоставки (первая встреченная), если delivered < total, иначе None.
+    """
     notifier = get_telegram_notifier()
-    resolved: list[str] = []
+    total = len(recipients)
+    delivered = 0
+    first_error: str | None = None
     for token in recipients:
         chat_id = resolve_recipient(token)
-        if chat_id:
-            resolved.append(chat_id)
-
-    delivered = 0
-    for chat_id in resolved:
-        msg_id = await notifier.send_message(chat_id, text_body)
+        if not chat_id:
+            if first_error is None:
+                first_error = f"получатель не разрешён: {token}"
+            continue
+        msg_id, err = await notifier.send_message_ex(chat_id, text_body, retries=retries)
         if msg_id:
             delivered += 1
+        elif first_error is None:
+            first_error = err or "неизвестная ошибка"
+    return delivered, total, (first_error if delivered < total else None)
 
-    total = len(recipients)
+
+async def dispatch_alert(alert_type: str, severity: str, text_body: str, recipients: list[str]) -> tuple[int, int]:
+    """Разрезолвить получателей, отправить и записать историю. Возвращает (delivered, total).
+
+    Если доставлено не всем — запись помечается pending=1 и будет переотправлена
+    в начале следующих циклов монитора (когда сеть/Telegram вернутся).
+    """
+    delivered, total, error = await _deliver(text_body, recipients)
+    pending = 1 if (total > 0 and delivered < total) else 0
+
     try:
         async with async_session() as db:
             db.add(
@@ -199,14 +230,62 @@ async def dispatch_alert(alert_type: str, severity: str, text_body: str, recipie
                     message=text_body[:2000],
                     recipients_count=total,
                     delivered_count=delivered,
+                    delivery_error=(error or None),
+                    pending=pending,
                 )
             )
             await db.commit()
     except Exception as exc:
         logger.warning("[ALERTS] failed to write AlertLog: %s", exc)
 
-    logger.info("[ALERTS] %s/%s sent (type=%s, severity=%s)", delivered, total, alert_type, severity)
+    log_fn = logger.info if pending == 0 else logger.warning
+    log_fn(
+        "[ALERTS] %s/%s sent (type=%s, severity=%s)%s",
+        delivered,
+        total,
+        alert_type,
+        severity,
+        f" — недоставлено, в очереди: {error}" if pending else "",
+    )
     return delivered, total
+
+
+async def flush_pending_alerts(recipients: list[str]) -> None:
+    """Переотправить недоставленные алерты текущим получателям.
+
+    Вызывается в начале каждого цикла монитора. Лучше получить алерт с
+    опозданием, чем не получить вовсе. Дубликат для тех, кто уже получил,
+    приемлем — приоритет у гарантии доставки. Записи старше суток или
+    исчерпавшие лимит попыток снимаются с очереди.
+    """
+    if not recipients:
+        return
+    try:
+        async with async_session() as db:
+            rows = await db.execute(
+                select(AlertLog).where(AlertLog.pending == 1).order_by(AlertLog.created_at).limit(20)
+            )
+            pending_rows = rows.scalars().all()
+            for row in pending_rows:
+                age_min = _row_age_minutes(row.created_at)
+                if (row.retry_count or 0) >= MAX_RESEND_ATTEMPTS or age_min >= PENDING_MAX_AGE_MIN:
+                    row.pending = 0
+                    row.delivery_error = (row.delivery_error or "") + " | снято с очереди (лимит попыток/срок)"
+                    continue
+                # retries=0: сам flush — это и есть механизм повтора, не блокируем цикл бэкоффом
+                delivered, total, error = await _deliver(row.message, recipients, retries=0)
+                row.retry_count = (row.retry_count or 0) + 1
+                if delivered >= total:
+                    row.pending = 0
+                    row.delivered_count = total
+                    row.recipients_count = total
+                    row.delivery_error = None
+                    logger.info("[ALERTS] переотправлен недоставленный алерт #%s (%s)", row.id, row.alert_type)
+                else:
+                    row.delivery_error = error or row.delivery_error
+            await db.commit()
+    except Exception as exc:
+        logger.warning("[ALERTS] flush pending failed: %s", exc)
 
 
 def _fmt(title: str, body: str = "") -> str:
@@ -224,6 +303,9 @@ async def _run_checks(cfg: dict[str, Any], state: dict[str, Any]) -> None:
     recipients: list[str] = cfg.get("recipients", [])
     cooldown = float(cfg.get("cooldown_min", 360))
     recovery = bool(cfg.get("notify_on_recovery", True))
+
+    # Сначала пытаемся добить недоставленные ранее алерты (сеть могла вернуться)
+    await flush_pending_alerts(recipients)
 
     async def emit(alert_type: str, severity: str, title: str, body: str = "") -> None:
         if not recipients:

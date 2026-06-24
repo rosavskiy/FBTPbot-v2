@@ -52,6 +52,17 @@
     .alerts-card .al-hist-item .sev--warning { color: #fbbf24; }
     .alerts-card .al-hist-item .sev--recovery { color: #4ade80; }
     .alerts-card .al-hist-item .sev--info { color: #818cf8; }
+    .alerts-card .al-hist-item .al-deliv { margin-left: auto; color: var(--gray-500); white-space: nowrap; }
+    .alerts-card .al-hist-item .al-deliv.al-fail { color: #f87171; font-weight: 700; }
+    .alerts-card .al-pending { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 5px;
+      border-radius: 4px; background: #fbbf24; color: #1a1a1a; margin-left: 6px; }
+    .alerts-card .al-hist-item summary { cursor: pointer; list-style: none; }
+    .alerts-card .al-hist-item summary::-webkit-details-marker { display: none; }
+    .alerts-card .al-hist-item details { flex: 1; min-width: 0; }
+    .alerts-card .al-hist-row { display: flex; gap: 8px; align-items: baseline; }
+    .alerts-card .al-hist-body { font-size: 11px; color: var(--gray-400, #a1a1aa); white-space: pre-wrap;
+      margin: 4px 0 2px; padding-left: 4px; border-left: 2px solid var(--border, rgba(255,255,255,.12)); }
+    .alerts-card .al-hist-err { font-size: 11px; color: #f87171; margin-top: 3px; padding-left: 4px; }
   </style>
 </head>
 <body>
@@ -907,10 +918,24 @@ async function alLoadHistory() {
         if (!data.items.length) { box.innerHTML = '<div class="empty-state">—</div>'; return; }
         box.innerHTML = data.items.map(i => {
             const dt = i.created_at ? new Date(i.created_at).toLocaleString('ru-RU') : '';
-            const firstLine = (i.message || '').replace(/<[^>]+>/g, '').split('\n')[0];
-            return `<div class="al-hist-item"><span class="sev sev--${i.severity}">${escape(i.alert_type)}</span>`
-                + `<span>${escape(firstLine)}</span>`
-                + `<span style="margin-left:auto; color:var(--gray-500)">${escape(dt)} · ${i.delivered_count}/${i.recipients_count}</span></div>`;
+            const plain = (i.message || '').replace(/<[^>]+>/g, '');
+            const firstLine = plain.split('\n')[0];
+            const body = plain.split('\n').slice(1).join('\n').trim();
+            const failed = i.delivered_count < i.recipients_count;
+            const delivClass = failed ? 'al-deliv al-fail' : 'al-deliv';
+            const retry = i.retry_count ? `, попыток: ${i.retry_count}` : '';
+            const pendingBadge = i.pending ? '<span class="al-pending">в очереди</span>' : '';
+            const errBlock = i.delivery_error
+                ? `<div class="al-hist-err">⚠ Недоставлено: ${escape(i.delivery_error)}${retry}</div>` : '';
+            const bodyBlock = body ? `<div class="al-hist-body">${escape(body)}</div>` : '';
+            return `<div class="al-hist-item"><details>`
+                + `<summary><span class="al-hist-row">`
+                + `<span class="sev sev--${i.severity}">${escape(i.alert_type)}</span>`
+                + `<span>${escape(firstLine)}${pendingBadge}</span>`
+                + `<span class="${delivClass}">${escape(dt)} · ${i.delivered_count}/${i.recipients_count}</span>`
+                + `</span></summary>`
+                + bodyBlock + errBlock
+                + `</details></div>`;
         }).join('');
     } catch (err) { console.error('[alerts] history', err); }
 }

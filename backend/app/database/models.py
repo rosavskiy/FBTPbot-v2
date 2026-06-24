@@ -193,6 +193,9 @@ class AlertLog(Base):
     message = Column(Text, nullable=False)
     recipients_count = Column(Integer, default=0)
     delivered_count = Column(Integer, default=0)
+    delivery_error = Column(Text, nullable=True)  # причина недоставки (если delivered < recipients)
+    pending = Column(Integer, default=0)  # 1 — алерт недоставлен, ждёт переотправки
+    retry_count = Column(Integer, default=0)  # сколько раз пытались переотправить
 
 
 # Async engine и session
@@ -232,6 +235,9 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
         await _migrate_add_column_if_missing(conn, "chat_messages", "source", "TEXT NOT NULL DEFAULT 'web'")
         await _migrate_add_column_if_missing(conn, "chat_messages", "detected_reason", "TEXT")
+        await _migrate_add_column_if_missing(conn, "alert_log", "delivery_error", "TEXT")
+        await _migrate_add_column_if_missing(conn, "alert_log", "pending", "INTEGER DEFAULT 0")
+        await _migrate_add_column_if_missing(conn, "alert_log", "retry_count", "INTEGER DEFAULT 0")
 
 
 async def get_db():

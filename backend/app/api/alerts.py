@@ -108,15 +108,21 @@ async def send_test_alert(user: AdminUser = _editor, db: AsyncSession = Depends(
 
     results = []
     delivered = 0
+    first_error: str | None = None
     for token in recipients:
         chat_id = resolve_recipient(token)
         ok = False
+        err: str | None = None
         if chat_id:
-            msg_id = await notifier.send_message(chat_id, text_body)
+            msg_id, err = await notifier.send_message_ex(chat_id, text_body)
             ok = bool(msg_id)
+        else:
+            err = f"получатель не разрешён: {token}"
         if ok:
             delivered += 1
-        results.append({"token": token, "chat_id": chat_id, "delivered": ok})
+        elif first_error is None:
+            first_error = err
+        results.append({"token": token, "chat_id": chat_id, "delivered": ok, "error": err})
 
     db.add(
         AlertLog(
@@ -125,6 +131,7 @@ async def send_test_alert(user: AdminUser = _editor, db: AsyncSession = Depends(
             message=text_body[:2000],
             recipients_count=len(recipients),
             delivered_count=delivered,
+            delivery_error=(first_error if delivered < len(recipients) else None),
         )
     )
     await db.commit()
@@ -149,6 +156,9 @@ async def get_history(
             "message": r.message,
             "recipients_count": r.recipients_count,
             "delivered_count": r.delivered_count,
+            "delivery_error": r.delivery_error,
+            "pending": bool(r.pending),
+            "retry_count": r.retry_count or 0,
         }
         for r in rows.scalars().all()
     ]
