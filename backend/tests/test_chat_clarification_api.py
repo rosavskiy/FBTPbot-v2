@@ -31,6 +31,8 @@ class MarkerClarificationRAGStub:
         routing_policy=None,
         refinement_attempt: int = 0,
         debug: bool = False,
+        denied_reason_ids=None,
+        denied_section_keys=None,
     ):
         self.calls.append(
             {
@@ -76,6 +78,8 @@ class ReasonSelectionRAGStub:
         routing_policy=None,
         refinement_attempt: int = 0,
         debug: bool = False,
+        denied_reason_ids=None,
+        denied_section_keys=None,
     ):
         self.calls.append(
             {
@@ -123,6 +127,8 @@ class AnswerRefinementRAGStub:
         routing_policy=None,
         refinement_attempt: int = 0,
         debug: bool = False,
+        denied_reason_ids=None,
+        denied_section_keys=None,
     ):
         self.calls.append(
             {
@@ -179,6 +185,8 @@ class StandardAnswerRAGStub:
         routing_policy=None,
         refinement_attempt: int = 0,
         debug: bool = False,
+        denied_reason_ids=None,
+        denied_section_keys=None,
     ):
         self.calls.append(
             {
