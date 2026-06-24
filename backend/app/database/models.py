@@ -46,6 +46,7 @@ class ChatSession(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(SARATOV_TZ), onupdate=lambda: datetime.now(SARATOV_TZ))
     user_ip = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
+    customer_id = Column(String(64), nullable=True)  # CustomerID контрагента из Фармбазиса
 
     messages = relationship("ChatMessageDB", back_populates="session", order_by="ChatMessageDB.created_at")
     escalations = relationship("Escalation", back_populates="session")
@@ -238,6 +239,7 @@ async def init_db():
         await _migrate_add_column_if_missing(conn, "alert_log", "delivery_error", "TEXT")
         await _migrate_add_column_if_missing(conn, "alert_log", "pending", "INTEGER DEFAULT 0")
         await _migrate_add_column_if_missing(conn, "alert_log", "retry_count", "INTEGER DEFAULT 0")
+        await _migrate_add_column_if_missing(conn, "chat_sessions", "customer_id", "VARCHAR(64)")
 
 
 async def get_db():

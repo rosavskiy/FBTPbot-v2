@@ -112,6 +112,7 @@ const AdminNav = (() => {
                 <a href="/kb-admin" class="admin-nav__link ${currentPage === 'kb-admin' ? 'active' : ''}">База знаний</a>
                 <a href="/reason-builder" class="admin-nav__link ${currentPage === 'reason-builder' ? 'active' : ''}">Помощник причин</a>
                 <a href="/admin-status" class="admin-nav__link ${currentPage === 'admin-status' ? 'active' : ''}">Мониторинг</a>
+                ${canManageAbout ? `<a href="/admin-clients" class="admin-nav__link ${currentPage === 'admin-clients' ? 'active' : ''}">Клиенты</a>` : ''}
                 ${role === 'superadmin' ? `
                 <a href="/admin-users" class="admin-nav__link ${currentPage === 'admin-users' ? 'active' : ''}">Пользователи</a>
                 <a href="/admin-audit" class="admin-nav__link ${currentPage === 'admin-audit' ? 'active' : ''}">Лог</a>

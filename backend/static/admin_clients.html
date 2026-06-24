@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Клиенты — Фармбазис Админ</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/admin_common.css">
+    <script src="/static/admin_nav.js"></script>
+    <style>
+        :root {
+            --accent: #6366f1; --accent-dark: #4338ca;
+            --gray-100: #f4f4f5; --gray-200: #e4e4e7; --gray-300: #d4d4d8;
+            --gray-400: #a1a1aa; --gray-500: #71717a; --gray-600: #52525b;
+            --gray-700: #3f3f46; --gray-800: #27272a; --gray-900: #18181b; --gray-950: #09090b;
+            --success: #22c55e; --danger: #ef4444; --warning: #f59e0b;
+            --radius: 12px; --radius-sm: 8px;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-sans); background: var(--gray-950); color: var(--gray-200); }
+
+        .page { max-width: 1000px; margin: 0 auto; padding: 32px 24px; }
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .page-header h1 { font-size: 22px; font-weight: 600; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; margin: 36px 0 16px; }
+        .section-header h2 { font-size: 17px; font-weight: 600; color: var(--gray-300); }
+
+        .btn {
+            padding: 8px 16px; border: none; border-radius: var(--radius-sm);
+            cursor: pointer; font-family: var(--font-sans); font-size: 13px; font-weight: 600;
+            transition: background 0.15s;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-dark); }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { opacity: 0.9; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .btn-ghost { background: none; border: 1px solid var(--gray-700); color: var(--gray-400); }
+        .btn-ghost:hover { border-color: var(--gray-500); color: var(--gray-200); }
+
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--gray-500); padding: 10px 12px; border-bottom: 1px solid var(--gray-800); letter-spacing: 0.5px; }
+        td { padding: 12px; border-bottom: 1px solid var(--gray-800); font-size: 14px; }
+        tr:hover td { background: rgba(255,255,255,0.02); }
+        .muted { color: var(--gray-500); font-size: 13px; }
+
+        .badge {
+            display: inline-block; padding: 2px 8px; border-radius: 4px;
+            font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+        }
+        .badge-auto { background: rgba(245,158,11,0.15); color: #fcd34d; }
+        .badge-manual { background: rgba(161,161,170,0.1); color: #a1a1aa; }
+        .badge-restrict { background: rgba(239,68,68,0.12); color: #fca5a5; }
+        .badge-none { color: var(--gray-600); }
+
+        .actions-cell { display: flex; gap: 6px; }
+
+        /* Modal */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            z-index: 10000; align-items: center; justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: var(--gray-900); border: 1px solid var(--gray-700);
+            border-radius: var(--radius); padding: 28px; width: 100%; max-width: 460px;
+        }
+        .modal.wide { max-width: 600px; }
+        .modal h2 { font-size: 18px; font-weight: 600; margin-bottom: 20px; }
+        .modal .field { margin-bottom: 16px; }
+        .modal .field label { display: block; font-size: 13px; font-weight: 500; color: var(--gray-400); margin-bottom: 5px; }
+        .modal .field input, .modal .field select {
+            width: 100%; padding: 9px 12px; background: var(--gray-800);
+            border: 1px solid var(--gray-700); border-radius: var(--radius-sm);
+            color: var(--gray-200); font-size: 14px; font-family: var(--font-sans); outline: none;
+        }
+        .modal .field input:focus, .modal .field select:focus { border-color: var(--accent); }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+        .error-text { color: var(--danger); font-size: 13px; margin-top: 8px; }
+
+        /* Restrictions tree */
+        .tree { max-height: 50vh; overflow-y: auto; border: 1px solid var(--gray-800); border-radius: var(--radius-sm); padding: 8px 12px; }
+        .tree-reason { padding: 8px 0; border-bottom: 1px solid var(--gray-800); }
+        .tree-reason:last-child { border-bottom: none; }
+        .tree-reason__head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+        .tree-sections { margin: 6px 0 2px 26px; display: flex; flex-direction: column; gap: 4px; }
+        .tree-section { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--gray-300); }
+        .tree label { cursor: pointer; }
+        .tree input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+        .tree-section.disabled { opacity: 0.4; }
+
+        .toast {
+            position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+            background: var(--gray-800); border: 1px solid var(--gray-700);
+            border-radius: var(--radius-sm); color: var(--gray-200); font-size: 14px;
+            z-index: 20000; opacity: 0; transition: opacity 0.3s;
+        }
+        .toast.show { opacity: 1; }
+        .toast.error { border-color: var(--danger); }
+    </style>
+</head>
+<body>
+
+<div class="page">
+    <div class="page-header">
+        <h1>Справочник клиентов</h1>
+        <button class="btn btn-primary editor-only" onclick="openClientModal()">+ Клиент</button>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>CustomerID</th>
+                <th>Имя</th>
+                <th>Группа</th>
+                <th>Источник</th>
+                <th>Ограничения</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody id="clientsBody"></tbody>
+    </table>
+
+    <div class="section-header">
+        <h2>Группы</h2>
+        <button class="btn btn-ghost editor-only" onclick="openGroupModal()">+ Группа</button>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Название</th>
+                <th>Ограничения</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody id="groupsBody"></tbody>
+    </table>
+</div>
+
+<!-- Modal: клиент -->
+<div class="modal-overlay" id="clientModal">
+    <div class="modal">
+        <h2 id="clientModalTitle">Новый клиент</h2>
+        <form id="clientForm" onsubmit="return submitClient(event)">
+            <input type="hidden" id="cl_edit">
+            <div class="field">
+                <label for="cl_id">CustomerID</label>
+                <input type="text" id="cl_id" required maxlength="64" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="cl_name">Имя контрагента</label>
+                <input type="text" id="cl_name" maxlength="300">
+            </div>
+            <div class="field">
+                <label for="cl_group">Группа</label>
+                <select id="cl_group"></select>
+            </div>
+            <div id="clientError" class="error-text" style="display:none"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-ghost" onclick="closeModal('clientModal')">Отмена</button>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: группа -->
+<div class="modal-overlay" id="groupModal">
+    <div class="modal">
+        <h2 id="groupModalTitle">Новая группа</h2>
+        <form id="groupForm" onsubmit="return submitGroup(event)">
+            <input type="hidden" id="gr_edit">
+            <div class="field">
+                <label for="gr_id">ID группы</label>
+                <input type="text" id="gr_id" required maxlength="64" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="gr_name">Название</label>
+                <input type="text" id="gr_name" required maxlength="300">
+            </div>
+            <div id="groupError" class="error-text" style="display:none"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-ghost" onclick="closeModal('groupModal')">Отмена</button>
+                <button type="submit" class="btn btn-primary">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: ограничения -->
+<div class="modal-overlay" id="restrictModal">
+    <div class="modal wide">
+        <h2 id="restrictTitle">Ограничения доступа</h2>
+        <p class="muted" style="margin-bottom:14px">Отметьте причины или отдельные разделы, которые нужно закрыть. Закрытое содержимое бот игнорирует (тихий пропуск).</p>
+        <div class="tree" id="restrictTree"></div>
+        <div id="restrictError" class="error-text" style="display:none"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" onclick="closeModal('restrictModal')">Отмена</button>
+            <button type="button" class="btn btn-primary" onclick="saveRestrictions()">Сохранить</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api/clients';
+
+// Auth fetch override
+const _origFetch = window.fetch.bind(window);
+window.fetch = (url, opts = {}) => {
+    if (typeof url === 'string' && url.startsWith('/api/')) {
+        return AdminNav.authFetch(url, opts);
+    }
+    return _origFetch(url, opts);
+};
+
+let isEditor = false;
+let clients = [];
+let groups = [];
+let tree = [];               // [{reason_id, reason_name, sections:[{section_id,title}]}]
+let restrictTarget = null;   // {type:'client'|'group', id}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const user = AdminNav.init({ currentPage: 'admin-clients' });
+    if (!user) return;
+    if (user.role !== 'superadmin' && user.role !== 'admin') {
+        document.querySelector('.page').innerHTML = '<p style="padding:40px;color:var(--gray-500)">Доступ только для администраторов.</p>';
+        return;
+    }
+    isEditor = true;
+    loadAll();
+});
+
+async function loadAll() {
+    await Promise.all([loadClients(), loadGroups(), loadTree()]);
+}
+
+async function loadClients() {
+    try {
+        const r = await fetch(`${API}`);
+        if (!r.ok) throw new Error('Ошибка загрузки клиентов');
+        clients = (await r.json()).clients;
+        renderClients();
+    } catch (e) { showToast(e.message, true); }
+}
+
+async function loadGroups() {
+    try {
+        const r = await fetch(`${API}/groups`);
+        if (!r.ok) throw new Error('Ошибка загрузки групп');
+        groups = (await r.json()).groups;
+        renderGroups();
+    } catch (e) { showToast(e.message, true); }
+}
+
+async function loadTree() {
+    try {
+        const r = await fetch(`${API}/sections-tree`);
+        if (!r.ok) throw new Error('Ошибка загрузки дерева причин');
+        tree = (await r.json()).reasons;
+    } catch (e) { showToast(e.message, true); }
+}
+
+function restrictBadge(rc, sc) {
+    if (!rc && !sc) return '<span class="badge-none">—</span>';
+    const parts = [];
+    if (rc) parts.push(`${rc} прич.`);
+    if (sc) parts.push(`${sc} разд.`);
+    return `<span class="badge badge-restrict">${parts.join(' / ')}</span>`;
+}
+
+function renderClients() {
+    const tbody = document.getElementById('clientsBody');
+    if (!clients.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="muted" style="padding:24px">Справочник пуст. Клиенты появятся автоматически при первом обращении с customer_id.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = '';
+    for (const c of clients) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><code>${esc(c.customer_id)}</code></td>
+            <td>${esc(c.name || '—')}</td>
+            <td>${esc(c.group_name || '—')}</td>
+            <td><span class="badge ${c.auto_added ? 'badge-auto' : 'badge-manual'}">${c.auto_added ? 'авто' : 'вручную'}</span></td>
+            <td>${restrictBadge(c.denied_reasons_count, c.denied_sections_count)}</td>
+            <td><div class="actions-cell editor-only">
+                <button class="btn btn-sm btn-ghost" onclick="openRestrict('client', ${JSON.stringify(c.customer_id)})">Ограничения</button>
+                <button class="btn btn-sm btn-ghost" onclick="openClientModal(${JSON.stringify(c.customer_id)})">Изм.</button>
+                <button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="deleteClient(${JSON.stringify(c.customer_id)})">Удал.</button>
+            </div></td>
+        `;
+        tbody.appendChild(tr);
+    }
+}
+
+function renderGroups() {
+    const tbody = document.getElementById('groupsBody');
+    if (!groups.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="muted" style="padding:24px">Групп пока нет.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = '';
+    for (const g of groups) {
+        const rc = (g.restrictions?.denied_reasons || []).length;
+        const sc = (g.restrictions?.denied_sections || []).length;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><code>${esc(g.id)}</code></td>
+            <td>${esc(g.name)}</td>
+            <td>${restrictBadge(rc, sc)}</td>
+            <td><div class="actions-cell editor-only">
+                <button class="btn btn-sm btn-ghost" onclick="openRestrict('group', ${JSON.stringify(g.id)})">Ограничения</button>
+                <button class="btn btn-sm btn-ghost" onclick="openGroupModal(${JSON.stringify(g.id)})">Изм.</button>
+                <button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="deleteGroup(${JSON.stringify(g.id)})">Удал.</button>
+            </div></td>
+        `;
+        tbody.appendChild(tr);
+    }
+}
+
+// ── Клиент ──
+function fillGroupSelect(selected) {
+    const sel = document.getElementById('cl_group');
+    sel.innerHTML = '<option value="">— без группы —</option>' +
+        groups.map(g => `<option value="${esc(g.id)}" ${g.id === selected ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
+}
+
+function openClientModal(customerId) {
+    document.getElementById('clientError').style.display = 'none';
+    const editing = !!customerId;
+    document.getElementById('cl_edit').value = editing ? customerId : '';
+    document.getElementById('clientModalTitle').textContent = editing ? 'Редактирование клиента' : 'Новый клиент';
+    const idInput = document.getElementById('cl_id');
+    idInput.disabled = editing;
+    if (editing) {
+        const c = clients.find(x => x.customer_id === customerId);
+        idInput.value = c.customer_id;
+        document.getElementById('cl_name').value = c.name || '';
+        fillGroupSelect(c.group_id || '');
+    } else {
+        idInput.value = '';
+        document.getElementById('cl_name').value = '';
+        fillGroupSelect('');
+    }
+    document.getElementById('clientModal').classList.add('active');
+}
+
+async function submitClient(e) {
+    e.preventDefault();
+    const editId = document.getElementById('cl_edit').value;
+    const errEl = document.getElementById('clientError');
+    errEl.style.display = 'none';
+    const body = {
+        name: document.getElementById('cl_name').value.trim(),
+        group_id: document.getElementById('cl_group').value || null,
+    };
+    const customerId = editId || document.getElementById('cl_id').value.trim();
+    try {
+        if (!customerId) throw new Error('Укажите CustomerID');
+        const r = await fetch(`${API}/clients/${encodeURIComponent(customerId)}`, {
+            method: editId ? 'PUT' : 'POST',
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Ошибка');
+        closeModal('clientModal');
+        showToast(editId ? 'Клиент обновлён' : 'Клиент создан');
+        await loadClients();
+    } catch (err) { errEl.textContent = err.message; errEl.style.display = 'block'; }
+    return false;
+}
+
+async function deleteClient(customerId) {
+    if (!confirm(`Удалить клиента "${customerId}"?`)) return;
+    try {
+        const r = await fetch(`${API}/clients/${encodeURIComponent(customerId)}`, { method: 'DELETE' });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Ошибка');
+        showToast('Клиент удалён');
+        await loadClients();
+    } catch (e) { showToast(e.message, true); }
+}
+
+// ── Группа ──
+function openGroupModal(groupId) {
+    document.getElementById('groupError').style.display = 'none';
+    const editing = !!groupId;
+    document.getElementById('gr_edit').value = editing ? groupId : '';
+    document.getElementById('groupModalTitle').textContent = editing ? 'Редактирование группы' : 'Новая группа';
+    const idInput = document.getElementById('gr_id');
+    idInput.disabled = editing;
+    if (editing) {
+        const g = groups.find(x => x.id === groupId);
+        idInput.value = g.id;
+        document.getElementById('gr_name').value = g.name;
+    } else {
+        idInput.value = '';
+        document.getElementById('gr_name').value = '';
+    }
+    document.getElementById('groupModal').classList.add('active');
+}
+
+async function submitGroup(e) {
+    e.preventDefault();
+    const editId = document.getElementById('gr_edit').value;
+    const errEl = document.getElementById('groupError');
+    errEl.style.display = 'none';
+    const groupId = editId || document.getElementById('gr_id').value.trim();
+    const body = { name: document.getElementById('gr_name').value.trim() };
+    try {
+        if (!groupId) throw new Error('Укажите ID группы');
+        const r = await fetch(`${API}/groups/${encodeURIComponent(groupId)}`, {
+            method: editId ? 'PUT' : 'POST',
+            body: JSON.stringify(body),
+        });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Ошибка');
+        closeModal('groupModal');
+        showToast(editId ? 'Группа обновлена' : 'Группа создана');
+        await Promise.all([loadGroups(), loadClients()]);
+    } catch (err) { errEl.textContent = err.message; errEl.style.display = 'block'; }
+    return false;
+}
+
+async function deleteGroup(groupId) {
+    if (!confirm(`Удалить группу "${groupId}"? Клиенты группы останутся, привязка снимется.`)) return;
+    try {
+        const r = await fetch(`${API}/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Ошибка');
+        showToast('Группа удалена');
+        await Promise.all([loadGroups(), loadClients()]);
+    } catch (e) { showToast(e.message, true); }
+}
+
+// ── Ограничения ──
+function currentRestrictions() {
+    if (restrictTarget.type === 'client') {
+        const c = clients.find(x => x.customer_id === restrictTarget.id);
+        return { reasons: new Set(c.denied_reasons || []), sections: new Set(c.denied_sections || []) };
+    }
+    const g = groups.find(x => x.id === restrictTarget.id);
+    return { reasons: new Set(g.restrictions?.denied_reasons || []), sections: new Set(g.restrictions?.denied_sections || []) };
+}
+
+function openRestrict(type, id) {
+    restrictTarget = { type, id };
+    const label = type === 'client'
+        ? (clients.find(x => x.customer_id === id)?.name || id)
+        : (groups.find(x => x.id === id)?.name || id);
+    document.getElementById('restrictTitle').textContent = `Ограничения — ${label}`;
+    document.getElementById('restrictError').style.display = 'none';
+
+    const cur = currentRestrictions();
+    const treeEl = document.getElementById('restrictTree');
+    if (!tree.length) {
+        treeEl.innerHTML = '<p class="muted">Нет причин обращения.</p>';
+    } else {
+        treeEl.innerHTML = tree.map(r => {
+            const reasonChecked = cur.reasons.has(r.reason_id);
+            const sections = r.sections.map(s => {
+                const key = `${r.reason_id}::${s.section_id}`;
+                const checked = cur.sections.has(key);
+                return `<label class="tree-section ${reasonChecked ? 'disabled' : ''}">
+                    <input type="checkbox" class="sec-cb" data-key="${esc(key)}" ${checked ? 'checked' : ''} ${reasonChecked ? 'disabled' : ''}>
+                    ${esc(s.title)}</label>`;
+            }).join('');
+            return `<div class="tree-reason">
+                <label class="tree-reason__head">
+                    <input type="checkbox" class="reason-cb" data-reason="${esc(r.reason_id)}" ${reasonChecked ? 'checked' : ''}
+                        onchange="onReasonToggle(this)">
+                    ${esc(r.reason_name)} <span class="muted" style="font-weight:400">(вся причина)</span>
+                </label>
+                <div class="tree-sections">${sections || '<span class="muted">нет разделов</span>'}</div>
+            </div>`;
+        }).join('');
+    }
+    document.getElementById('restrictModal').classList.add('active');
+}
+
+// При закрытии всей причины — её разделы блокируются (избыточны)
+function onReasonToggle(cb) {
+    const wrap = cb.closest('.tree-reason');
+    const disabled = cb.checked;
+    wrap.querySelectorAll('.sec-cb').forEach(s => {
+        s.disabled = disabled;
+        s.closest('.tree-section').classList.toggle('disabled', disabled);
+    });
+}
+
+async function saveRestrictions() {
+    const denied_reasons = Array.from(document.querySelectorAll('.reason-cb'))
+        .filter(cb => cb.checked).map(cb => cb.dataset.reason);
+    const denied_sections = Array.from(document.querySelectorAll('.sec-cb'))
+        .filter(cb => cb.checked && !cb.disabled).map(cb => cb.dataset.key);
+    const errEl = document.getElementById('restrictError');
+    errEl.style.display = 'none';
+    const path = restrictTarget.type === 'client'
+        ? `${API}/clients/${encodeURIComponent(restrictTarget.id)}/restrictions`
+        : `${API}/groups/${encodeURIComponent(restrictTarget.id)}/restrictions`;
+    try {
+        const r = await fetch(path, { method: 'PUT', body: JSON.stringify({ denied_reasons, denied_sections }) });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Ошибка');
+        closeModal('restrictModal');
+        showToast('Ограничения сохранены');
+        await Promise.all([loadClients(), loadGroups()]);
+    } catch (err) { errEl.textContent = err.message; errEl.style.display = 'block'; }
+}
+
+// ── Утилиты ──
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+function esc(text) {
+    const d = document.createElement('div');
+    d.textContent = (text === null || text === undefined) ? '' : text;
+    return d.innerHTML;
+}
+
+function showToast(msg, isError = false) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast show' + (isError ? ' error' : '');
+    setTimeout(() => el.className = 'toast', 3000);
+}
+</script>
+</body>
+</html>

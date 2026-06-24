@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     # Contact Reasons
     contact_reasons_path: str = "./data/contact_reasons.json"
 
+    # Clients Directory (интеграция с Фармбазисом)
+    clients_directory_path: str = "./data/clients_directory.json"
+
     # Google Sheets
     google_sheets_credentials_file: str = ""
     google_sheets_spreadsheet_id: str = ""

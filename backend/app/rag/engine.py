@@ -394,11 +394,17 @@ class RAGEngine:
         return "\n\n---\n\n".join(parts) if parts else "Нет дополнительного контекста."
 
     @staticmethod
-    def _build_full_context(reason: ContactReason) -> str:
-        """Формирование ПОЛНОГО контекста из всей БЗ причины обращения."""
+    def _build_full_context(reason: ContactReason, denied_section_ids: set[str] | None = None) -> str:
+        """Формирование ПОЛНОГО контекста из всей БЗ причины обращения.
+
+        Закрытые для клиента разделы (denied_section_ids) исключаются — иначе LLM
+        увидел бы запрещённый раздел в full-context режиме.
+        """
         parts: list[str] = []
 
         for section in reason.thematic_sections:
+            if denied_section_ids and section.id in denied_section_ids:
+                continue
             section_lines = [f"## {section.title}"]
             for qa in section.qa_pairs:
                 section_lines.append(f"Вопрос: {qa.question}\nОтвет: {qa.answer}")
@@ -606,7 +612,9 @@ class RAGEngine:
             logger.warning(f"LLM question extraction failed: {e}")
             return None
 
-    async def _maybe_normalize_question_for_l1(self, question: str, l1: L1Result) -> tuple[str, L1Result, bool]:
+    async def _maybe_normalize_question_for_l1(
+        self, question: str, l1: L1Result, denied_reason_ids: set[str] | None = None
+    ) -> tuple[str, L1Result, bool]:
         if not self._should_try_llm_question_extractor(question, l1):
             return question, l1, False
 
@@ -621,7 +629,7 @@ class RAGEngine:
         if normalized_question.lower() == re.sub(r"\s+", " ", question).strip().lower():
             return question, l1, False
 
-        normalized_l1 = classify_reason(normalized_question)
+        normalized_l1 = classify_reason(normalized_question, denied_reason_ids=denied_reason_ids)
         if not self._is_better_l1_result(normalized_l1, l1):
             return question, l1, False
 
@@ -757,6 +765,8 @@ class RAGEngine:
         routing_policy: ChatRoutingPolicy | None = None,
         refinement_attempt: int = 0,
         debug: bool = False,
+        denied_reason_ids: set[str] | None = None,
+        denied_section_keys: set[str] | None = None,
     ) -> RAGResponse:
         """Основной метод: полный pipeline L1→L2→L3.
 
@@ -765,6 +775,9 @@ class RAGEngine:
             chat_history: История чата.
             reason_id: Принудительная причина обращения (пропускает L1).
             debug: Собирать полный trace pipeline.
+            denied_reason_ids: Причины, закрытые для клиента (тихий пропуск на L1).
+            denied_section_keys: Закрытые разделы, ключи '<reason_id>::<section_id>'
+                (тихий пропуск на L2 и при сборке full-context).
 
         Returns:
             RAGResponse с ответом и метаданными.
@@ -859,9 +872,11 @@ class RAGEngine:
             ]
         else:
             l1_question = question
-            l1 = classify_reason(question)
+            l1 = classify_reason(question, denied_reason_ids=denied_reason_ids)
 
-            l1_question, l1, llm_extractor_used = await self._maybe_normalize_question_for_l1(question, l1)
+            l1_question, l1, llm_extractor_used = await self._maybe_normalize_question_for_l1(
+                question, l1, denied_reason_ids=denied_reason_ids
+            )
             if llm_extractor_used:
                 llm_used_for_classify = True
                 llm_extractor_original_question = question
@@ -940,6 +955,11 @@ class RAGEngine:
             l1_confident = l1.is_confident
             l1_winning = l1.winning_candidate
         logger.info(f"[ENGINE] L1={reason.name} method={l1_method}")
+
+        # Разделы выбранной причины, закрытые для клиента (тихий пропуск на L2).
+        denied_section_ids: set[str] = {
+            key.split("::", 1)[1] for key in (denied_section_keys or set()) if key.startswith(reason.id + "::")
+        }
 
         # ── L1.1: Per-reason порог баллов ──
         cls_rules = reason.classification_rules
@@ -1060,7 +1080,7 @@ class RAGEngine:
         if reason.full_context_llm.enabled:
             # ── Full-Context path: вся БЗ причины → LLM ──
             # ExampleQA bypass — всё ещё проверяем (быстро и бесплатно)
-            l2 = classify_section(question, reason)
+            l2 = classify_section(question, reason, denied_section_ids=denied_section_ids)
 
             if l2.method == "example_match" and l2.best_example:
                 _total = _time.time() - _start
@@ -1100,8 +1120,8 @@ class RAGEngine:
                     }
                 return _finalize_response(resp)
 
-            # Собираем полный контекст из всей БЗ причины
-            full_context = self._build_full_context(reason)
+            # Собираем полный контекст из всей БЗ причины (без закрытых разделов)
+            full_context = self._build_full_context(reason, denied_section_ids=denied_section_ids)
             full_context_chars = len(full_context)
 
             if full_context == "Нет дополнительного контекста.":
@@ -1363,7 +1383,7 @@ class RAGEngine:
             return _finalize_response(resp)
 
         # ── L2: Определение тематического раздела ──
-        l2 = classify_section(question, reason)
+        l2 = classify_section(question, reason, denied_section_ids=denied_section_ids)
 
         # Exact match с примером → ответ без LLM
         if l2.method == "example_match" and l2.best_example:

@@ -21,6 +21,7 @@ from app.api.admin_auth import router as admin_router
 from app.api.alerts import router as alerts_router
 from app.api.bot_config import router as bot_config_router
 from app.api.chat import router as chat_router
+from app.api.clients import router as clients_router
 from app.api.escalation import router as escalation_router
 from app.api.images import router as images_router
 from app.api.kb_admin import router as kb_admin_router
@@ -121,6 +122,7 @@ app.include_router(admin_router)
 app.include_router(reason_builder_router)
 app.include_router(status_router)
 app.include_router(alerts_router)
+app.include_router(clients_router)
 
 # Статические файлы (изображения из инструкций)
 images_dir = Path(settings.chroma_persist_dir).parent / "images"
@@ -225,4 +227,13 @@ async def admin_status_page():
     html_path = Path(__file__).resolve().parent.parent / "static" / "admin_status.html"
     if not html_path.exists():
         return {"error": "admin_status.html не найден"}
+    return FileResponse(html_path, media_type="text/html")
+
+
+@app.get("/admin-clients", tags=["admin"])
+async def admin_clients_page():
+    """Страница справочника клиентов и ограничений доступа."""
+    html_path = Path(__file__).resolve().parent.parent / "static" / "admin_clients.html"
+    if not html_path.exists():
+        return {"error": "admin_clients.html не найден"}
     return FileResponse(html_path, media_type="text/html")

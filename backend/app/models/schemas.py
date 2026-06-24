@@ -84,6 +84,8 @@ class ChatRequest(BaseModel):
     session_id: str | None = Field(None, description="ID сессии (для продолжения диалога)")
     debug: bool = Field(False, description="Включить debug-трейсинг pipeline")
     routing_policy: ChatRoutingPolicy | None = Field(None, description="Политика маршрутизации mid-confidence ответов")
+    customer_id: str | None = Field(None, description="CustomerID контрагента из Фармбазиса")
+    customer_name: str | None = Field(None, description="Имя контрагента (запишется, если у клиента ещё нет имени)")
 
 
 class SuggestedTopicSchema(BaseModel):

@@ -218,14 +218,22 @@ def score_reason_candidate(query: str, reason: ContactReason) -> ClassificationC
     return _build_candidate(query, reason, text_normalized, user_nouns, user_verbs, _get_weights())
 
 
-def classify_reason(query: str) -> L1Result:
+def classify_reason(query: str, denied_reason_ids: set[str] | None = None) -> L1Result:
     """Основной метод L1-классификации.
 
     Определяет причину обращения по маркерам (без LLM).
     Если неоднозначно — возвращает is_confident=False + candidates
     для последующей LLM-классификации или уточнения.
+
+    Args:
+        query: Вопрос пользователя.
+        denied_reason_ids: Причины, закрытые для клиента (тихий пропуск) — исключаются
+            из кандидатов. Если после фильтра причин не осталось → method="none".
     """
     reasons = get_all_reasons(active_only=True)
+
+    if denied_reason_ids:
+        reasons = [r for r in reasons if r.id not in denied_reason_ids]
 
     if not reasons:
         logger.warning("Нет активных причин обращения для классификации")

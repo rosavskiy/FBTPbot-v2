@@ -79,12 +79,14 @@ def _overlap_score(query_lemmas: set[str], text_lemmas: set[str]) -> float:
     return len(query_lemmas & text_lemmas) / len(query_lemmas)
 
 
-def classify_section(query: str, reason: ContactReason) -> L2Result:
+def classify_section(query: str, reason: ContactReason, denied_section_ids: set[str] | None = None) -> L2Result:
     """Определить тематический раздел и ближайший Q&A для запроса.
 
     Args:
         query: Вопрос пользователя.
         reason: Определённая на L1 причина обращения.
+        denied_section_ids: ID разделов этой причины, закрытых для клиента (тихий
+            пропуск). Если все разделы закрыты → best_section=None → штатная ветка.
 
     Returns:
         L2Result с лучшим разделом и ближайшим Q&A / жалобой / примером.
@@ -140,6 +142,10 @@ def classify_section(query: str, reason: ContactReason) -> L2Result:
     best_section_score = 0.0
 
     for section in reason.thematic_sections:
+        # Тихий пропуск разделов, закрытых для клиента.
+        if denied_section_ids and section.id in denied_section_ids:
+            continue
+
         section_total_score = 0.0
         section_best_qa: QAPair | None = None
         section_best_qa_score = 0.0

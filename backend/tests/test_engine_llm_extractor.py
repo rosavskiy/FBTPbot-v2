@@ -54,7 +54,7 @@ async def test_maybe_normalize_question_for_l1_uses_improved_result(monkeypatch)
     monkeypatch.setattr(engine, "_llm_extract_question_signal", fake_extract)
     monkeypatch.setattr(
         "app.rag.engine.classify_reason",
-        lambda question: improved_l1
+        lambda question, **_kw: improved_l1
         if question == "изменить количество в проведенной накладной 58329771в"
         else current_l1,
     )
@@ -126,9 +126,9 @@ async def test_ask_debug_trace_contains_llm_extractor_metadata(monkeypatch):
     monkeypatch.setattr(engine, "_llm_extract_question_signal", fake_extract)
     monkeypatch.setattr(
         "app.rag.engine.classify_reason",
-        lambda current_question: improved_l1 if current_question == normalized_question else current_l1,
+        lambda current_question, **_kw: improved_l1 if current_question == normalized_question else current_l1,
     )
-    monkeypatch.setattr("app.rag.engine.classify_section", lambda _question, _reason: L2Result(method="none"))
+    monkeypatch.setattr("app.rag.engine.classify_section", lambda _question, _reason, **_kw: L2Result(method="none"))
 
     response = await engine.ask(question, debug=True)
 

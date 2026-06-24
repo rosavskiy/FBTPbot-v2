@@ -64,11 +64,14 @@ class DatabaseService:
 
     # === Сессии ===
 
-    async def create_session(self, user_ip: str | None = None, user_agent: str | None = None) -> ChatSession:
+    async def create_session(
+        self, user_ip: str | None = None, user_agent: str | None = None, customer_id: str | None = None
+    ) -> ChatSession:
         chat_session = ChatSession(
             id=str(uuid.uuid4()),
             user_ip=user_ip,
             user_agent=user_agent,
+            customer_id=customer_id,
         )
         self.session.add(chat_session)
         await self._commit_with_retry()

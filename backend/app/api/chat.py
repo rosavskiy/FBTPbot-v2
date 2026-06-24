@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.clients.store import resolve_denied
 from app.database.models import get_db
 from app.database.service import DatabaseService
 from app.llm_settings import get_active_llm_display, get_chat_routing_policy_settings
@@ -417,6 +418,7 @@ async def send_message(
         session = await db_service.create_session(
             user_ip=http_request.client.host if http_request.client else None,
             user_agent=http_request.headers.get("user-agent"),
+            customer_id=request.customer_id,
         )
 
     pending = await db_service.get_pending_clarification(session.id)
@@ -613,6 +615,13 @@ async def send_message(
             reason_id_override = pending.fixed_reason_id
             refinement_attempt = pending.attempts
 
+    # Ограничения доступа по CustomerID (Фармбазис): резолвим запрещённые причины/разделы
+    # и попутно авторегистрируем клиента в справочнике. Без customer_id — ограничений нет.
+    denied_reason_ids: set[str] = set()
+    denied_section_keys: set[str] = set()
+    if request.customer_id:
+        denied_reason_ids, denied_section_keys = resolve_denied(request.customer_id, request.customer_name)
+
     # ── Основной pipeline: L1→L2→L3 ──
     rag_response = await rag_engine.ask(
         question=question_for_engine,
@@ -621,6 +630,8 @@ async def send_message(
         routing_policy=routing_policy,
         refinement_attempt=refinement_attempt,
         debug=request.debug,
+        denied_reason_ids=denied_reason_ids,
+        denied_section_keys=denied_section_keys,
     )
 
     response_type = _resolve_response_type(rag_response.classification_method)
